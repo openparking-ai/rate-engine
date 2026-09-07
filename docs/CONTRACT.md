@@ -163,6 +163,8 @@ never failed is a decoration.
 | **F14** | A registered guarantee whose test stops running turns the build RED, including when its module fails to import; and a test module that plants a defect but registers no guarantee is refused. |
 | **F15** | `increment.rounding` is CONSULTED by the applier, which refuses a mode it does not implement rather than pricing the stay under a different one. The applier checks what it implements, never what the loader accepts. |
 | **F16** | Every refusal reaches the caller AS a refusal. A malformed number anywhere in a plan comes back as a named 400 naming the field, and a malformed rule return as a named 422 -- never as an exception escaping the quote contract, and never as a dropped connection. |
+| **F17** | A rendered amount uses its own currency's ISO 4217 minor-unit exponent, never an assumed two decimal places -- and a code whose exponent this module does not know is REFUSED at load rather than rendered on a guess. |
+| **F17b** | That refusal is at LOAD, so an unrenderable currency never reaches the renderer at all -- the membership check and the exponent read one table. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |

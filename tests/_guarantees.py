@@ -104,6 +104,15 @@ GUARANTEES: dict[str, str] = {
         "return as a named 422 -- never as an exception escaping the quote contract, "
         "and never as a dropped connection."
     ),
+    "F17": (
+        "A rendered amount uses its own currency's ISO 4217 minor-unit exponent, "
+        "never an assumed two decimal places -- and a code whose exponent this "
+        "module does not know is REFUSED at load rather than rendered on a guess."
+    ),
+    "F17b": (
+        "That refusal is at LOAD, so an unrenderable currency never reaches the "
+        "renderer at all -- the membership check and the exponent read one table."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
