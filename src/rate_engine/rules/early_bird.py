@@ -84,7 +84,21 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
 
 
 def _failures(rule: Rule, stay, plan) -> list[str]:
-    """Every condition this stay fails, in plain English. Empty means it qualifies."""
+    """Why this stay fails the rule, in plain English. Empty means it qualifies.
+
+    NOT every failed condition, and the difference is one `elif`. The entry limit
+    is tested on its own and always reports. The exit side is the day-span check
+    OR the wall-clock limit, never both: a `same_day` stay that crosses midnight
+    reports the day span alone, even when it also left after `exit_by`. Under
+    `any_span` the first branch cannot fail, so the wall-clock limit is the whole
+    exit test.
+
+    Said here because the docstring used to promise every condition and the code
+    has never done that. Which line comes back changes nothing about WHETHER the
+    rate applies -- it is all-conditions-or-nothing either way -- so the wording
+    is what is wrong, not the structure, and widening it would change the
+    sentence an operator is read at the counter for no gain.
+    """
     # TRUNCATED TO THE MINUTE, and the limit is refused if it is finer -- see
     # wallclock.py. Compared at full precision, an entry at 09:00:00.001 failed a
     # 09:00 limit and the line below rendered "entry 09:00 is after the 09:00

@@ -152,18 +152,35 @@ def test_THERE_IS_ONE_ENCODER_and_no_surface_re_implements_it():
     The claim is "one code path and one serializer". It was false while three
     `json.dumps` call sites encoded a response with two different argument lists,
     and nothing measured that -- byte-equality was asserted over decoded objects.
-    A second encode site added anywhere in the package fails this the day it
-    appears, rather than the round somebody's bytes diverge.
+    A call into `json`'s encoder from anywhere in the package but `contract.py`
+    fails this the day it appears, rather than the round somebody's bytes
+    diverge.
 
     **Walks the AST, not the text.** The first version of this grepped for
     `json.dumps` and went red on its own docstring -- the sentences in cli.py
     explaining the defect matched the search for the defect. A check that matches
     WORDS confirms only that a word was written; this one matches a CALL.
+
+    **BOTH import styles, because it used to see only one.** It matched
+    `json.dumps` written as an attribute on the name `json`, so `from json import
+    dumps` walked past it silently -- measured GREEN with a byte-identical second
+    encoder planted, which is exactly the site somebody adds by accident later.
+    The names bound by `from json import ...` are collected per module, aliases
+    included, and a call to one of them counts the same as the attribute form.
+    Both arms have a fail-control in `scripts/fail_controls.py`.
+
+    What it still does not see, said plainly rather than advertised away: an
+    encoder that does not go through `json` at all. The load-bearing property --
+    the two doors' BYTES -- is guarded separately, and that guard does catch one.
     """
     import ast
     import pathlib
 
     import rate_engine
+
+    #: json's encoding entry points. `dump` writes the same bytes to a stream,
+    #: so a second site is a second site whichever of the two it calls.
+    ENCODERS = {"dumps", "dump"}
 
     package = pathlib.Path(rate_engine.__file__).parent
     offenders: dict[str, list[int]] = {}
@@ -171,15 +188,33 @@ def test_THERE_IS_ONE_ENCODER_and_no_surface_re_implements_it():
         if source.name == "contract.py":
             continue  # the one encoder lives here
         tree = ast.parse(source.read_text())
-        hits = [
-            node.lineno
+
+        # Local names that ARE json's encoder in this module: `from json import
+        # dumps` binds `dumps`, `... as _d` binds `_d`. Collected first, because
+        # a bare call tells you nothing without knowing what the name is bound to.
+        imported = {
+            (alias.asname or alias.name)
             for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "dumps"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "json"
-        ]
+            if isinstance(node, ast.ImportFrom) and node.module == "json"
+            for alias in node.names
+            if alias.name in ENCODERS
+        }
+
+        hits = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            attribute_form = (
+                isinstance(func, ast.Attribute)
+                and func.attr in ENCODERS
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "json"
+            )
+            imported_form = isinstance(func, ast.Name) and func.id in imported
+            if attribute_form or imported_form:
+                hits.append(node.lineno)
+        hits.sort()
         if hits:
             offenders[source.name] = hits
     assert offenders == {}, (
