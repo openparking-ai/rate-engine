@@ -381,18 +381,19 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the exact shape of the defect that shipped, print() appending a newline, "
         "and the one the old decoded comparison could not see",
     ),
-    # X9. The plant makes every stage behave the way the framework contract used
-    # to CLAIM they all did -- non-qualifying rules everywhere emitting zero lines.
+    # X9, re-anchored in A2 when the silence rule stopped being keyed on the stage
+    # alone. The PLANTED DEFECT IS THE SAME ONE -- the framework contract's old
+    # blanket claim, that every non-qualifying rule everywhere speaks -- expressed
+    # against the mechanism that decides it now.
     "F22": (
         "tests/test_f22_the_silence_rule_is_per_stage.py",
         "engine.py",
-        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n                continue",
-        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n"
-        "                ledger.add(Line(code=f'{rule.type}.not_applied', rule_id=rule.id,\n"
-        "                                text='PLANTED', delta_minor=0))\n"
-        "                continue",
-        "every non-qualifying rule at every stage emits an explanatory zero line, so "
-        "a standard-space receipt lists VIP tiers that were never about that space",
+        "    return SPEAKS_UNQUALIFIED in RULE_TRAITS[rule.type] "
+        "and rule.covers(stay.space_class)",
+        "    return True  # PLANTED: every rule speaks, whatever it declared",
+        "every non-qualifying rule at every stage is asked for lines whatever it "
+        "declared and whatever space it covers, so a standard-space receipt carries "
+        "VIP tiers that were never about that space -- and carries their money",
     ),
     # X10. The plant is the L3's own probe: no-op the production invariant. Before
     # this control existed the WHOLE SUITE stayed green under it -- 97 passed.
@@ -498,6 +499,61 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the direction a fractional minor unit goes stops being the plan's "
         "decision -- every percentage rounds one way whatever the document says, "
         "on a plan that reads correctly to whoever wrote it",
+    ),
+    # A2's second build group. W2 brings terminality and the trait that finally
+    # gives an ADJUST window its line; W3 brings the second cap type and the
+    # three stage categories the first one detonated.
+    #
+    # The two arms below share an ANCHOR and plant opposite defects, which is the
+    # only honest way to control a boolean: `return True` collapses the silence
+    # rule into "everything speaks", `return False` into "nothing does", and a
+    # single arm would go red for whichever it happened to pick.
+    "F22b": (
+        "tests/test_f22_the_silence_rule_is_per_stage.py::"
+        "test_a_rule_that_COULD_have_applied_and_did_not_SPEAKS_at_any_stage",
+        "engine.py",
+        "    return SPEAKS_UNQUALIFIED in RULE_TRAITS[rule.type] "
+        "and rule.covers(stay.space_class)",
+        "    return False  # PLANTED: no type may declare that it speaks",
+        "the declaration stops being read, so a weekend discount that declined "
+        "because it is a Tuesday says nothing at all and the receipt cannot answer "
+        "the question it was asked",
+    ),
+    "F32": (
+        "tests/test_f32_grace_is_terminal_and_free.py",
+        "engine.py",
+        "        if TERMINAL in RULE_TRAITS[rule.type]:",
+        "        if False:  # PLANTED: a terminal rule no longer stops the pipeline",
+        "a graced stay goes on through CAP, SURCHARGE and ADJUST, so a free stay in "
+        "a VIP space is charged the surcharge -- 'if customer decides to laeve "
+        "within that period it is free' with a five-dollar line under it",
+    ),
+    "F33": (
+        "tests/test_f33_two_caps_compose.py",
+        "rules/weekly_max.py",
+        "            delta_minor=ceiling - running_total_minor,",
+        "            delta_minor=-rule.params[\"max_minor\"],  # PLANTED: a cap that SUBTRACTS",
+        "a cap subtracts its own maximum instead of reducing the total to it, which "
+        "is arithmetic that depends on the order the caps ran in -- 500 one way and "
+        "1900 the other, from the same two ceilings on the same stay",
+    ),
+    "F34": (
+        "tests/test_f34_composing_stages_do_not_conflict.py",
+        "engine.py",
+        "    if stage in RESOLVING:",
+        "    if True:  # PLANTED: every stage resolves, as it used to",
+        "every stage is treated as resolving again, so a plan carrying a daily AND a "
+        "weekly cap refuses every stay in the garage -- the defect that was latent "
+        "until a second CAP rule type existed",
+    ),
+    "F35": (
+        "tests/test_f35_the_adjust_order_is_stated.py",
+        "engine.py",
+        "    if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is not None:",
+        "    if False:  # PLANTED: the stated order is ignored",
+        "the order an owner wrote is discarded and the adjustments run in rule-id "
+        "order instead, so a plan that says 'voucher first' quietly charges the "
+        "percentage first -- a wrong fee behind a document that reads correctly",
     ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",

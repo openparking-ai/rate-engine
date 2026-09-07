@@ -31,6 +31,7 @@ from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_NEGATIVE_TOTAL,
+    CONFLICT_UNORDERED_ADJUSTMENTS,
     FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
@@ -40,12 +41,22 @@ from .findings import (
     Refused,
 )
 from .plan import InvalidPlan, Plan
-from .rules import RULE_APPLIERS
+from .rules import RULE_APPLIERS, RULE_TRAITS, SPEAKS_UNQUALIFIED, TERMINAL
 from .rules import daily_max as daily_max_rule
+from .rules import grace as grace_rule
 from .rules import increment as increment_rule
 from .rules import space_surcharge as space_surcharge_rule
 from .rules import time_window as time_window_rule
-from .stages import ACCUMULATE, ADJUST, CAP, QUALIFY, STAGES
+from .rules import weekly_max as weekly_max_rule
+from .stages import (
+    ACCUMULATE,
+    ADJUST,
+    CAP,
+    COMPOSING_ORDER_DEPENDENT,
+    QUALIFY,
+    RESOLVING,
+    STAGES,
+)
 
 #: Which predicate decides whether a rule of each type qualifies for a stay.
 #: Registered beside the appliers rather than inferred, so a rule type that
@@ -65,9 +76,85 @@ STAGES_GIVEN_THE_RUNNING_TOTAL: frozenset[str] = frozenset({CAP, ADJUST})
 QUALIFIERS = {
     "increment": lambda rule, stay, plan: increment_rule.qualifies(rule, stay),
     "time_window": time_window_rule.qualifies,
+    "grace": grace_rule.qualifies,
     "daily_max": daily_max_rule.qualifies,
+    "weekly_max": weekly_max_rule.qualifies,
     "space_surcharge": space_surcharge_rule.qualifies,
 }
+
+
+def _terminal_rule(qualified: list):
+    """The rule that prices this stay ALONE, if one of them said so. Else None.
+
+    A type declares `TERMINAL` at registration and the pipeline reads the
+    declaration -- it does not know the type's NAME. `grace` is the first one:
+    "if customer decides to laeve within that period it is free", and free means
+    free, so a graced stay in a VIP space must not pick up the surcharge and must
+    not pick up anything at CAP or ADJUST. An `if rule.type == "grace"` here
+    would be the engine holding a pricing decision no plan can see or change,
+    which is the defect `day_span` was created to undo.
+    """
+    for rule in qualified:
+        if TERMINAL in RULE_TRAITS[rule.type]:
+            return rule
+    return None
+
+
+def _speaks_anyway(rule, stay) -> bool:
+    """Whether a rule that did NOT qualify still gets to explain itself.
+
+    The framework contract's silence rule was keyed on the STAGE, because in A1
+    the stage was a perfect proxy: the only rule type outside QUALIFY that could
+    fail to apply failed by not covering the space, and "a VIP tier that was
+    never about your space" is noise on a receipt. A `time_window` with an
+    `adjust` effect broke the proxy -- it runs at ADJUST and can decline because
+    it is a Tuesday and the rule says weekends, which is exactly the informative
+    case, at a stage the old rule called silent. "Why didn't I get the weekend
+    discount?" had no answer in the breakdown.
+
+    So the TYPE declares it, and coverage still governs: a rule that was never
+    about this space stays silent whatever it declared.
+    """
+    return SPEAKS_UNQUALIFIED in RULE_TRAITS[rule.type] and rule.covers(stay.space_class)
+
+
+def _in_application_order(plan: Plan, stage: str, rules):
+    """The sequence a COMPOSING stage's rules are applied in.
+
+    **Never the caller's array position.** Deciding money by the order of a JSON
+    list, silently, is a defect this module has already shipped once and refuses
+    at `select_plan` -- so composing rules run in ascending rule id, which is
+    stated by the operator and stable.
+
+    ADJUST is the exception, and it is an exception about ARITHMETIC rather than
+    about determinism: 20% off then 5.00 off is not 5.00 off then 20% off, so the
+    plan states the sequence. Where it has not, `find_conflicts` has already
+    refused the stay -- this never has to guess.
+    """
+    if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is not None:
+        position = {rule_id: index for index, rule_id in enumerate(plan.adjust_order)}
+        return sorted(rules, key=lambda rule: position[rule.id])
+    return sorted(rules, key=lambda rule: rule.id)
+
+
+def _superseded_line(rule, terminal) -> Line:
+    """A rule that qualified and was beaten outright, said out loud.
+
+    Dropping it silently would leave a breakdown in which a special the customer
+    was entitled to simply is not mentioned -- and "why is the early bird not on
+    here?" is the question §8 exists to make answerable. The engine writes this
+    one because no rule can know it was superseded; the code is engine-level,
+    like `stay`, rather than borrowed from the rule's own namespace.
+    """
+    return Line(
+        code="superseded",
+        rule_id=rule.id,
+        text=(
+            f"{rule.id!r} also qualified and was NOT applied: {terminal.id!r} is "
+            "terminal, so it prices this stay by itself and nothing further is charged"
+        ),
+        delta_minor=0,
+    )
 
 
 @dataclass(frozen=True)
@@ -269,31 +356,69 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
 
 
 def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
-    """Two rules qualifying at one stage, which A1 refuses rather than resolves.
+    """More than one rule qualifying at one stage -- and it means three things.
 
-    The plan states a resolution mode per stage and this version does not act on
-    it -- see plan.RESOLUTION_MODES. Resolving honestly needs two rule types that
-    can qualify at one stage, which is round A2. Until then the module does the
-    thing it promises everywhere else: it says what is ambiguous and does not
-    pick.
+    **This function used to report a conflict whenever more than one rule
+    qualified at ANY stage, and that was a live defect waiting for a rule type.**
+    It is right at QUALIFY, where two specials are competing bases and only one
+    can be the price. It is wrong at CAP, where two ceilings simply both apply --
+    and the moment `weekly_max` existed, every plan carrying a daily AND a weekly
+    cap would have refused every stay in the garage.
+
+    So the answer is per CATEGORY, and stages.py holds which is which:
+
+    * RESOLVING -- a genuine either/or. Reported, unless a TERMINAL rule
+      qualified: terminality is an outright win declared by the rule type, not an
+      ambiguity for the plan to settle, so grace beating a weekend rate is not a
+      conflict.
+    * COMPOSING, ORDER-INDEPENDENT -- both apply and the total is the same
+      either way. Nothing to report and nothing to decide.
+    * COMPOSING, ORDER-DEPENDENT -- both apply and the order changes the money,
+      so the PLAN must state the order and a plan that has not is refused.
     """
     findings: list[Finding] = []
     for stage in STAGES:
         qualifying = _qualifying(plan, stay, stage)
         if len(qualifying) > 1:
-            findings.append(
-                Finding(
-                    code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
-                    text=(
-                        f"{len(qualifying)} rules qualify at {stage} "
-                        f"({', '.join(r.id for r in qualifying)}); the plan states "
-                        f"resolution {plan.resolution[stage]!r} for that stage, which "
-                        "this version records but does not apply"
-                    ),
-                    rule_ids=tuple(r.id for r in qualifying),
-                )
-            )
+            finding = _conflict_at(plan, stage, qualifying)
+            if finding is not None:
+                findings.append(finding)
     return findings
+
+
+def _conflict_at(plan: Plan, stage: str, qualifying: list) -> Finding | None:
+    """What more than one qualifying rule MEANS at this stage. None means nothing."""
+    ids = tuple(r.id for r in qualifying)
+    if stage in RESOLVING:
+        terminal = [r for r in qualifying if TERMINAL in RULE_TRAITS[r.type]]
+        if len(terminal) == 1:
+            # Not an ambiguity: one of them wins outright by what its type is,
+            # and the others get a `superseded` line saying so.
+            return None
+        return Finding(
+            code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
+            text=(
+                f"{len(qualifying)} rules qualify at {stage} ({', '.join(ids)}); the "
+                f"plan states resolution {plan.resolution[stage]!r} for that stage, "
+                "which this version records but does not apply"
+            ),
+            rule_ids=ids,
+        )
+    if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is None:
+        return Finding(
+            code=CONFLICT_UNORDERED_ADJUSTMENTS,
+            text=(
+                f"{len(qualifying)} adjustments qualify ({', '.join(ids)}) and the plan "
+                "does not state `adjust_order`. Both apply -- this is not a choice "
+                "between them -- but a percentage taken before a fixed amount is a "
+                "different fee from one taken after, so the order is a pricing "
+                "decision and the engine will not pick"
+            ),
+            rule_ids=ids,
+        )
+    # COMPOSING and order-independent: both apply, the total is the same either
+    # way, and there is nothing for an owner to decide.
+    return None
 
 
 def quote(plans: list[Plan], stay: Stay) -> Quote:
@@ -320,21 +445,39 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     )
 
     qualified_at_qualify = _qualifying(plan, stay, QUALIFY)
+    terminal = _terminal_rule(qualified_at_qualify)
 
     for stage in STAGES:
+        if terminal is not None and stage != QUALIFY:
+            # A TERMINAL rule prices the stay by itself. Free means free: no
+            # time-based charge, no cap, no surcharge, no adjustment. QUALIFY has
+            # already run, so its lines -- including every `superseded` one -- are
+            # in the ledger. See rules/grace.py.
+            break
         if stage == ACCUMULATE and qualified_at_qualify:
             # A special that qualified IS the base. Not a discount on the
             # time-based charge and not the cheaper of the two -- it replaces it.
             continue
-        for rule in plan.rules_for_stage(stage):
+        rules = plan.rules_for_stage(stage)
+        if stage not in RESOLVING:
+            rules = _in_application_order(plan, stage, rules)
+        for rule in rules:
             applier = RULE_APPLIERS[rule.type]
             if stage == QUALIFY:
                 # Emits its line either way: a special that did not apply is the
-                # line an operator most wants to read.
-                for line in _lines_of(rule, applier(rule, stay, plan)):
+                # line an operator most wants to read. A special that DID qualify
+                # and was beaten by a terminal rule says that instead -- calling
+                # its applier here would add its price to the ledger.
+                beaten = terminal is not None and rule is not terminal
+                lines = (
+                    [_superseded_line(rule, terminal)]
+                    if beaten and rule in qualified_at_qualify
+                    else applier(rule, stay, plan)
+                )
+                for line in _lines_of(rule, lines):
                     ledger.add(line)
                 continue
-            if not QUALIFIERS[rule.type](rule, stay, plan):
+            if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
                 continue
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor)

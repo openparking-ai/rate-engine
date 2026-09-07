@@ -6,6 +6,20 @@ dependencies, no database, and no payment of any kind: this module calculates.
 Importing the package registers the rule types it ships.
 """
 
-from .rules import daily_max, increment, space_surcharge, time_window  # noqa: F401
+from .rules import (  # noqa: F401
+    daily_max,
+    grace,
+    increment,
+    space_surcharge,
+    time_window,
+    weekly_max,
+)
 
-__all__ = ["daily_max", "increment", "space_surcharge", "time_window"]
+__all__ = [
+    "daily_max",
+    "grace",
+    "increment",
+    "space_surcharge",
+    "time_window",
+    "weekly_max",
+]

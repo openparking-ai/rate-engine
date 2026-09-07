@@ -66,6 +66,22 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: should meet a named refusal rather than a mislabelled one.
 CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
 
+#: Two or more ADJUST rules qualify and the plan does not say in what order to
+#: apply them.
+#:
+#: This is a DIFFERENT question from the one above, which is why it is a
+#: different code. Two rules qualifying at QUALIFY is "which one is the price" --
+#: an either/or the plan settles with a resolution mode. Two adjustments is not
+#: an either/or at all: BOTH apply, and the only open question is the sequence.
+#: 20% off then 5.00 off is not 5.00 off then 20% off, and the difference is
+#: money, so the engine will not pick -- for the same reason it will not pick
+#: between two specials.
+#:
+#: Caps and surcharges raise no such question: they compose in any order and the
+#: total is the same, which is why CAP and SURCHARGE are order-INDEPENDENT and
+#: two of them together are not reported at all.
+CONFLICT_UNORDERED_ADJUSTMENTS = "CONFLICT_UNORDERED_ADJUSTMENTS"
+
 # --- fault codes -----------------------------------------------------------
 #: A registered rule type returned something that is not a list of Lines.
 #:
@@ -89,6 +105,7 @@ CONFLICT_CODES: tuple[str, ...] = (
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_NEGATIVE_TOTAL,
+    CONFLICT_UNORDERED_ADJUSTMENTS,
 )
 
 #: Faults are never produced by the validator: it probes a plan against stays and

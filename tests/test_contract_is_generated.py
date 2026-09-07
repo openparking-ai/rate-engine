@@ -94,8 +94,8 @@ def test_the_rule_type_table_is_derived_from_the_registry():
 #: plan's window is a base and runs at QUALIFY either way.
 NARROW_A_RULE_TYPE = (
     "rules/time_window.py",
-    'register("time_window", STAGES_RUN_AT, build, apply)',
-    'register("time_window", (QUALIFY,), build, apply)  # PLANTED: ADJUST undeclared',
+    'register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,))',
+    'register("time_window", (QUALIFY,), build, apply, traits=(SPEAKS_UNQUALIFIED,))  # PLANTED',
 )
 
 
