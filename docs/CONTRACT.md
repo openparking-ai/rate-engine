@@ -165,6 +165,8 @@ never failed is a decoration.
 | **F16** | Every refusal reaches the caller AS a refusal. A malformed number anywhere in a plan comes back as a named 400 naming the field, and a malformed rule return as a named 422 -- never as an exception escaping the quote contract, and never as a dropped connection. |
 | **F17** | A rendered amount uses its own currency's ISO 4217 minor-unit exponent, never an assumed two decimal places -- and a code whose exponent this module does not know is REFUSED at load rather than rendered on a guess. |
 | **F17b** | That refusal is at LOAD, so an unrenderable currency never reaches the renderer at all -- the membership check and the exponent read one table. |
+| **F18** | A wall-clock limit is compared at the granularity it is written and rendered in: the stay is truncated to the minute, so no breakdown line can say a time is after itself. |
+| **F18b** | And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; anything finer is rejected at load, because rounding it would silently discard a pricing decision the operator wrote. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |

@@ -113,6 +113,16 @@ GUARANTEES: dict[str, str] = {
         "That refusal is at LOAD, so an unrenderable currency never reaches the "
         "renderer at all -- the membership check and the exponent read one table."
     ),
+    "F18": (
+        "A wall-clock limit is compared at the granularity it is written and "
+        "rendered in: the stay is truncated to the minute, so no breakdown line can "
+        "say a time is after itself."
+    ),
+    "F18b": (
+        "And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; "
+        "anything finer is rejected at load, because rounding it would silently "
+        "discard a pricing decision the operator wrote."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

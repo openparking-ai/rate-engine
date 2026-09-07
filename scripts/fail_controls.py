@@ -87,10 +87,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F5": (
         "tests/test_f5_determinism.py",
         "rules/early_bird.py",
-        "    entry_local = stay.entry_at.astimezone(plan.timezone)\n"
-        "    exit_local = stay.exit_at.astimezone(plan.timezone)",
-        "    entry_local = stay.entry_at.astimezone()  # PLANTED: the SERVER's zone\n"
-        "    exit_local = stay.exit_at.astimezone()  # PLANTED: the SERVER's zone",
+        # Re-anchored when X5 moved the comparison onto wallclock.local_minute.
+        # The PLANTED DEFECT IS UNCHANGED -- the plan's zone is swapped for the
+        # server's -- because re-pointing an anchor must not quietly weaken what
+        # the control proves.
+        "    entry_local = local_minute(stay.entry_at, plan.timezone)\n"
+        "    exit_local = local_minute(stay.exit_at, plan.timezone)",
+        "    entry_local = local_minute(stay.entry_at, None)  # PLANTED: the SERVER's zone\n"
+        "    exit_local = local_minute(stay.exit_at, None)  # PLANTED: the SERVER's zone",
         "the engine reads the SERVER's timezone instead of the plan's, so the same "
         "garage bills two different amounts depending on which machine answered",
     ),
@@ -251,6 +255,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if False:  # PLANTED: an unrenderable currency code loads again",
         "a code with no known exponent -- ZZZ, or XXX which means 'no currency' -- "
         "is accepted at load and reaches the renderer",
+    ),
+    # X5, two arms. The first restores the raw comparison the L3 measured; the
+    # second restores the truncation-of-the-limit that the brief's first draft
+    # called for and amendment A3 reversed -- so the reversal itself has a control.
+    "F18": (
+        "tests/test_f18_wall_clock_is_minute_granular.py",
+        "rules/early_bird.py",
+        "    entry_local = local_minute(stay.entry_at, plan.timezone)",
+        "    entry_local = stay.entry_at.astimezone(plan.timezone)  # PLANTED: raw precision",
+        "an entry one microsecond past the limit fails again, and the breakdown "
+        "renders 'entry 09:00 is after the 09:00 entry limit'",
+    ),
+    "F18b": (
+        "tests/test_f18_wall_clock_is_minute_granular.py",
+        "wallclock.py",
+        "    if parsed.second or parsed.microsecond:",
+        "    if False:  # PLANTED: a sub-minute limit is silently accepted again",
+        "a plan stating enter_by 09:00:30 loads, so a limit the breakdown cannot "
+        "render decides the fee -- the engine keeping a decision it cannot explain",
     ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
