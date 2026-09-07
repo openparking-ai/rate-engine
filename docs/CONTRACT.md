@@ -177,10 +177,22 @@ Named here so nobody adds them helpfully:
 ## The occupancy multiplier, and why money stays an integer
 
 Round A2's occupancy rule is a multiplier, and a multiplier is fractional. It
-will be expressed as a **rational** — a numerator and a denominator, both whole —
-with the rounding direction stated in the plan, exactly as `increment.rounding`
-already is. It will not introduce a float, and it will not change what any plan
-written against this version answers.
+will be expressed as a **rational** — an integer numerator over an integer
+denominator, applied as `value * numerator // denominator` — and the plan will
+state the rounding direction explicitly, with no default.
+
+**That rounding is not the rounding this version already has.**
+`increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
+stay is two hours. A multiplier's rounding direction decides fractions of a
+**cent**. The two share a word and nothing else, and **this module does not round
+money anywhere today** — `money.py` says so in as many words, and the arithmetic
+matches it: every A1 rule is an integer add or an integer replace. A2 introduces
+the first money rounding this contract has ever carried, and it arrives with a
+version bump, which is what §2 says a commercial contract does.
+
+Money stays an integer of minor units at every depth. The multiplier will not
+introduce a float, and it will not change what any plan written against this
+version answers.
 
 ---
 
