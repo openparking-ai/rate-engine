@@ -35,6 +35,18 @@ from __future__ import annotations
 
 from datetime import datetime, time
 
+#: Day names a plan may state, in week order. **The index IS the weekday index
+#: `datetime.weekday()` returns**, which is what lets a stated day become a real
+#: date and back again without a second table.
+#:
+#: It lives here rather than on a rule type because three unrelated things read
+#: it -- `time_window` matches a stay's day against it, `weekly_max` turns a
+#: stated first-day-of-the-week into an offset, and `validator` turns a stated
+#: day back into a probe date. It began on `time_window` and `weekly_max` had to
+#: import it from there, which coupled a CAP rule to a QUALIFY rule's module for
+#: no reason except where the constant happened to be typed first.
+DAYS_OF_WEEK: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
 
 def parse_limit(raw: dict, key: str, where: str) -> time:
     """A plan's `HH:MM` wall-clock limit, or a refusal naming the field.

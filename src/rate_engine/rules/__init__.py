@@ -82,6 +82,25 @@ class Rule:
     space_classes: tuple[str, ...]
     #: Type-specific, already validated by the builder that produced it.
     params: dict[str, Any]
+    #: What the OPERATOR calls this rule, where its type lets them say. None for a
+    #: type that has no such field, and every type that does not set it behaves
+    #: exactly as it did.
+    #:
+    #: **It is a framework field rather than a `params` entry because the ENGINE
+    #: needs it.** A rule beaten by a terminal one gets a line saying so, and no
+    #: rule can write that line -- the rule that lost does not know it lost. The
+    #: engine had only the id to name it by, so a receipt read "'eb-weekday' also
+    #: qualified", which is a database key on a document a customer is handed.
+    label: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        """What to call this rule in a sentence a customer reads.
+
+        The operator's own label where there is one, and otherwise their own rule
+        id -- which they also wrote, so it is never a name this module invented.
+        """
+        return self.label or self.id
 
     def covers(self, space_class: str) -> bool:
         return space_class in self.space_classes

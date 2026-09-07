@@ -36,8 +36,8 @@ from datetime import date, timedelta
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import CAP
+from ..wallclock import DAYS_OF_WEEK
 from . import Rule, common_fields, register
-from .time_window import DAYS_OF_WEEK
 
 WEEK_BOUNDARIES: tuple[str, ...] = ("calendar_week", "rolling_7d")
 

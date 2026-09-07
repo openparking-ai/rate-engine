@@ -34,6 +34,13 @@ from rate_engine.validator import probe_stays
 #: ceiling so no unrelated gap masks the result. The L3's counterexample, carried
 #: forward onto `time_window` unchanged in everything it measures: the two rules
 #: apply on every day, so the day axis cannot be what makes them overlap.
+#:
+#: **They now charge the SAME price, and that is not cosmetic.** W4 made the
+#: resolution modes act, so two rules at different prices are no longer a
+#: conflict -- `cheapest_wins` settles them. What survives is the tie, which
+#: nothing can settle, and this file is about whether the VALIDATOR sees what the
+#: engine would refuse. A fixture the engine no longer refuses would have made it
+#: pass while measuring nothing.
 DAWN_CONFLICT = {
     "plan_version": "r3-counterexample",
     "effective_from": "2026-02-01T00:00:00-05:00",
@@ -41,8 +48,7 @@ DAWN_CONFLICT = {
     "currency": "USD",
     "space_classes": ["standard"],
     "resolution": {
-        "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-        "SURCHARGE": "stated_order", "ADJUST": "stated_order",
+        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
     },
     "adjust_order": None,
     "rules": [
@@ -57,7 +63,7 @@ DAWN_CONFLICT = {
          "applies_on": {"kind": "days_of_week",
                         "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
          "enter_from": "00:00", "enter_by": "05:30", "exit_by": "16:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1100}},
+         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,

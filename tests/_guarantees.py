@@ -70,8 +70,10 @@ GUARANTEES: dict[str, str] = {
         "REFUSED by name, not left to crash inside the ledger."
     ),
     "F11": (
-        "Two rules qualifying at one pipeline stage are REFUSED and both named, with "
-        "the plan's stated resolution mode quoted back. A1 detects; it does not resolve."
+        "An ambiguity the PLAN cannot settle is REFUSED and both rules named, with "
+        "the stated mode quoted back and the refusal saying what would settle it. "
+        "Since the modes act, that means a TIE: two rules qualifying at one stage "
+        "and charging the same amount, which `cheapest_wins` cannot separate."
     ),
     "F10": (
         "Plan selection is never ambiguous. Two versions in force at the same instant "
@@ -230,6 +232,25 @@ GUARANTEES: dict[str, str] = {
         "naming both; with an order they produce that order's total, and the two "
         "orders genuinely differ -- 20% off then a fixed amount is not the same fee "
         "as the fixed amount then 20% off."
+    ),
+    "F36": (
+        "The resolution modes DECIDE. Two windows qualifying on one stay resolve to "
+        "the cheaper under `cheapest_wins` and to the stated one under "
+        "`stated_order`, on the SAME stay -- and the rules that lost still appear, "
+        "each naming the winner, both prices and the mode that chose."
+    ),
+    "F38": (
+        "Every identifier the published documents name in backticks is one the "
+        "code actually holds -- rule types, stages, finding codes, plan and rule "
+        "fields, stated values, traits and guarantee ids -- and every file path "
+        "they point at exists. Derived from both documents rather than from a "
+        "list of the sentences somebody remembered to check."
+    ),
+    "F37": (
+        "A `stated_order` must name every rule at its stage EXACTLY ONCE, and one "
+        "that does not is refused at LOAD, naming what is missing. A rule left out "
+        "would take a silent position, and array position deciding money is what "
+        "this module refuses everywhere else."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

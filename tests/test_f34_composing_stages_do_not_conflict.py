@@ -37,10 +37,7 @@ from rate_engine.stages import (
     STAGES,
 )
 
-RESOLUTION = {
-    "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-    "SURCHARGE": "stated_order", "ADJUST": "stated_order",
-}
+RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
 EVERY_DAY = {"kind": "days_of_week",
              "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
 
@@ -118,13 +115,25 @@ def test_every_stage_falls_in_EXACTLY_ONE_category():
 @pytest.mark.guarantee("F34")
 def test_two_rules_at_a_RESOLVING_stage_are_STILL_a_conflict():
     """The arm that must not have been widened away. Two specials cannot both be
-    the price."""
+    the price -- and at the SAME price nothing can choose between them.
+
+    W4 made the modes act, so two windows at different prices resolve rather than
+    refuse. The tie is what is left, and it is still a refusal: the engine will
+    not pick, for the same reason `select_plan` will not pick between two plan
+    versions sharing an effective date.
+    """
     status, body = _quote(_plan([_window("win-a", "QUALIFY", 1200),
-                                 _window("win-b", "QUALIFY", 1500)]))
+                                 _window("win-b", "QUALIFY", 1200)]))
     assert status == 422, body
     finding = body["findings"][0]
     assert finding["code"] == CONFLICT_MULTIPLE_RULES_AT_STAGE
     assert set(finding["rule_ids"]) == {"win-a", "win-b"}
+
+    # And the control on it: the same pair at different prices now PRICES.
+    status, priced = _quote(_plan([_window("win-a", "QUALIFY", 1200),
+                                   _window("win-b", "QUALIFY", 1500)]))
+    assert status == 200, priced
+    assert priced["fee_minor"] == 1200
 
 
 @pytest.mark.guarantee("F34")
