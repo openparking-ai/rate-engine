@@ -28,8 +28,10 @@ Two guards on the plant itself:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -52,15 +54,47 @@ def planted(relative_path: str, frm: str, to: str):
         )
 
     try:
-        path.write_text(original.replace(frm, to))
+        _write(path, original.replace(frm, to))
         yield
     finally:
-        path.write_text(original)
+        _write(path, original)
         if path.read_text() != original:
             raise AssertionError(
                 f"{relative_path} was NOT restored -- a planted defect is still in "
                 "the working tree. Restore it by hand before running anything else."
             )
+
+
+#: Every write through this helper gets a distinct modification time. See _write.
+_writes = 0
+
+
+def _write(path: Path, text: str) -> None:
+    """Write, and make sure Python cannot serve the PREVIOUS bytecode for it.
+
+    CPython validates a cached `.pyc` against the source's (mtime IN WHOLE
+    SECONDS, size). A plant that changes a file without changing its SIZE, inside
+    the same second as the last write, is therefore invisible to any subprocess:
+    it imports the stale bytecode, behaves exactly as if nothing was planted, and
+    the control reports GREEN against a defect that was never actually loaded.
+
+    This is not hypothetical -- it happened here. The control for the findings
+    table moves one line out of `GAP_CODES` and the identical line into
+    `CONFLICT_CODES`, so the file came out byte-for-byte the same LENGTH, and the
+    rendered document came back unplanted. The failure mode is the worst kind
+    this project catalogues: a check shaped like evidence that cannot produce a
+    negative result, and one that would have looked like a REAL finding ("the
+    prose does not follow the registry") rather than like a broken test.
+
+    No existing control was affected -- all ten change the file's length -- but
+    that was luck, and the next plant somebody writes should not have to depend
+    on it. So the mtime is advanced past any cached entry on every write.
+    """
+    global _writes
+    _writes += 1
+    path.write_text(text)
+    stamp = time.time() + _writes
+    os.utime(path, (stamp, stamp))
 
 
 def run_tests(target: str) -> subprocess.CompletedProcess:

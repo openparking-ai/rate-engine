@@ -8,7 +8,7 @@ interface is inadequate we find out before an integrator does.
 **This module calculates. It takes no payment, holds no card, and stores
 nothing.** A plan arrives on the call and is gone when the response is written.
 
-<!--gen:schema_version-->
+<!--gen:schema_version kind=1-->
 `schema_version` **1**
 <!--/gen:schema_version-->
 
@@ -47,7 +47,7 @@ answer is the owner's to give.
 
 ## The pipeline
 
-<!--gen:stages-->
+<!--gen:stages kind=1-->
 **QUALIFY** → **ACCUMULATE** → **CAP** → **SURCHARGE** → **ADJUST**
 <!--/gen:stages-->
 
@@ -55,7 +55,7 @@ The order is load-bearing: a cap that ran before the surcharge would cap a numbe
 the customer is not being charged, and a surcharge applied after the cap is a
 surcharge that survives it.
 
-<!--gen:rule_types-->
+<!--gen:rule_types kind=2-->
 | rule type | stage |
 | --- | --- |
 | `daily_max` | CAP |
@@ -73,7 +73,7 @@ default anywhere**, because a default is a pricing decision made by whoever wrot
 the engine and applied to a garage whose owner never saw it. Where a plan is
 silent, the engine refuses and names the field.
 
-A plan states a resolution mode per stage, from: <!--gen:resolution-->
+A plan states a resolution mode per stage, from: <!--gen:resolution kind=1-->
 `cheapest_wins`, `stated_order`
 <!--/gen:resolution-->. This
 version validates that field and does not act on it — see "What this version does
@@ -91,7 +91,7 @@ standing acceptance, and in this module it is also the entire commercial
 argument: a system that refuses when it is unsure can be trusted by someone who
 cannot check its work.
 
-<!--gen:findings-->
+<!--gen:findings kind=2-->
 | code | kind |
 | --- | --- |
 | `GAP_UNDECLARED_SPACE_CLASS` | gap |
@@ -104,7 +104,7 @@ cannot check its work.
 
 ## A worked example
 
-<!--gen:example-->
+<!--gen:example kind=2-->
 ```
 POST /v1/quote
 {
@@ -141,7 +141,7 @@ Each of these has a test proven able to fail, by planting the defect it guards
 against and requiring red — `python scripts/fail_controls.py`. A test that has
 never failed is a decoration.
 
-<!--gen:guarantees-->
+<!--gen:guarantees kind=1-->
 | id | what it proves |
 | --- | --- |
 | **F1** | The engine never guesses. A stay the plan cannot price is REFUSED, naming the gap, and no number is returned. |
