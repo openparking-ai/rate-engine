@@ -356,6 +356,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "every non-qualifying rule at every stage emits an explanatory zero line, so "
         "a standard-space receipt lists VIP tiers that were never about that space",
     ),
+    # X10. The plant is the L3's own probe: no-op the production invariant. Before
+    # this control existed the WHOLE SUITE stayed green under it -- 97 passed.
+    "F23": (
+        "tests/test_f23_the_production_invariant_is_guarded.py",
+        "engine.py",
+        "    summed = sum(line.delta_minor for line in ledger.lines)",
+        "    return  # PLANTED: the production invariant is a no-op\n"
+        "    summed = sum(line.delta_minor for line in ledger.lines)",
+        "the invariant that makes the breakdown the product rather than a report "
+        "stops reacting at all -- the exact deletion that left all 97 tests green "
+        "when the outside pass measured it",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

@@ -153,6 +153,11 @@ GUARANTEES: dict[str, str] = {
         "a QUALIFY rule always speaks, at delta zero; a rule at another stage that "
         "does not cover the stay is silent."
     ),
+    "F23": (
+        "The production invariant that the fee IS the ledger's sum is itself "
+        "guarded: deleting it, no-opping it or unwiring it from the pricing path "
+        "turns the suite red."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
