@@ -30,8 +30,10 @@ GUARANTEES: dict[str, str] = {
         "the gap, and no number is returned."
     ),
     "F2": (
-        "A special rate is all-conditions-or-nothing. Miss one condition by a minute "
-        "and it does not apply at all -- no pro-rating and no partial credit."
+        "A special rate is all-conditions-or-nothing: miss one condition by a minute "
+        "and it does not apply at all -- no pro-rating and no partial credit. "
+        "Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so "
+        "the property is proven of it rather than of a populated stage."
     ),
     "F3": (
         "The plan version in force at ENTRY prices the whole stay. A rate change "
@@ -51,8 +53,9 @@ GUARANTEES: dict[str, str] = {
         "AND the same breakdown, always, on any machine and at any wall-clock time."
     ),
     "F6": (
-        "The test function IS the production path. `/v1/quote` and the CLI return the "
-        "same bytes for the same request, from one code path and one serializer."
+        "The test function IS the production path. `/v1/quote` and the CLI emit the "
+        "same response bytes for the same request, from one code path and one "
+        "encoder; the CLI's terminal newline is written outside the payload."
     ),
     "F7": (
         "Registering a new rule type changes no existing plan's answer -- fee and "
@@ -97,6 +100,72 @@ GUARANTEES: dict[str, str] = {
         "A registered guarantee whose test stops running turns the build RED, "
         "including when its module fails to import; and a test module that plants a "
         "defect but registers no guarantee is refused."
+    ),
+    "F16": (
+        "Every refusal reaches the caller AS a refusal. A malformed number anywhere "
+        "in a plan comes back as a named 400 naming the field, and a malformed rule "
+        "return as a named 422 -- never as an exception escaping the quote contract, "
+        "and never as a dropped connection."
+    ),
+    "F17": (
+        "A rendered amount uses its own currency's ISO 4217 minor-unit exponent, "
+        "never an assumed two decimal places -- and a code whose exponent this "
+        "module does not know is REFUSED at load rather than rendered on a guess."
+    ),
+    "F17b": (
+        "That refusal is at LOAD, so an unrenderable currency never reaches the "
+        "renderer at all -- the membership check and the exponent read one table."
+    ),
+    "F18": (
+        "A wall-clock limit is compared at the granularity it is written and "
+        "rendered in: the stay is truncated to the minute, so no breakdown line can "
+        "say a time is after itself."
+    ),
+    "F18b": (
+        "And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; "
+        "anything finer is rejected at load, because rounding it would silently "
+        "discard a pricing decision the operator wrote."
+    ),
+    "F19": (
+        "`validate-plan` probes every boundary the plan DECLARES -- entry limits and "
+        "exit limits as well as durations, each side of each -- so a conflict the "
+        "engine would refuse is one the owner was shown before the plan went live."
+    ),
+    "F20": (
+        "There are TWO time roundings and both are declared: a part-minute is a whole "
+        "minute (assumed, module-wide) and minutes into periods is stated per rule. "
+        "Every comparison against a duration reads the same rounded value."
+    ),
+    "F21": (
+        "A refusal's CODE names the cause that actually occurred. A negative total "
+        "is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed."
+    ),
+    "F6b": (
+        "And there is exactly ONE encoder. No surface re-implements the response "
+        "bytes, so the two doors cannot drift the way they silently did."
+    ),
+    "F6c": (
+        "The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal "
+        "newline written outside it -- compared as bytes, never as decoded objects."
+    ),
+    "F22": (
+        "Whether a non-qualifying rule appears in the breakdown depends on its STAGE: "
+        "a QUALIFY rule always speaks, at delta zero; a rule at another stage that "
+        "does not cover the stay is silent."
+    ),
+    "F23": (
+        "The production invariant that the fee IS the ledger's sum is itself "
+        "guarded: deleting it, no-opping it or unwiring it from the pricing path "
+        "turns the suite red."
+    ),
+    "F24": (
+        "A zero-length stay pays the first period -- a decision, published in the "
+        "contract with the divergence it was disclosed with, not left for an "
+        "integrator to discover as an anomaly."
+    ),
+    "F25": (
+        "Whether an early bird may run overnight is stated by the PLAN, in "
+        "`day_span`, with no default -- the engine holds no day condition of its own."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

@@ -84,8 +84,15 @@ not do".
 
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
-places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time a gap is a **refusal that names what is missing**.
+places it is needed: `validate-plan` reports them so an owner can decide, and at
+quote time a gap is a **refusal that names what is missing**.
+
+`validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
+exit limit, each period length and stated ceiling, either side of each, across
+every space class -- rather than a written list of scenarios or a search over all
+stays. That is exhaustive over what a rule can express today and is not a claim
+about every possible stay; the probe axes are derived from the rules, so a rule
+type qualifying on something new brings its own axis.
 
 **Deciding a finding does not resolve it.** `decisions[]` records that an owner
 has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
@@ -109,6 +116,8 @@ cannot check its work.
 | `GAP_NO_PLAN_IN_FORCE_AT_ENTRY` | gap |
 | `CONFLICT_MULTIPLE_RULES_AT_STAGE` | conflict |
 | `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
+| `CONFLICT_NEGATIVE_TOTAL` | conflict |
+| `FAULT_RULE_RETURNED_NOT_LINES` | fault |
 <!--/gen:findings-->
 
 ## A worked example
@@ -161,12 +170,26 @@ never failed is a decoration.
 | **F13** | The fixture corpus holds a case either side of every threshold the rules branch on, read out of the plans rather than from a list -- so no guarantee is proven against a corpus that could only ever exercise one branch. |
 | **F14** | A registered guarantee whose test stops running turns the build RED, including when its module fails to import; and a test module that plants a defect but registers no guarantee is refused. |
 | **F15** | `increment.rounding` is CONSULTED by the applier, which refuses a mode it does not implement rather than pricing the stay under a different one. The applier checks what it implements, never what the loader accepts. |
-| **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
+| **F16** | Every refusal reaches the caller AS a refusal. A malformed number anywhere in a plan comes back as a named 400 naming the field, and a malformed rule return as a named 422 -- never as an exception escaping the quote contract, and never as a dropped connection. |
+| **F17** | A rendered amount uses its own currency's ISO 4217 minor-unit exponent, never an assumed two decimal places -- and a code whose exponent this module does not know is REFUSED at load rather than rendered on a guess. |
+| **F17b** | That refusal is at LOAD, so an unrenderable currency never reaches the renderer at all -- the membership check and the exponent read one table. |
+| **F18** | A wall-clock limit is compared at the granularity it is written and rendered in: the stay is truncated to the minute, so no breakdown line can say a time is after itself. |
+| **F18b** | And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; anything finer is rejected at load, because rounding it would silently discard a pricing decision the operator wrote. |
+| **F19** | `validate-plan` probes every boundary the plan DECLARES -- entry limits and exit limits as well as durations, each side of each -- so a conflict the engine would refuse is one the owner was shown before the plan went live. |
+| **F2** | A special rate is all-conditions-or-nothing: miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so the property is proven of it rather than of a populated stage. |
+| **F20** | There are TWO time roundings and both are declared: a part-minute is a whole minute (assumed, module-wide) and minutes into periods is stated per rule. Every comparison against a duration reads the same rounded value. |
+| **F21** | A refusal's CODE names the cause that actually occurred. A negative total is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed. |
+| **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
+| **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
+| **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
+| **F25** | Whether an early bird may run overnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
-| **F6** | The test function IS the production path. `/v1/quote` and the CLI return the same bytes for the same request, from one code path and one serializer. |
+| **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
+| **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
+| **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
@@ -190,6 +213,29 @@ Named here so nobody adds them helpfully:
   inventing a pricing decision nobody made. An operator who wants the first
   fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
   in the plan.
+
+## A stay of zero length pays the first period
+
+**Entry and exit at the same instant is priced, not free, and not refused.** The
+first period covers `[0, first_period_minutes]`, so a car that enters and leaves
+without stopping pays `first_period_minor` -- the same as a car that stayed one
+minute or fifty-nine.
+
+It is a DECISION, and it is published here because an integrator cannot otherwise
+learn it: the number is correct under the rule as written, and it is the kind of
+edge a garage owner will be asked about at the counter.
+
+**It diverges from the platform's own older fee code, which returns zero for the
+same stay.** That divergence is known and is a later round's to reconcile; it is
+recorded rather than left for whoever notices the two answering differently.
+
+A negative stay -- exit before entry -- is a different thing and is REFUSED as a
+caller bug rather than priced at zero, because pricing it would hide it.
+
+**What would change this, and has not yet:** a grace period. A garage that
+declares one would make a zero-length stay free by the grace rule, and this
+paragraph would then describe only a plan that declares no grace. Grace is not in
+this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
 ## The occupancy multiplier, and why money stays an integer

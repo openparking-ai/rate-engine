@@ -23,15 +23,38 @@ Three traps this file exists to close, all of them things that pass a naive
   one codebase means every function has to handle both, and the one that
   eventually forgets is the one that ships. One type, all the way down.
 
-Nothing in this module rounds money. The only rounding in the engine is
-TIME into periods, it is stated per rule rather than assumed, and it happens
-before any amount is touched. See ``rules/increment.py``.
+Nothing in this module rounds money, and that half of the sentence has always
+been true. **There are TWO time roundings, and only one of them is stated per
+rule** -- the original wording claimed only one existed and that the plan decided
+it, which was false in the direction that costs money:
+
+* **A part-minute is a whole minute.** ``engine.Stay.duration_minutes`` rounds a
+  partial minute UP before any rule sees the stay. This is ASSUMED, module-wide,
+  and no plan field reaches it. It is the ordinary garage convention and it is
+  kept -- but it is a pricing decision, so it is stated here rather than left to
+  be discovered. A stay of 09:00:00 to 09:01:00.001 is TWO minutes, and on a rule
+  with one-minute periods that is twice the fee.
+* **Minutes into periods is STATED PER RULE**, by ``increment.rounding``, and the
+  applier refuses a mode it does not implement rather than pricing under another.
+
+The second is what "stated per rule" was ever true of. Both happen before any
+amount is touched, so no money is rounded either way.
+
+**Where the first one is visible, and it is not only cosmetic:** a stated ceiling
+is compared against the SAME rounded value the rules price on, so a stay of
+24 hours and one millisecond is 1441 minutes and a 1440-minute ceiling does not
+cover it -- the stay is REFUSED rather than priced. That is coherent, and it is
+the behaviour §8 asks for (nothing prices it, so the owner is asked), but an
+operator reading "the only rounding is time into periods" would not have predicted
+it. See ``rules/increment.py`` and ``engine.Stay.duration_minutes``.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any
+
+from .currency import minor_unit_digits
 
 
 class NotMinorUnits(TypeError):
@@ -133,7 +156,24 @@ def refuse_non_integer_money(node: Any, path: str = "plan") -> None:
 
 
 def format_minor(minor: int, currency: str) -> str:
-    """For a breakdown line's text. Never feed the result back into arithmetic."""
+    """For a breakdown line's text. Never feed the result back into arithmetic.
+
+    **The divisor comes from the CURRENCY, not from the number 100.** This used to
+    be `divmod(abs(minor), 100)` for everything, so a fee of 800 minor units in a
+    zero-decimal currency was returned correctly as 800 and rendered "8.00" -- a
+    correct number with an explanation a hundred times wrong, in the breakdown
+    this module exists to make trustworthy. A zero-decimal currency now renders
+    "800 JPY" with no decimal point at all, because a yen has no minor unit to
+    show; a three-decimal one renders three places.
+
+    Currencies are validated at load, so an unknown code cannot reach here from a
+    plan. If one does, `minor_unit_digits` raises rather than falling back to 2 --
+    a guessed exponent is the defect, not the mitigation.
+    """
+    digits = minor_unit_digits(currency)
     sign = "-" if minor < 0 else ""
-    whole, part = divmod(abs(minor), 100)
-    return f"{sign}{whole}.{part:02d} {currency}"
+    if digits == 0:
+        return f"{sign}{abs(minor)} {currency}"
+    divisor = 10**digits
+    whole, part = divmod(abs(minor), divisor)
+    return f"{sign}{whole}.{part:0{digits}d} {currency}"
