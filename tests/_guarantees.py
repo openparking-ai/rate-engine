@@ -163,6 +163,10 @@ GUARANTEES: dict[str, str] = {
         "contract with the divergence it was disclosed with, not left for an "
         "integrator to discover as an anomaly."
     ),
+    "F25": (
+        "Whether an early bird may run overnight is stated by the PLAN, in "
+        "`day_span`, with no default -- the engine holds no day condition of its own."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
