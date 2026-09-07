@@ -14,6 +14,7 @@
     "SURCHARGE": "stated_order",
     "ADJUST": "stated_order"
   },
+  "adjust_order": null,
   "rules": [
     {
       "id": "eb-weekday",

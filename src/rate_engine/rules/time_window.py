@@ -99,7 +99,14 @@ from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import ADJUST, QUALIFY
 from ..wallclock import local_minute, parse_limit
-from . import Rule, check_stated_stage, common_fields, increment, register
+from . import (
+    SPEAKS_UNQUALIFIED,
+    Rule,
+    check_stated_stage,
+    common_fields,
+    increment,
+    register,
+)
 
 #: Day names a plan may state, in week order. The index IS the weekday index
 #: `datetime.weekday()` returns, and validator.py reads this tuple to turn a
@@ -621,13 +628,24 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
 
     failed = _failures(rule, stay, plan)
     if failed:
+        # The consequence differs by effect, and saying the wrong one would be a
+        # sentence that is false on a receipt. A base that did not apply means the
+        # stay prices on the time-based rate; an adjustment that did not apply
+        # means the fee stands as it is. "The stay prices on the time-based rate"
+        # under a declined weekend discount would tell a customer their whole
+        # basis had changed, which is not what happened.
+        consequence = (
+            "so the fee is not adjusted"
+            if rule.params["effect"]["kind"] == "adjust"
+            else "so the stay prices on the time-based rate"
+        )
         return [
             Line(
                 code=NOT_APPLIED,
                 rule_id=rule.id,
                 text=(
                     f"{rule.params['label']} NOT applied: {'; '.join(failed)}. All of "
-                    "its conditions must hold, so the stay prices on the time-based rate"
+                    f"its conditions must hold, {consequence}"
                 ),
                 delta_minor=0,
             )
@@ -676,4 +694,18 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
     return [_adjust_line(rule, plan, running_total_minor)]
 
 
-register("time_window", STAGES_RUN_AT, build, apply)
+# SPEAKS_UNQUALIFIED, and it is the reason the trait exists.
+#
+# A window at QUALIFY already speaks either way -- the engine asks every QUALIFY
+# rule for lines. One at ADJUST did not, because the framework's silence rule was
+# keyed on the STAGE: outside QUALIFY, a rule that did not apply was assumed to
+# have not applied because it was never about this space, and a receipt listing
+# every VIP tier a standard bay is not charged for is noise.
+#
+# That assumption held until this type existed. A weekend discount declining
+# because it is a Tuesday is not noise -- it is the answer to "why didn't I get
+# the weekend discount?", which is precisely the question §8 exists to make
+# answerable, and it was missing from the breakdown. The type says so about
+# itself rather than the engine knowing its name; coverage still governs, so a
+# window scoped to VIP stays silent on a standard receipt.
+register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,))

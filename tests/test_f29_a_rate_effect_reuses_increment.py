@@ -57,6 +57,7 @@ PLAIN = {
     "effective_from": "2026-01-01T00:00:00-05:00",
     "timezone": "America/New_York", "currency": "USD", "space_classes": ["standard"],
     "resolution": RESOLUTION,
+    "adjust_order": None,
     "rules": [
         {"id": "x", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], **RATE},
@@ -72,6 +73,7 @@ VIA_WINDOW = {
     "effective_from": "2026-01-01T00:00:00-05:00",
     "timezone": "America/New_York", "currency": "USD", "space_classes": ["standard"],
     "resolution": RESOLUTION,
+    "adjust_order": None,
     "rules": [
         {"id": "x", "type": "time_window", "stage": "QUALIFY",
          "space_classes": ["standard"], "label": "Weekend rate",

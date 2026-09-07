@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .currency import excluded_reason, is_known
 from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
-from .stages import STAGES
+from .stages import ADJUST, STAGES
 
 
 class InvalidPlan(ValueError):
@@ -48,6 +48,19 @@ class InvalidPlan(ValueError):
 #: already exists -- see F7, which is the guarantee that makes that safe.
 RESOLUTION_MODES: tuple[str, ...] = ("cheapest_wins", "stated_order")
 
+#: `adjust_order` is a LIST OF RULE IDS, or null, and the null has to be typed.
+#:
+#: **It is deliberately not part of `resolution`, and that is not tidiness.**
+#: A resolution mode answers "which of these is the price" -- an either/or, at a
+#: stage where only one rule can win. Two adjustments are not an either/or: BOTH
+#: apply, and the only open question is the sequence, because 20% off then 5.00
+#: off is not 5.00 off then 20% off. An order is not a choice, so it does not
+#: live in the field that records choices.
+#:
+#: Required-and-nullable, like `max_duration_minutes` and `week_starts_on`: a
+#: field that may simply be absent is a field somebody forgets while believing
+#: they set it. A plan with fewer than two adjustments writes null.
+
 PLAN_KEYS: frozenset[str] = frozenset(
     {
         "plan_version",
@@ -56,6 +69,7 @@ PLAN_KEYS: frozenset[str] = frozenset(
         "currency",
         "space_classes",
         "resolution",
+        "adjust_order",
         "rules",
         "decisions",
     }
@@ -107,6 +121,7 @@ class Plan:
     currency: str
     space_classes: tuple[str, ...]
     resolution: dict[str, str]
+    adjust_order: tuple[str, ...] | None
     rules: tuple[Rule, ...]
     decisions: tuple[dict, ...]
 
@@ -210,6 +225,33 @@ def load_plan(document: object, where: str = "plan") -> Plan:
             raise InvalidPlan(f"{where}.rules contains two rules with id {rule.id!r}.")
         seen.add(rule.id)
 
+    adjust_order = document["adjust_order"]
+    if adjust_order is not None:
+        adjustments = sorted(r.id for r in rules if r.stage == ADJUST)
+        if (
+            not isinstance(adjust_order, list)
+            or not all(isinstance(item, str) for item in adjust_order)
+        ):
+            raise InvalidPlan(
+                f"{where}.adjust_order must be a list of rule ids, or null. It is the "
+                "sequence the ADJUST rules are applied in, and an order is not a "
+                "choice -- see resolution, which records choices."
+            )
+        if len(set(adjust_order)) != len(adjust_order):
+            raise InvalidPlan(f"{where}.adjust_order names a rule more than once.")
+        if sorted(adjust_order) != adjustments:
+            # Named explicitly and exhaustively, never by position. A rule missing
+            # from the order would otherwise take a silent place in it, which is
+            # the array-order disease this module refuses at `select_plan`.
+            missing = sorted(set(adjustments) - set(adjust_order))
+            extra = sorted(set(adjust_order) - set(adjustments))
+            raise InvalidPlan(
+                f"{where}.adjust_order must name every ADJUST rule exactly once. "
+                + (f"Missing: {', '.join(missing)}. " if missing else "")
+                + (f"Not an ADJUST rule in this plan: {', '.join(extra)}. " if extra else "")
+                + "A rule left out of the order would take a silent position in it."
+            )
+
     decisions = document["decisions"]
     if not isinstance(decisions, list):
         raise InvalidPlan(
@@ -233,6 +275,7 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         currency=currency,
         space_classes=tuple(space_classes),
         resolution=dict(resolution),
+        adjust_order=tuple(adjust_order) if adjust_order is not None else None,
         rules=rules,
         decisions=tuple(decisions),
     )

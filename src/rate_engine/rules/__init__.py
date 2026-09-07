@@ -33,6 +33,21 @@ by returning a Line.
    exists" is not -- but it is a rule about STAGES, not a blanket one.
    `tests/test_f22_the_silence_rule_is_per_stage.py` holds both halves.
 
+   **AND THE STAGE IS NOT THE WHOLE ANSWER EITHER, which A2 had to find out.**
+   The reasoning above is about the two KINDS of silence, and it used the stage as
+   the proxy for them because in A1 the stage was a perfect proxy: the only rule
+   type outside QUALIFY that could fail to apply failed by not covering the space.
+   `time_window` broke that. A window with an `adjust` effect runs at ADJUST and
+   can decline for a reason that has nothing to do with the space -- it is a
+   Tuesday and the rule says weekends -- which is squarely the FIRST kind, the
+   informative one, at a stage the old rule called silent. "Why didn't I get the
+   weekend discount?" had no answer in the breakdown.
+
+   So a type DECLARES it, with the `SPEAKS_UNQUALIFIED` trait, and the engine
+   calls such a rule's applier even when it did not qualify -- **provided the rule
+   COVERS the stay**, which is the half that was always right. A tier that was
+   never about this space is still silent, whatever it declares.
+
 5. It declares the STAGE OR STAGES it may run at, and a type that may run at
    more than one DERIVES each rule's stage from that rule's own shape. This
    exists because `time_window` is one condition with three effects and two of
@@ -72,6 +87,31 @@ class Rule:
         return space_class in self.space_classes
 
 
+# --- traits ----------------------------------------------------------------
+#
+# What a rule type declares about ITSELF at registration, rather than what the
+# engine hardcodes about it by name. There has been exactly one rule in this
+# module that needed the pipeline to behave differently, and the tempting fix was
+# `if rule.type == "grace"` in engine.py -- which is the engine holding a pricing
+# decision no plan can see or change, the defect `day_span` was created to undo.
+
+#: When a rule of this type QUALIFIES, the pipeline stops after QUALIFY: nothing
+#: at CAP, SURCHARGE or ADJUST is applied, and this rule prices the stay alone.
+#: `grace` is the first one. Free means free -- a graced stay in a VIP space must
+#: not pick up the surcharge, and must not pick up anything at CAP.
+TERMINAL = "terminal"
+
+#: A rule of this type is asked for lines even when it did NOT qualify, at any
+#: stage, provided it covers the stay's space class. See item 4 above: the stage
+#: was a proxy for "could this have applied to you", and it stopped being one.
+SPEAKS_UNQUALIFIED = "speaks_unqualified"
+
+TRAITS: tuple[str, ...] = (TERMINAL, SPEAKS_UNQUALIFIED)
+
+#: type name -> the traits it declared. Every registered type has an entry, so a
+#: lookup is never a `.get` with a default that quietly means "no".
+RULE_TRAITS: dict[str, frozenset[str]] = {}
+
 #: type name -> (the stages it may run at, builder). The builder validates and
 #: returns a Rule; the applier lives beside it and is looked up by type at
 #: pipeline time.
@@ -89,6 +129,7 @@ def register(
     stage: str | tuple[str, ...],
     builder: Callable[..., Rule],
     applier: Callable[..., Any],
+    traits: tuple[str, ...] = (),
 ):
     """Register a rule type at the stage, or the stages, it may run at.
 
@@ -97,10 +138,22 @@ def register(
     spellings are accepted rather than the tuple alone because `register` is this
     module's published extension point: a rule type written against the earlier
     signature must keep working, which is F7 applied to the framework itself.
+
+    `traits` is how a type tells the ENGINE that the pipeline must treat it
+    differently, rather than the engine knowing its name. It defaults to none, so
+    a type registered against the earlier signature declares nothing and behaves
+    exactly as it did.
     """
     stages = (stage,) if isinstance(stage, str) else tuple(stage)
     if not stages:
         raise ValueError(f"{rule_type} declares no stage at all.")
+    declared = frozenset(traits)
+    unknown_traits = sorted(declared - set(TRAITS))
+    if unknown_traits:
+        raise ValueError(
+            f"{rule_type} declares trait(s) {', '.join(map(repr, unknown_traits))}, "
+            f"which this version does not know. Registered traits: {', '.join(TRAITS)}."
+        )
     unknown = [s for s in stages if s not in STAGES]
     if unknown:
         raise ValueError(
@@ -121,6 +174,7 @@ def register(
             )
     RULE_TYPES[rule_type] = (stages, builder)
     RULE_APPLIERS[rule_type] = applier
+    RULE_TRAITS[rule_type] = declared
 
 
 def build_rule(raw: object, plan_space_classes: tuple[str, ...], where: str) -> Rule:

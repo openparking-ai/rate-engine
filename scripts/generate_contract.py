@@ -192,6 +192,17 @@ rule type now runs at a stage that depends on the rule rather than only on its
 type. The stage is still stated in every plan, and the engine refuses a plan
 whose stated stage disagrees with the one the rule's own shape implies.
 
+Two rule types arrived with it: `grace`, and `weekly_max`. And one field: every
+plan now states `adjust_order`, null included.
+
+**A latent defect was fixed on the way, and it is worth stating because a plan
+that used to be refused now prices.** More than one rule qualifying at one stage
+was treated as a conflict at EVERY stage. That is right where rules compete and
+wrong where they compose, and it was harmless only while no second rule type
+existed at a composing stage. `weekly_max` is that second type: without the fix,
+every plan carrying a daily AND a weekly cap would have refused every stay in the
+garage.
+
 **A window that would have to wrap past midnight is REFUSED, and that is a stated
 gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
 not expressible as one rule. It is refused at load, naming the field, and the
@@ -242,12 +253,41 @@ A plan states a resolution mode per stage, from: {resolution_inline}. This
 version validates that field and does not act on it — see "What this version does
 not do".
 
+`adjust_order` is a different thing and is stated separately: a list of rule ids,
+or null, giving the sequence the ADJUST rules run in. **An order is not a
+choice**, which is why it does not live in `resolution`. It is
+required-and-nullable like `max_duration_minutes` and `week_starts_on` — a field
+that may simply be absent is one somebody forgets while believing they set it —
+and when it is stated it must name every ADJUST rule exactly once, because a rule
+left out would take a silent position in the sequence.
+
 ## Gaps, conflicts, and the refusal
 
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
 places it is needed: `validate-plan` reports them so an owner can decide, and at
 quote time a gap is a **refusal that names what is missing**.
+
+**More than one rule qualifying at one stage means three different things, and
+the stage decides which.** This used to be one answer for all five stages, and it
+was wrong in a way that only a second rule type could expose:
+
+- **QUALIFY and ACCUMULATE resolve.** Two rules are a genuine either/or -- only
+  one of them can be the price -- so it is a conflict and the plan settles it.
+- **CAP and SURCHARGE compose, in any order.** Two caps are not a contradiction;
+  they are two ceilings, and the lower one wins whichever ran first. Nothing is
+  reported, because there is nothing for an owner to decide. Their lines are
+  emitted in ascending rule id, never in the order the caller's array happened to
+  carry them.
+- **ADJUST composes, and the order changes the money.** Twenty per cent off then
+  five dollars off is not five dollars off then twenty per cent off, so two
+  qualifying adjustments with no stated `adjust_order` are REFUSED under their
+  own code -- a different question from "which of these is the price", and a
+  consumer routing on codes can tell them apart.
+
+**A TERMINAL rule is not a conflict either.** It wins outright by what its type
+is, rather than by anything the plan says, so a grace period beating a weekend
+rate is settled and the beaten rule gets a line saying so.
 
 `validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
 exit limit, each period length and stated ceiling, either side of each, across
@@ -291,16 +331,35 @@ Named here so nobody adds them helpfully:
   rules qualifying at one stage is a refusal in this version — including two
   `time_window` rules, which a plan can now express. Resolving it is not done
   here.
-- **No weekly maximum, and no occupancy-driven rule.** Not in this version.
+- **No occupancy-driven rule.** Not in this version.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.
 - **No forecast and no competitor comparison.** Round C.
 - **No rate import from a photograph.** Round D, and it will only ever produce a
   draft.
-- **No grace period.** Deliberately absent: inventing a free interval is
-  inventing a pricing decision nobody made. An operator who wants the first
-  fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
-  in the plan.
+
+## Grace, and what "free" means
+
+A plan may declare a grace period: `minutes`, a positive whole number, with **no
+default and no grace unless the plan states the rule.** "Usually ten minutes" is
+an observation about other people's garages, not a value to assume.
+
+**A stay at or under that many minutes costs nothing, and nothing means nothing.**
+Grace is TERMINAL: the pipeline stops after QUALIFY, so a graced stay in a VIP
+space does not pick up the surcharge, does not reach a cap, and is not adjusted.
+A receipt for a graced stay carries the grace line and nothing else. It also
+beats any other special that qualified — and that special is not dropped
+silently; it gets a line naming the rule that superseded it.
+
+**All-or-nothing.** One minute over a ten-minute grace and the stay prices from
+ENTRY on the ordinary rate, not from minute ten. That is the ordinary garage
+convention and it is the same all-conditions rule every special here keeps.
+
+**A grace of ten minutes covers 600.000 seconds and not 600.001.** Durations are
+whole minutes rounded UP, module-wide, before any rule sees a stay — so a stay of
+ten minutes and one millisecond is eleven minutes and misses a ten-minute grace.
+That is coherent with every other duration comparison here, including the stated
+ceiling on a time-based rule, and it is recorded rather than adjusted.
 
 ## A stay of zero length pays the first period
 
@@ -320,10 +379,11 @@ recorded rather than left for whoever notices the two answering differently.
 A negative stay -- exit before entry -- is a different thing and is REFUSED as a
 caller bug rather than priced at zero, because pricing it would hide it.
 
-**What would change this, and has not yet:** a grace period. A garage that
-declares one would make a zero-length stay free by the grace rule, and this
-paragraph would then describe only a plan that declares no grace. Grace is not in
-this version -- see the item above.
+**And this paragraph now describes only a plan that declares NO grace.** A garage
+that declares one makes a zero-length stay free by the grace rule, because zero
+is at or under any positive number of minutes. Both behaviours are deliberate,
+both are tested, and which one a garage gets is stated in its own plan rather
+than assumed here.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
 ## The first money rounding, and why money stays an integer

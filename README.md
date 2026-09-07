@@ -115,13 +115,24 @@ drifts.
   the rate does not apply at all — no pro-rating, no partial credit, and not the
   cheaper of the two. The breakdown still carries a line saying which condition
   failed, because that is the question an attendant is actually asked.
-- **Daily maximum**, stating whether a day means a local calendar day or a
-  rolling 24 hours — because those price a Friday-night stay differently and the
-  answer is the operator's.
+- **Daily and weekly maximums**, each stating what a day or a week means — a
+  local calendar day or a rolling 24 hours; a calendar week starting on the day
+  the plan names, or a rolling seven days. Those price a Friday-night stay
+  differently and the answer is the operator's, not ours: there is no universal
+  first day of the week. **Two caps are not a conflict** — they are two ceilings,
+  and the lower one wins whichever is applied first.
+- **A grace period, if the plan declares one.** A stay at or under the stated
+  minutes is free, and free means free: no surcharge, no cap, no adjustment. One
+  minute over and it prices from entry on the ordinary rate. There is no default
+  — "usually ten minutes" is an observation about other people's garages.
 - **Space-class surcharges.** This module prices a *space*, not a garage: a VIP
   area and a reserved spot are the same mechanism.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
+- **When two rules qualify at once, what that MEANS depends on the stage.** Two
+  specials competing to be the price is a conflict the plan settles. Two caps
+  compose and nothing is reported. Two adjustments compose but the order changes
+  the money, so the plan states the order and a plan that has not is refused.
 
 Money is an integer of minor units everywhere. No float, no bool, no `Decimal`,
 at any depth — a plan carrying one does not load, whether or not the field is one

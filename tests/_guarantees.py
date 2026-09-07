@@ -153,6 +153,12 @@ GUARANTEES: dict[str, str] = {
         "a QUALIFY rule always speaks, at delta zero; a rule at another stage that "
         "does not cover the stay is silent."
     ),
+    "F22b": (
+        "And the stage is not the whole answer. A rule TYPE may declare that it "
+        "speaks when it did not qualify, so a weekend discount declining because it "
+        "is a Tuesday says so on the receipt -- while a rule that was never about "
+        "this space stays silent whatever it declared."
+    ),
     "F23": (
         "The production invariant that the fee IS the ledger's sum is itself "
         "guarded: deleting it, no-opping it or unwiring it from the pricing path "
@@ -201,6 +207,29 @@ GUARANTEES: dict[str, str] = {
         "An `adjust` percentage is integer basis points and its `rounding` is "
         "CONSULTED: the same stay under `up` and under `down` differs by one minor "
         "unit, and the breakdown line says which way it went."
+    ),
+    "F32": (
+        "`grace` is TERMINAL, and free means free: a stay at or under the stated "
+        "minutes costs zero and picks up no surcharge, no cap and no adjustment. "
+        "Terminality is DECLARED by the rule type at registration -- the engine "
+        "never knows its name -- and a special it beat says so on the receipt."
+    ),
+    "F33": (
+        "Two caps on one stay leave the LOWER ceiling standing, the total after CAP "
+        "is the same in both application orders, and the breakdown names both. Caps "
+        "COMPOSE; two of them are not a conflict."
+    ),
+    "F34": (
+        "More than one rule qualifying at one stage means three different things, "
+        "and the stage's category decides which: RESOLVING is a conflict, COMPOSING "
+        "order-independent is not reported at all, and COMPOSING order-dependent is "
+        "refused unless the plan states the order."
+    ),
+    "F35": (
+        "Two qualifying ADJUST rules with no stated `adjust_order` are REFUSED "
+        "naming both; with an order they produce that order's total, and the two "
+        "orders genuinely differ -- 20% off then a fixed amount is not the same fee "
+        "as the fixed amount then 20% off."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

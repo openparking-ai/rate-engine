@@ -42,6 +42,7 @@ PLAN = {
     "currency": "USD",
     "space_classes": ["standard"],
     "resolution": RESOLUTION,
+    "adjust_order": None,
     "rules": [
         {"id": "flat-hour", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,

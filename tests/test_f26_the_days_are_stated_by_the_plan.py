@@ -44,6 +44,7 @@ PLAN = {
         "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
         "SURCHARGE": "stated_order", "ADJUST": "stated_order",
     },
+    "adjust_order": None,
     "rules": [
         {"id": "weekend", "type": "time_window", "stage": "QUALIFY",
          "space_classes": ["standard"], "label": "Weekend rate",
