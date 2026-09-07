@@ -78,6 +78,24 @@ def test_a_decimal_is_refused():
 @pytest.mark.guarantee("F4")
 def test_a_float_in_a_field_this_version_ignores_is_refused_as_well():
     """It is not read today. It is in a live plan, and it will be read one day."""
+    assert "float" in _refused(_with_note(1.5))
+
+
+# --- F4b: the SENTENCE, not three examples of it -----------------------------
+#
+# "A float, a bool or a Decimal anywhere in a plan is refused at load" is
+# published at four sites. Every individual test above was true and the sentence
+# over them was not: a bool hit an early `return` in the plan-wide walk and a
+# Decimal fell off the end of it, so both were ACCEPTED at all four `decisions[]`
+# fields -- the only leaves in a plan that nothing else types.
+#
+# The fix was to make the sentence true rather than to narrow it. What holds it
+# true is the derived test below, not the two examples: an example passes for one
+# field, and the sentence is a claim about every field there is or will be.
+
+
+def _with_note(value) -> dict:
+    """The reference plan carrying one decision whose note is `value`."""
     document = plan_with(decisions=[])
     document["rules"][0]["space_classes"] = ["standard"]
     document["decisions"] = [
@@ -85,9 +103,81 @@ def test_a_float_in_a_field_this_version_ignores_is_refused_as_well():
             "code": "GAP_NO_ACCUMULATE_RULE",
             "decided_by": "owner",
             "decided_at": "2026-03-01",
-            "note": 1.5,
+            "note": value,
         }
     ]
-    assert "float" in _refused(document)
+    return document
+
+
+@pytest.mark.guarantee("F4b")
+def test_a_bool_in_a_decisions_note_is_refused():
+    """Measured as ACCEPTED before this round. A note is prose an owner wrote;
+    a bool in it is a malformed document, not a pricing subtlety."""
+    assert "boolean" in _refused(_with_note(True))
+
+
+@pytest.mark.guarantee("F4b")
+def test_a_decimal_in_a_decisions_note_is_refused():
+    """Also measured as ACCEPTED. `as_minor` never sees it -- nothing asks a note
+    for money -- so only the plan-wide walk can refuse it."""
+    assert "Decimal" in _refused(_with_note(Decimal("8.00")))
+
+
+@pytest.mark.guarantee("F4b")
+def test_the_published_sentence_is_true_at_EVERY_LEAF_of_a_plan():
+    """DERIVED, and this is the test that makes the sentence a guarantee.
+
+    It enumerates every leaf position in a loadable plan by walking the document
+    itself, puts each of the three named types at each position in turn, and
+    requires a refusal every time. A leaf added to the plan format in a later
+    round is probed the day it exists -- which is the difference between a
+    guarantee and a list of examples somebody remembered to extend.
+
+    A positive control comes with it: the unmodified plan must LOAD. Without
+    that, an engine refusing every document whatsoever would satisfy this.
+    """
+    document = _with_note("we know; the attendant handles these at the booth")
+    assert load_plan(document), "the unprobed plan must load, or nothing below means anything"
+
+    def leaves(node, path="plan"):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield from leaves(value, f"{path}.{key}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                yield from leaves(value, f"{path}[{index}]")
+        else:
+            yield path
+
+    def replace_at(node, path, value, prefix="plan"):
+        """Rebuild `node` with the leaf at `path` replaced."""
+        if prefix == path:
+            return value
+        if isinstance(node, dict):
+            return {k: replace_at(v, path, value, f"{prefix}.{k}") for k, v in node.items()}
+        if isinstance(node, list):
+            return [replace_at(v, path, value, f"{prefix}[{i}]") for i, v in enumerate(node)]
+        return node
+
+    positions = sorted(set(leaves(document)))
+    assert len(positions) > 30, (
+        f"only {len(positions)} leaves were probed; the plan fixture has shrunk and "
+        "this test is no longer covering the format"
+    )
+
+    accepted: list[str] = []
+    for probe in (True, Decimal("8.00"), 8.0):
+        for position in positions:
+            probed = replace_at(document, position, probe)
+            try:
+                load_plan(probed)
+            except (InvalidPlan, NotMinorUnits):
+                continue
+            accepted.append(f"{position} = {probe!r}")
+
+    assert not accepted, (
+        "the published sentence says a float, a bool or a Decimal ANYWHERE in a plan "
+        "is refused at load. These were accepted:\n  " + "\n  ".join(accepted)
+    )
 
 

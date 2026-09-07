@@ -87,8 +87,9 @@ be byte-identical over every fixture.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
 
-Money is an integer of minor units everywhere. No float, no `Decimal`, at any
-depth — a plan carrying one does not load.
+Money is an integer of minor units everywhere. No float, no bool, no `Decimal`,
+at any depth — a plan carrying one does not load, whether or not the field is one
+this version reads.
 
 See [docs/CONTRACT.md](docs/CONTRACT.md) for the full contract, and for what this
 version deliberately does **not** do.

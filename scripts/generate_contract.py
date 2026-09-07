@@ -168,11 +168,12 @@ document saying it does not.
 
 ## Money
 
-Money is an **integer of minor units** — 800 means 8.00. No float, no `Decimal`,
-no string, at any depth of a plan, including in fields this version does not
-read. A rate that cannot be expressed in minor units is a rate this module
-refuses, and it refuses it at load rather than at the point the arithmetic goes
-wrong. JSON exponent form (`8e2`) parses to a float and is refused with the rest.
+Money is an **integer of minor units** — 800 means 8.00. A float, a bool or a
+`Decimal` is refused at **any depth of a plan**, including in fields this version
+does not read; and a string where money is expected is refused with them. A rate
+that cannot be expressed in minor units is a rate this module refuses, and it
+refuses it at load rather than at the point the arithmetic goes wrong. JSON
+exponent form (`8e2`) parses to a float and is refused with the rest.
 
 ## Time
 

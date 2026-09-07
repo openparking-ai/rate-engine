@@ -72,6 +72,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a float anywhere in a plan is accepted at load, including in a field this "
         "version does not yet read",
     ),
+    # P3. The plant removes the plan-wide walk entirely -- "remove the check and
+    # require red". `as_minor` still guards the fields that ASK for money, so what
+    # this exposes is precisely the gap the sentence was false about: the leaves
+    # nothing else types.
+    "F4b": (
+        "tests/test_f4_integer_minor_units.py",
+        "plan.py",
+        "    refuse_non_integer_money(document, where)",
+        "    pass  # PLANTED: the plan-wide walk no longer runs",
+        "a float, a bool or a Decimal in a plan field this version does not read is "
+        "accepted at load, so the sentence published at four sites is false again",
+    ),
     "F5": (
         "tests/test_f5_determinism.py",
         "rules/early_bird.py",
