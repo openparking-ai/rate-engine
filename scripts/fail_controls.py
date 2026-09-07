@@ -316,6 +316,33 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "qualifying at one stage, so a consumer routing on the code is told to "
         "settle a resolution order that was never the problem",
     ),
+    # X8, and the three ids guard three DIFFERENT properties -- writing one plant
+    # for all of them was how the original F6 ended up unable to see the defect
+    # that actually shipped.
+    #
+    # NOTE, recorded so it is not re-attempted: changing `contract.encode` to
+    # indent=4/sort_keys=True is NOT a usable plant any more. Both surfaces read
+    # that one function, so they move together and stay equal -- which is the fix
+    # working, not a control failing. fail_controls.py reported it GREEN and the
+    # plant was replaced rather than argued with.
+    "F6b": (
+        "tests/test_f6_one_code_path.py",
+        "service.py",
+        "        payload = encode(body)",
+        "        payload = json.dumps(body, indent=2).encode()  # PLANTED: a second encoder",
+        "the route encodes its own response again instead of calling the one "
+        "encoder, which is the arrangement that let the two doors' bytes diverge "
+        "while the contract claimed one serializer",
+    ),
+    "F6c": (
+        "tests/test_f6_one_code_path.py",
+        "cli.py",
+        "    stream.write(payload)",
+        "    stream.write(payload + b' ')  # PLANTED: a byte the route does not send",
+        "the CLI writes a byte inside the payload that the route does not send -- "
+        "the exact shape of the defect that shipped, print() appending a newline, "
+        "and the one the old decoded comparison could not see",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

@@ -51,8 +51,9 @@ GUARANTEES: dict[str, str] = {
         "AND the same breakdown, always, on any machine and at any wall-clock time."
     ),
     "F6": (
-        "The test function IS the production path. `/v1/quote` and the CLI return the "
-        "same bytes for the same request, from one code path and one serializer."
+        "The test function IS the production path. `/v1/quote` and the CLI emit the "
+        "same response bytes for the same request, from one code path and one "
+        "encoder; the CLI's terminal newline is written outside the payload."
     ),
     "F7": (
         "Registering a new rule type changes no existing plan's answer -- fee and "
@@ -136,6 +137,14 @@ GUARANTEES: dict[str, str] = {
     "F21": (
         "A refusal's CODE names the cause that actually occurred. A negative total "
         "is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed."
+    ),
+    "F6b": (
+        "And there is exactly ONE encoder. No surface re-implements the response "
+        "bytes, so the two doors cannot drift the way they silently did."
+    ),
+    "F6c": (
+        "The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal "
+        "newline written outside it -- compared as bytes, never as decoded objects."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
