@@ -182,6 +182,7 @@ never failed is a decoration.
 | **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
 | **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
+| **F25** | Whether an early bird may run overnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |

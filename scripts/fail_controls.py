@@ -382,6 +382,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "decision being changed with nothing said -- and it is the exact behaviour "
         "an outside reviewer asked for and the owner has not agreed to",
     ),
+    # X4. The plant restores the undeclared condition exactly as it shipped: the
+    # engine deciding the day span for every plan, whatever the plan says.
+    "F25": (
+        "tests/test_f25_day_span_is_declared_by_the_plan.py",
+        "rules/early_bird.py",
+        '    if rule.params["day_span"] == "same_day" and crosses_a_day:',
+        "    if crosses_a_day:  # PLANTED: the engine decides the day span again",
+        "the engine imposes a same-local-day condition the plan cannot state or "
+        "remove, so an overnight stay meeting both declared wall-clock limits is "
+        "charged the time-based rate -- 60.00 where the early bird is 12.00",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

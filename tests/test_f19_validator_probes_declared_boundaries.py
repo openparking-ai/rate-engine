@@ -44,10 +44,10 @@ DAWN_CONFLICT = {
     "rules": [
         {"id": "eb-dawn-a", "type": "early_bird", "stage": "QUALIFY",
          "space_classes": ["standard"], "enter_by": "06:00", "exit_by": "17:00",
-         "price_minor": 1000},
+         "price_minor": 1000, "day_span": "same_day"},
         {"id": "eb-dawn-b", "type": "early_bird", "stage": "QUALIFY",
          "space_classes": ["standard"], "enter_by": "05:30", "exit_by": "16:00",
-         "price_minor": 1100},
+         "price_minor": 1100, "day_span": "same_day"},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,

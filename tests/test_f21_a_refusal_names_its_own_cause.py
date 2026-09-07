@@ -117,10 +117,10 @@ def test_the_MULTI_RULE_conflict_still_uses_the_multi_rule_code():
     document["rules"] = [
         {"id": "eb-a", "type": "early_bird", "stage": "QUALIFY",
          "space_classes": ["standard"], "enter_by": "09:00", "exit_by": "17:00",
-         "price_minor": 1000},
+         "price_minor": 1000, "day_span": "same_day"},
         {"id": "eb-b", "type": "early_bird", "stage": "QUALIFY",
          "space_classes": ["standard"], "enter_by": "10:00", "exit_by": "18:00",
-         "price_minor": 1100},
+         "price_minor": 1100, "day_span": "same_day"},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,
