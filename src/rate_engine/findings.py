@@ -49,6 +49,23 @@ CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"
 #: and the answer is the same as everywhere else here: refuse, and name both.
 CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 
+#: The rules between them produced a NEGATIVE total. Refused rather than handing a
+#: customer a negative amount.
+#:
+#: It used to be raised as CONFLICT_MULTIPLE_RULES_AT_STAGE, which is documented
+#: exclusively for two rules qualifying at one stage. Nothing was mispriced -- the
+#: refusal is correct and the SENTENCE said what really happened -- but the CODE
+#: named a cause that had not occurred, and the code is what anything mechanical
+#: keys off. A consumer routing on it would have told an operator to settle a
+#: resolution order that was not the problem.
+#:
+#: Unreachable with the four rule types A1 ships: every money field goes through
+#: `as_non_negative_minor`, and `daily_max` sets the total to exactly
+#: `max_minor x days`, which is >= 0. It is registered anyway because a rule type
+#: is the unit of growth here, and the first one that can return a negative Line
+#: should meet a named refusal rather than a mislabelled one.
+CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
+
 # --- fault codes -----------------------------------------------------------
 #: A registered rule type returned something that is not a list of Lines.
 #:
@@ -71,6 +88,7 @@ GAP_CODES: tuple[str, ...] = (
 CONFLICT_CODES: tuple[str, ...] = (
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
+    CONFLICT_NEGATIVE_TOTAL,
 )
 
 #: Faults are never produced by the validator: it probes a plan against stays and

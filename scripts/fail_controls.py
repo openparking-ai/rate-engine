@@ -306,6 +306,16 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "price on rounded minutes, so a stay past the ceiling is priced anyway and "
         "the refusal edge no longer matches the pricing edge",
     ),
+    # X7. The plant restores the borrowed code exactly as it shipped.
+    "F21": (
+        "tests/test_f21_a_refusal_names_its_own_cause.py",
+        "engine.py",
+        "                    code=CONFLICT_NEGATIVE_TOTAL,",
+        "                    code=CONFLICT_MULTIPLE_RULES_AT_STAGE,  # PLANTED: borrowed again",
+        "a negative total is refused under the code documented for two rules "
+        "qualifying at one stage, so a consumer routing on the code is told to "
+        "settle a resolution order that was never the problem",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
