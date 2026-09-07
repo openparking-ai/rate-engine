@@ -99,6 +99,7 @@ cannot check its work.
 | `GAP_STAY_EXCEEDS_MAX_DURATION` | gap |
 | `GAP_NO_PLAN_IN_FORCE_AT_ENTRY` | gap |
 | `CONFLICT_MULTIPLE_RULES_AT_STAGE` | conflict |
+| `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
 <!--/gen:findings-->
 
 ## A worked example
@@ -144,6 +145,7 @@ never failed is a decoration.
 | id | what it proves |
 | --- | --- |
 | **F1** | The engine never guesses. A stay the plan cannot price is REFUSED, naming the gap, and no number is returned. |
+| **F10** | Plan selection is never ambiguous. Two versions in force at the same instant are REFUSED and both named, never resolved by the order of the caller's list. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |

@@ -111,6 +111,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
+    "F10": (
+        "tests/test_f10_unambiguous_plan_selection.py",
+        "engine.py",
+        "    if len(tied) > 1:",
+        "    if False:  # PLANTED: an ambiguous selection is resolved by list order again",
+        "two plan versions sharing an effective date stop being refused, so the fee "
+        "goes back to depending on which one the caller put first in the array",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

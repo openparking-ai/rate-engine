@@ -57,6 +57,10 @@ GUARANTEES: dict[str, str] = {
         "The fee is the sum of the breakdown's deltas, by construction. There is no "
         "second route to the total."
     ),
+    "F10": (
+        "Plan selection is never ambiguous. Two versions in force at the same instant "
+        "are REFUSED and both named, never resolved by the order of the caller's list."
+    ),
 }
 
 #: Environment variable naming ids this job cannot run. Exact ids, comma

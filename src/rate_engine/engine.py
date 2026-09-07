@@ -28,6 +28,7 @@ from datetime import datetime
 
 from .breakdown import Ledger, Line
 from .findings import (
+    CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
@@ -137,7 +138,37 @@ def select_plan(plans: list[Plan], stay: Stay) -> Plan:
                 )
             ]
         )
-    return max(in_force, key=lambda p: p.effective_from)
+
+    # AND THE SELECTION MUST NOT BE AMBIGUOUS.
+    #
+    # This was `max(in_force, key=...effective_from)`, and `max` returns the
+    # FIRST maximal element. Two versions carrying the same `effective_from`
+    # therefore priced the same car at 300 or at 2700 minor units depending only
+    # on the order of the caller's array -- measured, not imagined. A rate engine
+    # that decides money by list order and says nothing is exactly the failure
+    # this module refuses everywhere else, so it refuses here too.
+    latest = max(p.effective_from for p in in_force)
+    tied = [p for p in in_force if p.effective_from == latest]
+    if len(tied) > 1:
+        # Sorted, so the refusal reads the same whichever order it arrived in.
+        # A message that still depended on the array order would have fixed the
+        # fee and left the explanation carrying the same defect.
+        names = sorted(p.plan_version for p in tied)
+        raise Refused(
+            [
+                Finding(
+                    code=CONFLICT_AMBIGUOUS_PLAN_SELECTION,
+                    text=(
+                        f"{len(tied)} plan versions take effect at "
+                        f"{latest.isoformat()} and none is later, so the version in "
+                        f"force at entry is ambiguous: {', '.join(names)}. Supply one "
+                        "of them, or give them distinct effective dates -- the engine "
+                        "will not price on whichever arrived first in the list"
+                    ),
+                )
+            ]
+        )
+    return tied[0]
 
 
 def _qualifying(plan: Plan, stay: Stay, stage: str):
