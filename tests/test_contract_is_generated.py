@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from plant import ROOT, planted
 
 CONTRACT = ROOT / "docs" / "CONTRACT.md"
@@ -39,6 +41,7 @@ def _render() -> str:
     return result.stdout
 
 
+@pytest.mark.guarantee("F9")
 def test_the_committed_contract_matches_the_code():
     """A hand-edited number or sentence in docs/CONTRACT.md turns this red."""
     result = subprocess.run(
@@ -62,6 +65,7 @@ ADD_A_RULE_TYPE = (
 )
 
 
+@pytest.mark.guarantee("F9")
 def test_the_rule_type_table_is_derived_from_the_registry():
     """PLANT: register an extra rule type. The table must grow a row."""
     baseline = _render()
@@ -77,6 +81,7 @@ def test_the_rule_type_table_is_derived_from_the_registry():
     )
 
 
+@pytest.mark.guarantee("F9")
 def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
     """The same plant, on the sentence beside the table.
 
@@ -97,6 +102,7 @@ def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
     assert "Every stage has at least one rule type in this version." in planted_render
 
 
+@pytest.mark.guarantee("F9")
 def test_the_gap_table_is_derived_from_the_findings_registry():
     """PLANT: rename a gap code. The table must follow it."""
     with planted(
@@ -110,6 +116,7 @@ def test_the_gap_table_is_derived_from_the_findings_registry():
     assert "`GAP_NO_ACCUMULATE_RULE`" not in planted_render
 
 
+@pytest.mark.guarantee("F9")
 def test_the_worked_example_is_priced_not_transcribed():
     """PLANT: change the example plan's hourly rate. Every number must move.
 
@@ -144,6 +151,7 @@ def test_the_worked_example_is_priced_not_transcribed():
     )
 
 
+@pytest.mark.guarantee("F9")
 def test_the_guarantee_table_is_derived_from_the_registry():
     """PLANT: change a guarantee's wording. The published table must follow."""
     registry = Path(ROOT / "tests" / "_guarantees.py")
@@ -180,6 +188,7 @@ def _blocks() -> dict[str, int]:
     }
 
 
+@pytest.mark.guarantee("F9")
 def test_every_generated_block_is_closed_and_declares_a_kind():
     text = CONTRACT.read_text()
     blocks = _blocks()
@@ -188,6 +197,7 @@ def test_every_generated_block_is_closed_and_declares_a_kind():
         assert f"<!--/gen:{name}-->" in text, f"{name} is not closed"
 
 
+@pytest.mark.guarantee("F9")
 def test_every_ASSERTING_block_has_a_control_in_this_file():
     """The check that stops K4 from having to be done again by hand.
 
@@ -204,6 +214,7 @@ def test_every_ASSERTING_block_has_a_control_in_this_file():
     )
 
 
+@pytest.mark.guarantee("F9")
 def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls():
     """The other half, and it is a real rule rather than bookkeeping.
 
@@ -227,6 +238,7 @@ def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls
 # interpolation -- a moving number is not a changed assertion.
 
 
+@pytest.mark.guarantee("F9")
 def test_the_findings_table_asserts_a_KIND_not_just_a_code():
     """PLANT: move a code from the gap registry to the conflict registry.
 
@@ -260,6 +272,7 @@ def test_the_findings_table_asserts_a_KIND_not_just_a_code():
     assert "| `GAP_NO_ACCUMULATE_RULE` | gap |" not in planted_render
 
 
+@pytest.mark.guarantee("F9")
 def test_the_worked_example_asserts_IN_WORDS_what_the_rules_did():
     """PLANT: raise the cap out of reach. The cap's SENTENCE must change, not its number.
 
@@ -295,6 +308,7 @@ def test_the_worked_example_asserts_IN_WORDS_what_the_rules_did():
     )
 
 
+@pytest.mark.guarantee("F9")
 def test_a_size_preserving_plant_is_actually_loaded():
     """The control on the PLANT HELPER, which nothing else here covers.
 
@@ -308,6 +322,13 @@ def test_a_size_preserving_plant_is_actually_loaded():
     reported a false finding until `plant.py` started advancing the mtime. This
     proves the fix, using a plant whose replacement is the same length by
     construction rather than by accident.
+
+    The mtime advance alone was NOT enough, and this test is what said so: it
+    failed on 3 runs in 6, and twice took its whole module red before anything
+    was planted. `plant.py` writes mtimes in the FUTURE, so a `.pyc` surviving an
+    earlier run can collide with a later plant in whole seconds while the size is
+    identical by construction. `_write` now deletes the cached bytecode as well —
+    bytecode that does not exist cannot be served stale.
     """
     import subprocess
 

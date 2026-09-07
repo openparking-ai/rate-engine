@@ -28,6 +28,7 @@ Two guards on the plant itself:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -38,10 +39,38 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "rate_engine"
 
+#: Path prefixes that are resolved against ROOT rather than against SRC.
+#:
+#: Every plant used to land in `src/rate_engine`, which was fine while every
+#: control guarded the ENGINE. It stopped being fine the moment the guard on the
+#: guarantees needed a control of its own: `tests/conftest.py` is the thing that
+#: fails a run when a registered guarantee stops running, and no plant in the
+#: engine can reach it. A mechanism that cannot be pointed at its own machinery
+#: can only ever prove the easy half.
+#:
+#: Explicit prefixes rather than "does it contain a slash": `rules/increment.py`
+#: contains one and is SRC-relative, so anything cleverer than a listed prefix
+#: would silently retarget the nine controls that already exist.
+ROOT_RELATIVE_PREFIXES: tuple[str, ...] = ("tests/", "scripts/", "docs/")
+
+
+def resolve(relative_path: str) -> Path:
+    """Where a plant's path points. ONE resolver, used by the plant and by the
+    anchor pre-flight -- two copies would let `--anchors` report a live anchor in
+    a file the plant then never writes to."""
+    base = ROOT if relative_path.startswith(ROOT_RELATIVE_PREFIXES) else SRC
+    path = (base / relative_path).resolve()
+    if not path.is_relative_to(ROOT):
+        raise AssertionError(
+            f"a plant resolved to {path}, which is outside the repository. A control "
+            "that writes outside the tree is not a control, it is an accident."
+        )
+    return path
+
 
 @contextmanager
 def planted(relative_path: str, frm: str, to: str):
-    path = SRC / relative_path
+    path = resolve(relative_path)
     original = path.read_text()
 
     occurrences = original.count(frm)
@@ -89,12 +118,30 @@ def _write(path: Path, text: str) -> None:
     No existing control was affected -- all ten change the file's length -- but
     that was luck, and the next plant somebody writes should not have to depend
     on it. So the mtime is advanced past any cached entry on every write.
+
+    **AND THE CACHED BYTECODE IS DELETED, because advancing the mtime was not
+    enough on its own.** Measured, not reasoned about: with only the mtime
+    advance, `test_a_size_preserving_plant_is_actually_loaded` failed on 3 runs
+    in 6 and twice took the whole module red BEFORE anything was planted, which
+    `fail_controls.py` correctly reported as UNMEASURED -- a control set that
+    intermittently cannot say whether it ran. The mtime this helper writes is
+    `now + n`, i.e. in the FUTURE, so a `.pyc` left behind by an earlier run can
+    record a stamp that a later run's plant collides with in whole seconds; the
+    size is identical by construction in exactly the plants this guards, and the
+    two together are precisely CPython's cache key.
+
+    Removing the cache entry closes the class rather than the instance. There is
+    no arithmetic left to get wrong: bytecode that does not exist cannot be
+    served stale.
     """
     global _writes
     _writes += 1
     path.write_text(text)
     stamp = time.time() + _writes
     os.utime(path, (stamp, stamp))
+
+    cached = Path(importlib.util.cache_from_source(str(path)))
+    cached.unlink(missing_ok=True)
 
 
 def run_tests(target: str) -> subprocess.CompletedProcess:

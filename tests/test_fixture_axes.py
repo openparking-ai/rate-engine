@@ -32,6 +32,7 @@ def _durations() -> list[int]:
         ("increment.max_duration_minutes", _rule("hourly")["max_duration_minutes"]),
     ],
 )
+@pytest.mark.guarantee("F13")
 def test_the_corpus_straddles_every_duration_threshold(label, threshold):
     durations = _durations()
     below = [d for d in durations if d < threshold]
@@ -40,6 +41,7 @@ def test_the_corpus_straddles_every_duration_threshold(label, threshold):
     assert at_or_above, f"no fixture reaches {label} ({threshold} min); that side is unmeasured"
 
 
+@pytest.mark.guarantee("F13")
 def test_the_corpus_straddles_the_early_bird_limits():
     """Both conditions, each missed and each met -- F2 is only worth running if so."""
     plan = loaded()
@@ -60,6 +62,7 @@ def test_the_corpus_straddles_the_early_bird_limits():
     )
 
 
+@pytest.mark.guarantee("F13")
 def test_the_corpus_straddles_the_cap():
     """Some stays must reach the daily max and some must not."""
     plan = loaded()
@@ -75,6 +78,7 @@ def test_the_corpus_straddles_the_cap():
     assert not_reached, "every fixture is capped; the un-capped branch is unmeasured"
 
 
+@pytest.mark.guarantee("F13")
 def test_the_corpus_straddles_the_space_class_axis():
     classes = {s.space_class for s in CORPUS.values()}
     assert classes == set(DOWNTOWN_V2["space_classes"]), (
@@ -84,6 +88,7 @@ def test_the_corpus_straddles_the_space_class_axis():
     )
 
 
+@pytest.mark.guarantee("F13")
 def test_the_axes_control_can_fail():
     """The positive control for this file.
 
@@ -99,6 +104,7 @@ def test_the_axes_control_can_fail():
     )
 
 
+@pytest.mark.guarantee("F13")
 def test_the_plan_corpus_contains_a_clean_plan_and_a_plan_with_gaps():
     """Both sides of the validator's own axis.
 
@@ -125,6 +131,7 @@ def test_the_plan_corpus_contains_a_clean_plan_and_a_plan_with_gaps():
     assert with_gaps, "no plan on disk has a gap, so a validator finding nothing would pass"
 
 
+@pytest.mark.guarantee("F13")
 def test_the_corpus_covers_BOTH_dst_transitions():
     """An axis with one side is the fixture defect §6 names.
 
