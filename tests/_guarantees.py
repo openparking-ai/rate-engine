@@ -73,6 +73,21 @@ GUARANTEES: dict[str, str] = {
         "`validate-plan` separates the findings an owner has still to look at from the "
         "ones they have recorded a decision for. Every finding is reported either way."
     ),
+    "F9": (
+        "The published contract is DERIVED, never transcribed. Every generated block "
+        "matches the code, and every block that ASSERTS something about its values is "
+        "proven to move when those values contradict it."
+    ),
+    "F13": (
+        "The fixture corpus holds a case either side of every threshold the rules "
+        "branch on, read out of the plans rather than from a list -- so no guarantee "
+        "is proven against a corpus that could only ever exercise one branch."
+    ),
+    "F14": (
+        "A registered guarantee whose test stops running turns the build RED, "
+        "including when its module fails to import; and a test module that plants a "
+        "defect but registers no guarantee is refused."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

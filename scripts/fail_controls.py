@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from _guarantees import GUARANTEES  # noqa: E402
-from plant import SRC, planted  # noqa: E402
+from plant import planted, resolve  # noqa: E402
 
 #: guarantee id -> (test target, source file, anchor, replacement, what breaks)
 CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
@@ -139,6 +139,35 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "name, and dies inside the ledger with a stack trace naming neither the "
         "rule nor its type",
     ),
+    # P2's three. F9 and F13 guard files that carried NO mark at all until this
+    # round; F14 guards the guard, and its plant is the first one in this project
+    # that lands outside src/ -- `tests/conftest.py` IS the mechanism, and no
+    # plant in the engine can reach it. See plant.ROOT_RELATIVE_PREFIXES.
+    "F9": (
+        "tests/test_contract_is_generated.py",
+        "contract.py",
+        "SCHEMA_VERSION = 1",
+        "SCHEMA_VERSION = 2  # PLANTED: the published schema version moves",
+        "the code answers with a schema version the committed contract does not "
+        "publish, so docs/CONTRACT.md stops being a reading of the code",
+    ),
+    "F13": (
+        "tests/test_fixture_axes.py",
+        "rules/daily_max.py",
+        "    if running_total_minor <= ceiling:",
+        "    if True:  # PLANTED: the cap never applies to anything",
+        "no fixture in the corpus can reach the daily max any more, so the capping "
+        "branch every cap guarantee is proven against stops being exercised at all",
+    ),
+    "F14": (
+        "tests/test_guarantee_guard.py",
+        "tests/conftest.py",
+        "    unaccounted = sorted(set(GUARANTEES) - _ran - allowed)",
+        "    unaccounted = []  # PLANTED: nothing is ever unaccounted for",
+        "the guard stops failing a run in which a registered guarantee never ran, "
+        "which is the exact way another repo lost eight wiring guarantees while "
+        "its build stayed green",
+    ),
     # P1's two arms. F12 is the split an owner reads; F12b is the line that stops
     # the split from turning into "settled means priced" the first time somebody
     # tidies it. The F12b plant is the whole defect in three lines -- a decision
@@ -183,7 +212,7 @@ def check_anchors() -> int:
     """Count every anchor. Zero or two is a dead control, and it is silent."""
     bad = 0
     for gid, (_target, path, anchor, _to, _why) in sorted(CONTROLS.items()):
-        source = (SRC / path).read_text()
+        source = resolve(path).read_text()
         count = source.count(anchor)
         status = "ok" if count == 1 else "DEAD"
         if count != 1:
