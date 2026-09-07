@@ -74,6 +74,11 @@ GUARANTEES: dict[str, str] = {
         "Plan selection is never ambiguous. Two versions in force at the same instant "
         "are REFUSED and both named, never resolved by the order of the caller's list."
     ),
+    "F15": (
+        "`increment.rounding` is CONSULTED by the applier, which refuses a mode it "
+        "does not implement rather than pricing the stay under a different one. The "
+        "applier checks what it implements, never what the loader accepts."
+    ),
     "F12": (
         "`validate-plan` separates the findings an owner has still to look at from the "
         "ones they have recorded a decision for. Every finding is reported either way."

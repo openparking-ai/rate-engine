@@ -160,6 +160,7 @@ never failed is a decoration.
 | **F12b** | A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` can cause a fee to be produced. |
 | **F13** | The fixture corpus holds a case either side of every threshold the rules branch on, read out of the plans rather than from a list -- so no guarantee is proven against a corpus that could only ever exercise one branch. |
 | **F14** | A registered guarantee whose test stops running turns the build RED, including when its module fails to import; and a test module that plants a defect but registers no guarantee is refused. |
+| **F15** | `increment.rounding` is CONSULTED by the applier, which refuses a mode it does not implement rather than pricing the stay under a different one. The applier checks what it implements, never what the loader accepts. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
@@ -200,7 +201,11 @@ state the rounding direction explicitly, with no default.
 
 **That rounding is not the rounding this version already has.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
-stay is two hours. A multiplier's rounding direction decides fractions of a
+stay is two hours. **The applier reads that field and refuses a mode it does not
+implement** — so A2 adding `floor` to the modes a plan may state is a real
+change, not a plan that quietly keeps pricing as `ceil` (F15).
+
+A multiplier's rounding direction decides fractions of a
 **cent**. The two share a word and nothing else, and **this module does not round
 money anywhere today** — `money.py` says so in as many words, and the arithmetic
 matches it: every A1 rule is an integer add or an integer replace. A2 introduces
