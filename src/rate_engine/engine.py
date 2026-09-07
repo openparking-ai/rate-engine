@@ -71,6 +71,21 @@ class Stay:
         Integer arithmetic on a timedelta, never a float division: this number
         feeds the period counts, and a float here would put a float into the
         pricing path through the back door.
+
+        **THIS ROUNDING IS ASSUMED, NOT STATED PER RULE, and that is a decision.**
+        No plan field reaches it: `increment.rounding` governs minutes into
+        PERIODS, downstream of this. money.py used to say the only rounding in the
+        engine was "TIME into periods, stated per rule rather than assumed", which
+        was false about this one -- it is time into MINUTES, and the plan has no
+        say. It is kept because it is the ordinary garage convention and because
+        every consumer of a duration here wants the same answer, but it has a
+        price: a stay one millisecond past a stated ceiling is 1441 minutes
+        against a 1440 limit, and is refused rather than priced.
+
+        Every comparison against a duration reads THIS property -- the rules and
+        the ceiling check alike -- so the edge is coherent rather than one
+        comparison against raw microseconds and another against minutes.
+        `tests/test_f20_time_rounding_is_declared.py` holds that.
         """
         delta = self.exit_at - self.entry_at
         seconds = delta.days * 86400 + delta.seconds

@@ -287,6 +287,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "only for an early entry never collide and validate-plan reports the plan "
         "clean while the engine refuses a real stay",
     ),
+    # X6. A4 established the "two comparisons" half of this item did not exist --
+    # both already read the rounded value. So the control plants what IS real: the
+    # ceiling reading raw seconds instead, which pulls the refusal edge away from
+    # the pricing edge.
+    "F20": (
+        "tests/test_f20_time_rounding_is_declared.py",
+        "rules/increment.py",
+        "    return ceiling is None or stay.duration_minutes <= ceiling",
+        # NOTE: the obvious plant here -- comparing raw elapsed minutes -- is a
+        # behavioural NO-OP, because ceil(x) > n is equivalent to x > n for an
+        # integer n. fail_controls.py reported it GREEN and it was replaced rather
+        # than argued with. FLOOR genuinely separates the two: a stay one
+        # millisecond past the ceiling floors back INSIDE it and gets priced.
+        "    return ceiling is None or int((stay.exit_at - stay.entry_at).total_seconds() // 60)"
+        " <= ceiling  # PLANTED: the ceiling floors raw time, the rules ceil minutes",
+        "the stated ceiling is compared against raw elapsed time while the rules "
+        "price on rounded minutes, so a stay past the ceiling is priced anyway and "
+        "the refusal edge no longer matches the pricing edge",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

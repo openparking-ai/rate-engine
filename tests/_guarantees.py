@@ -128,6 +128,11 @@ GUARANTEES: dict[str, str] = {
         "exit limits as well as durations, each side of each -- so a conflict the "
         "engine would refuse is one the owner was shown before the plan went live."
     ),
+    "F20": (
+        "There are TWO time roundings and both are declared: a part-minute is a whole "
+        "minute (assumed, module-wide) and minutes into periods is stated per rule. "
+        "Every comparison against a duration reads the same rounded value."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
