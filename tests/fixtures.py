@@ -88,6 +88,11 @@ EARLY = "2026-03-03T08:30:00-05:00"  # Tue, before the 09:00 entry limit
 LATE = "2026-03-03T09:14:00-05:00"  # Tue, after it -- the brief's worked example
 FRI_NIGHT = "2026-03-06T22:00:00-05:00"  # crosses local midnight into Saturday
 DST_SPRING = "2026-03-07T12:00:00-05:00"  # the US spring-forward is 2026-03-08
+#: 2026-11-01 is the US fall-back: that LOCAL day is 25 hours long. It is the
+#: only date in the year where `calendar_day` and `rolling_24h` give different
+#: answers for the same stay -- a stay can fit inside one local date and still
+#: cross two 24-hour windows. An axis with only the spring side is half an axis.
+DST_FALL = "2026-11-01T00:00:00-04:00"
 
 CORPUS: dict[str, Stay] = {
     # increment: first period, either side of 60 minutes
@@ -109,8 +114,11 @@ CORPUS: dict[str, Stay] = {
     "cap_not_reached": stay(LATE, 120),
     "cap_reached": stay(LATE, 566),
     "cap_across_midnight": stay(FRI_NIGHT, 300),
-    # daily_max: a DST day, which is 23 hours on the local clock
-    "dst_day": stay(DST_SPRING, 1440),
+    # daily_max across BOTH DST transitions. Spring-forward shortens a local day
+    # to 23 hours; fall-back stretches one to 25, and only the second separates
+    # the two day-boundary rules from each other.
+    "dst_day_spring": stay(DST_SPRING, 1440),
+    "dst_day_fall": stay(DST_FALL, 1440),
     # space_surcharge: both sides of the space-class axis
     "vip_space": stay(LATE, 120, "vip"),
     "standard_space": stay(LATE, 120, "standard"),
@@ -127,4 +135,5 @@ AXES: tuple[tuple[str, str], ...] = (
     ("early_bird enter_by 09:00 / exit_by 17:00", "early_bird"),
     ("daily_max.max_minor = 3000", "cap"),
     ("space_class in {standard, vip}", "space"),
+    ("both DST transitions", "dst_day"),
 )
