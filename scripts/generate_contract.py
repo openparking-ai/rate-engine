@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
-from rate_engine.findings import CONFLICT_CODES, GAP_CODES  # noqa: E402
+from rate_engine.findings import CONFLICT_CODES, FAULT_CODES, GAP_CODES  # noqa: E402
 from rate_engine.plan import RESOLUTION_MODES  # noqa: E402
 from rate_engine.rules import RULE_TYPES  # noqa: E402
 from rate_engine.stages import STAGES  # noqa: E402
@@ -87,9 +87,12 @@ def gen_rule_types() -> str:
 
 
 def gen_findings() -> str:
+    # Derived from the registry's own three tuples. A fourth kind added to
+    # findings.py appears here without this function being touched; a kind added
+    # here without a tuple behind it cannot be written at all.
     rows = ["| code | kind |", "| --- | --- |"]
-    rows += [f"| `{c}` | gap |" for c in GAP_CODES]
-    rows += [f"| `{c}` | conflict |" for c in CONFLICT_CODES]
+    for codes, kind in ((GAP_CODES, "gap"), (CONFLICT_CODES, "conflict"), (FAULT_CODES, "fault")):
+        rows += [f"| `{c}` | {kind} |" for c in codes]
     return block("findings", "\n".join(rows), ASSERTION)
 
 
