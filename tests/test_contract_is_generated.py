@@ -14,11 +14,10 @@ the two apart.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 from plant import ROOT, planted
 
@@ -166,11 +165,170 @@ def test_the_guarantee_table_is_derived_from_the_registry():
     )
 
 
-@pytest.mark.parametrize(
-    "marker",
-    ["schema_version", "stages", "rule_types", "findings", "guarantees", "example", "resolution"],
-)
-def test_every_generated_block_is_closed(marker):
+#: Blocks this file proves are ASSERTIONS -- it reaches two renderings of each
+#: and requires the non-numeric text to differ. Compared against the kind=2 set
+#: parsed out of the published document, so a new asserting block cannot arrive
+#: without a control.
+CONTROLLED_ASSERTIONS = {"rule_types", "findings", "example"}
+
+
+def _blocks() -> dict[str, int]:
+    """Every generated block and its declared kind, read from the document."""
+    return {
+        name: int(kind)
+        for name, kind in re.findall(r"<!--gen:([a-z_]+) kind=([12])-->", CONTRACT.read_text())
+    }
+
+
+def test_every_generated_block_is_closed_and_declares_a_kind():
     text = CONTRACT.read_text()
-    assert f"<!--gen:{marker}-->" in text
-    assert f"<!--/gen:{marker}-->" in text
+    blocks = _blocks()
+    assert blocks, "no generated blocks were found; the marker format has changed"
+    for name in blocks:
+        assert f"<!--/gen:{name}-->" in text, f"{name} is not closed"
+
+
+def test_every_ASSERTING_block_has_a_control_in_this_file():
+    """The check that stops K4 from having to be done again by hand.
+
+    A kind-2 block says something ABOUT its values, so it has two reachable
+    renderings and needs a control that reaches both. This derives that set from
+    the document rather than from a list somebody remembers to update: add an
+    asserting block with no control and this goes red naming it.
+    """
+    asserting = {name for name, kind in _blocks().items() if kind == 2}
+    assert asserting == CONTROLLED_ASSERTIONS, (
+        f"asserting blocks with no control: {sorted(asserting - CONTROLLED_ASSERTIONS)}; "
+        f"controls for blocks that no longer assert: "
+        f"{sorted(CONTROLLED_ASSERTIONS - asserting)}"
+    )
+
+
+def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls():
+    """The other half, and it is a real rule rather than bookkeeping.
+
+    A block with exactly one possible wording cannot be falsified by a
+    contradicting-prose test, and writing one anyway produces something shaped
+    like evidence that can only ever pass. Those blocks are marked kind 1 and
+    left alone -- deliberately, and this records the decision where a later
+    session will find it.
+    """
+    interpolation = {name for name, kind in _blocks().items() if kind == 1}
+    assert interpolation == {"schema_version", "stages", "resolution", "guarantees"}
+    assert not (interpolation & CONTROLLED_ASSERTIONS)
+
+
+# --- K4: the two ASSERTING blocks that had no prose control -------------------
+#
+# `rule_types` already had one (above): it plants a registration and requires
+# "Stages with no rule type in this version: ADJUST." to become "Every stage has
+# at least one rule type in this version." The other two asserting blocks did
+# not. Both were checked only on their NUMBERS or their IDENTIFIERS, which is
+# interpolation -- a moving number is not a changed assertion.
+
+
+def test_the_findings_table_asserts_a_KIND_not_just_a_code():
+    """PLANT: move a code from the gap registry to the conflict registry.
+
+    The code string is interpolated; the word beside it — `gap` or `conflict` —
+    is DERIVED from which tuple the code sits in, and it is the part an
+    integrator writing error handling actually reads. The earlier control renamed
+    a code and watched the name change, which proves the table is generated and
+    says nothing about the classification.
+    """
+    baseline = _render()
+    assert "| `GAP_NO_ACCUMULATE_RULE` | gap |" in baseline
+
+    with planted(
+        "findings.py",
+        "GAP_CODES: tuple[str, ...] = (\n    GAP_UNDECLARED_SPACE_CLASS,\n"
+        "    GAP_NO_ACCUMULATE_RULE,",
+        "GAP_CODES: tuple[str, ...] = (\n    GAP_UNDECLARED_SPACE_CLASS,",
+    ):
+        with planted(
+            "findings.py",
+            "CONFLICT_CODES: tuple[str, ...] = (\n    CONFLICT_MULTIPLE_RULES_AT_STAGE,",
+            "CONFLICT_CODES: tuple[str, ...] = (\n    GAP_NO_ACCUMULATE_RULE,\n"
+            "    CONFLICT_MULTIPLE_RULES_AT_STAGE,",
+        ):
+            planted_render = _render()
+
+    assert "| `GAP_NO_ACCUMULATE_RULE` | conflict |" in planted_render, (
+        "the published KIND did not follow the registry the code was moved into, so "
+        "the table interpolates codes and asserts nothing about them"
+    )
+    assert "| `GAP_NO_ACCUMULATE_RULE` | gap |" not in planted_render
+
+
+def test_the_worked_example_asserts_IN_WORDS_what_the_rules_did():
+    """PLANT: raise the cap out of reach. The cap's SENTENCE must change, not its number.
+
+    The earlier control changed the same value and asserted the totals moved —
+    3000 to 4400 — which a transcript with the numbers swapped would also satisfy.
+    What makes the block an assertion is that the cap line stops saying it was
+    APPLIED and starts saying it was NOT REACHED, and that the early-bird line
+    keeps saying which condition failed.
+    """
+    baseline = _render()
+    assert "Daily max 30.00 USD (calendar_day) applied over the day" in baseline
+    assert "not reached" not in baseline
+
+    plan_path = ROOT / "tests" / "plans" / "downtown_v2.json"
+    original = plan_path.read_text()
+    document = json.loads(original)
+    for rule in document["rules"]:
+        if rule["id"] == "cap":
+            rule["max_minor"] = 999999
+    try:
+        plan_path.write_text(json.dumps(document, indent=2))
+        planted_render = _render()
+    finally:
+        plan_path.write_text(original)
+        assert plan_path.read_text() == original
+
+    assert "applied over the day" not in planted_render, (
+        "the cap line still claims it applied while the cap was out of reach"
+    )
+    assert "not reached: the charge so far" in planted_render, (
+        "the block reported new numbers but the same words, which is interpolation "
+        "wearing an assertion's clothes"
+    )
+
+
+def test_a_size_preserving_plant_is_actually_loaded():
+    """The control on the PLANT HELPER, which nothing else here covers.
+
+    CPython validates a cached `.pyc` against the source's (mtime in whole
+    seconds, size). A plant that leaves the file the same LENGTH inside the same
+    second as the previous write is invisible to a subprocess: it imports the
+    stale bytecode and behaves as though nothing was planted.
+
+    The findings-table control above is exactly that shape — one line moves out
+    of `GAP_CODES` and the identical line moves into `CONFLICT_CODES` — and it
+    reported a false finding until `plant.py` started advancing the mtime. This
+    proves the fix, using a plant whose replacement is the same length by
+    construction rather than by accident.
+    """
+    import subprocess
+
+    original = (ROOT / "src" / "rate_engine" / "stages.py").read_text()
+    frm, to = 'ADJUST = "ADJUST"', 'ADJUST = "ADJUSX"'
+    assert len(frm) == len(to), "this control is only meaningful if the size is unchanged"
+
+    def adjust_seen_by_a_subprocess() -> str:
+        return subprocess.run(
+            [sys.executable, "-c",
+             f"import sys; sys.path.insert(0, {str(ROOT / 'src')!r}); "
+             "import rate_engine.stages as s; print(s.ADJUST)"],
+            cwd=ROOT, capture_output=True, text=True,
+        ).stdout.strip()
+
+    assert adjust_seen_by_a_subprocess() == "ADJUST"
+    with planted("stages.py", frm, to):
+        assert (ROOT / "src" / "rate_engine" / "stages.py").read_text() != original
+        assert adjust_seen_by_a_subprocess() == "ADJUSX", (
+            "a same-length plant was written to disk but a subprocess still imported "
+            "the old value -- plant.py is serving stale bytecode and every control "
+            "whose replacement happens to match its anchor's length is dead"
+        )
+    assert adjust_seen_by_a_subprocess() == "ADJUST"

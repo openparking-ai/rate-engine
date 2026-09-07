@@ -46,8 +46,28 @@ EXAMPLE_REQUEST = {
 }
 
 
-def block(name: str, body: str) -> str:
-    return f"<!--gen:{name}-->\n{body}\n<!--/gen:{name}-->"
+#: What a generated block IS, and it is marked in the document so a reader can
+#: tell without reading this file.
+#:
+#: KIND 1 -- INTERPOLATION. Exactly one possible wording; only values move. A
+#:           number or a list dropped into fixed words. There is nothing to
+#:           falsify beyond "the value is the one the code holds", so a
+#:           contradicting-prose test cannot be written for it and inventing one
+#:           would be theatre.
+#: KIND 2 -- ASSERTION. Two or more reachable renderings whose NON-NUMERIC text
+#:           differs, because the block says something ABOUT its values. These
+#:           need a control that reaches both renderings and requires the PROSE
+#:           to change -- a moving number is not a changed assertion.
+#:
+#: `tests/test_contract_is_generated.py` derives the kind-2 set from the
+#: published document and requires every member to be controlled, so a new
+#: asserting block cannot arrive without one.
+INTERPOLATION = 1
+ASSERTION = 2
+
+
+def block(name: str, body: str, kind: int = INTERPOLATION) -> str:
+    return f"<!--gen:{name} kind={kind}-->\n{body}\n<!--/gen:{name}-->"
 
 
 def gen_stages() -> str:
@@ -63,14 +83,14 @@ def gen_rule_types() -> str:
         if empty
         else "\n\nEvery stage has at least one rule type in this version."
     )
-    return block("rule_types", "\n".join(rows) + note)
+    return block("rule_types", "\n".join(rows) + note, ASSERTION)
 
 
 def gen_findings() -> str:
     rows = ["| code | kind |", "| --- | --- |"]
     rows += [f"| `{c}` | gap |" for c in GAP_CODES]
     rows += [f"| `{c}` | conflict |" for c in CONFLICT_CODES]
-    return block("findings", "\n".join(rows))
+    return block("findings", "\n".join(rows), ASSERTION)
 
 
 def gen_resolution() -> str:
@@ -115,7 +135,7 @@ def gen_example() -> str:
         f"and not a check performed afterwards: the fee IS the running total of the "
         f"breakdown, and the engine asserts it on every quote.",
     ]
-    return block("example", "\n".join(parts))
+    return block("example", "\n".join(parts), ASSERTION)
 
 
 def gen_schema() -> str:
