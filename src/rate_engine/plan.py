@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .money import refuse_floats
+from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
 from .stages import STAGES
 
@@ -119,8 +119,8 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         raise InvalidPlan(f"{where} must be an object, got {type(document).__name__}.")
 
     # Before any field is read. A float in a key this version ignores is still a
-    # float in a live plan; see money.refuse_floats.
-    refuse_floats(document, where)
+    # float in a live plan; see money.refuse_non_integer_money.
+    refuse_non_integer_money(document, where)
     _require_keys(document, PLAN_KEYS, where)
 
     plan_version = document["plan_version"]

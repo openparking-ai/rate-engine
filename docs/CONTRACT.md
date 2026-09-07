@@ -26,11 +26,12 @@ document saying it does not.
 
 ## Money
 
-Money is an **integer of minor units** — 800 means 8.00. No float, no `Decimal`,
-no string, at any depth of a plan, including in fields this version does not
-read. A rate that cannot be expressed in minor units is a rate this module
-refuses, and it refuses it at load rather than at the point the arithmetic goes
-wrong. JSON exponent form (`8e2`) parses to a float and is refused with the rest.
+Money is an **integer of minor units** — 800 means 8.00. A float, a bool or a
+`Decimal` is refused at **any depth of a plan**, including in fields this version
+does not read; and a string where money is expected is refused with them. A rate
+that cannot be expressed in minor units is a rate this module refuses, and it
+refuses it at load rather than at the point the arithmetic goes wrong. JSON
+exponent form (`8e2`) parses to a float and is refused with the rest.
 
 ## Time
 
@@ -162,6 +163,7 @@ never failed is a decoration.
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
+| **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI return the same bytes for the same request, from one code path and one serializer. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

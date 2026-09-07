@@ -41,6 +41,11 @@ GUARANTEES: dict[str, str] = {
         "Money is an integer of minor units. A float, a bool or a Decimal anywhere in "
         "a plan is refused at load."
     ),
+    "F4b": (
+        "That sentence is true at EVERY leaf of a plan, not at the fields the engine "
+        "happens to read -- proven by probing every position in the document, so a "
+        "field added in a later round is covered the day it exists."
+    ),
     "F5": (
         "Determinism. The same plan version and the same stay produce the same fee "
         "AND the same breakdown, always, on any machine and at any wall-clock time."
