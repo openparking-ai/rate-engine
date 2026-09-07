@@ -133,6 +133,10 @@ GUARANTEES: dict[str, str] = {
         "minute (assumed, module-wide) and minutes into periods is stated per rule. "
         "Every comparison against a duration reads the same rounded value."
     ),
+    "F21": (
+        "A refusal's CODE names the cause that actually occurred. A negative total "
+        "is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

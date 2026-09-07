@@ -30,6 +30,7 @@ from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
+    CONFLICT_NEGATIVE_TOTAL,
     FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
@@ -339,7 +340,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
         raise Refused(
             [
                 Finding(
-                    code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
+                    code=CONFLICT_NEGATIVE_TOTAL,
                     text=(
                         f"the rules produced a negative fee ({fee}); refusing rather than "
                         "charging a customer a negative amount"
