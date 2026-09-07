@@ -275,6 +275,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a plan stating enter_by 09:00:30 loads, so a limit the breakdown cannot "
         "render decides the fee -- the engine keeping a decision it cannot explain",
     ),
+    # X2. The plant collapses the entry axis back to the single fixed reference,
+    # which is exactly the shipped defect: probes vary duration only.
+    "F19": (
+        "tests/test_f19_validator_probes_declared_boundaries.py",
+        "validator.py",
+        "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}  # the original reference, and midnight",
+        "    return {DEFAULT_PROBE_ENTRY_MINUTE}  # PLANTED: every probe enters at 07:00\n"
+        "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}",
+        "every probe enters at one fixed time again, so two rules that both qualify "
+        "only for an early entry never collide and validate-plan reports the plan "
+        "clean while the engine refuses a real stay",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
