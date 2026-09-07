@@ -69,6 +69,15 @@ GUARANTEES: dict[str, str] = {
         "Plan selection is never ambiguous. Two versions in force at the same instant "
         "are REFUSED and both named, never resolved by the order of the caller's list."
     ),
+    "F12": (
+        "`validate-plan` separates the findings an owner has still to look at from the "
+        "ones they have recorded a decision for. Every finding is reported either way."
+    ),
+    "F12b": (
+        "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
+        "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
+        "can cause a fee to be produced."
+    ),
 }
 
 #: Environment variable naming ids this job cannot run. Exact ids, comma

@@ -139,6 +139,34 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "name, and dies inside the ledger with a stack trace naming neither the "
         "rule nor its type",
     ),
+    # P1's two arms. F12 is the split an owner reads; F12b is the line that stops
+    # the split from turning into "settled means priced" the first time somebody
+    # tidies it. The F12b plant is the whole defect in three lines -- a decision
+    # suppressing a blocking finding -- and it is the reason the two are separate
+    # ids: a single control could only ever plant one of them.
+    "F12": (
+        "tests/test_f12_a_decision_is_not_a_price.py",
+        "contract.py",
+        "    outstanding_codes = {f.code for f in undecided(plan)}",
+        "    outstanding_codes = {f.code for f in validate_plan(plan)}  # PLANTED",
+        "the split collapses -- every finding reports as outstanding whatever the "
+        "owner recorded, so decisions[] is write-only again and `undecided()` is "
+        "back to being called by nothing",
+    ),
+    "F12b": (
+        "tests/test_f12_a_decision_is_not_a_price.py",
+        "engine.py",
+        "    blocking = find_gaps(plan, stay) + find_conflicts(plan, stay)",
+        "    _decided = {d['code'] for d in plan.decisions}  # PLANTED\n"
+        "    blocking = [\n"
+        "        f\n"
+        "        for f in find_gaps(plan, stay) + find_conflicts(plan, stay)\n"
+        "        if f.code not in _decided\n"
+        "    ]  # PLANTED: a free-text note now prices a stay",
+        "an entry in decisions[] suppresses the finding it names, so a gap an owner "
+        "merely ACKNOWLEDGED starts coming back as a number -- the module inventing "
+        "money from prose, which is the failure it exists to prevent",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

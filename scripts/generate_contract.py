@@ -213,7 +213,15 @@ not do".
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
 places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time an unresolved gap is a **refusal that names what is missing**.
+at quote time a gap is a **refusal that names what is missing**.
+
+**Deciding a finding does not resolve it.** `decisions[]` records that an owner
+has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
+so a list can be worked through — and that is all it does. A decision carries a
+code and a free-text note, and a note cannot price a stay; a stay hitting a
+settled gap is refused exactly as one hitting an outstanding gap is. The way to
+make a gap priceable is to add a **rule** that covers it, which is a visible plan
+change. See F12 and F12b.
 
 **The engine never returns a number it had to guess.** That is this project's
 standing acceptance, and in this module it is also the entire commercial

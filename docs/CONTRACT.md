@@ -84,7 +84,15 @@ not do".
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
 places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time an unresolved gap is a **refusal that names what is missing**.
+at quote time a gap is a **refusal that names what is missing**.
+
+**Deciding a finding does not resolve it.** `decisions[]` records that an owner
+has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
+so a list can be worked through — and that is all it does. A decision carries a
+code and a free-text note, and a note cannot price a stay; a stay hitting a
+settled gap is refused exactly as one hitting an outstanding gap is. The way to
+make a gap priceable is to add a **rule** that covers it, which is a visible plan
+change. See F12 and F12b.
 
 **The engine never returns a number it had to guess.** That is this project's
 standing acceptance, and in this module it is also the entire commercial
@@ -147,6 +155,8 @@ never failed is a decoration.
 | **F1** | The engine never guesses. A stay the plan cannot price is REFUSED, naming the gap, and no number is returned. |
 | **F10** | Plan selection is never ambiguous. Two versions in force at the same instant are REFUSED and both named, never resolved by the order of the caller's list. |
 | **F11** | Two rules qualifying at one pipeline stage are REFUSED and both named, with the plan's stated resolution mode quoted back. A1 detects; it does not resolve. |
+| **F12** | `validate-plan` separates the findings an owner has still to look at from the ones they have recorded a decision for. Every finding is reported either way. |
+| **F12b** | A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` can cause a fee to be produced. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
