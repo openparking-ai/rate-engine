@@ -101,16 +101,29 @@ NOT_MONEY_TO_PRICE_IN: frozenset[str] = frozenset(
     }
 )
 
-#: An INDEX UNIT, not a circulating currency -- and the reason it needs naming is
-#: that it is zero-decimal, so it would otherwise look like an oversight in
-#: ZERO_DECIMAL rather than a decision. Uruguay's Unidad Indexada is a unit of
-#: account that tracks inflation; a garage does not take it at the barrier.
+#: ISO FUNDS AND INDEX UNITS. Real ISO 4217 codes, and none of them is money a
+#: garage charges in: each is a unit of account -- an inflation index, a
+#: mutual-fund or bond unit, a settlement unit -- used to denominate an obligation,
+#: not to take a payment at a barrier.
 #:
-#: NOTE for whoever extends this: ISO 4217 carries several more national
-#: fund/index units in the same shape -- BOV, CHE, CHW, COU, MXV, USN. They are
-#: absent from the table today and their absence is NOT yet a stated decision.
-#: That is a known gap, recorded rather than silently widened.
-NOT_A_CIRCULATING_CURRENCY: frozenset[str] = frozenset({"UYI"})
+#: These are listed for the same reason `UYI` was, and `UYI` is why the rest are
+#: here. It is ZERO-DECIMAL, so leaving it out looked like an oversight in
+#: `ZERO_DECIMAL` rather than a decision, and once it was written down the other
+#: six were sitting in exactly its shape with nothing said about them. An
+#: exclusion nobody wrote down is indistinguishable from a code somebody forgot,
+#: which is the whole reason this file states its exclusions instead of expressing
+#: them as absence.
+NOT_A_CIRCULATING_CURRENCY: frozenset[str] = frozenset(
+    {
+        "UYI",  # Uruguay, Unidad Indexada -- an inflation index unit
+        "BOV",  # Bolivia, Mvdol -- a dollar-indexed accounting unit
+        "CHE",  # Switzerland, WIR Euro   -- complementary-currency fund units
+        "CHW",  # Switzerland, WIR Franc  -- the same
+        "COU",  # Colombia, Unidad de Valor Real -- an inflation index unit
+        "MXV",  # Mexico, Unidad de Inversion (UDI) -- an inflation index unit
+        "USN",  # United States, Dollar (Next day) -- a settlement unit, not cash
+    }
+)
 
 #: Every code this module refuses ON PURPOSE. Asserted disjoint from the table
 #: below, so a code can never be both priced and declared unpriceable.
@@ -131,8 +144,9 @@ _WHY: tuple[tuple[frozenset[str], str], ...] = (
     ),
     (
         NOT_A_CIRCULATING_CURRENCY,
-        "it is a unit of account rather than a circulating currency, so it is not "
-        "something a garage is paid in",
+        "it is an ISO funds or index unit -- a unit of account used to denominate an "
+        "obligation -- rather than a circulating currency, so it is not something a "
+        "garage is paid in at a barrier",
     ),
 )
 
