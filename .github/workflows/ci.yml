@@ -129,11 +129,16 @@ jobs:
 
       - name: Every guarantee, proven able to FAIL
         # Breaks the thing each guarantee guards and requires red. A test that
-        # has never failed is a decoration. This step is what makes the eight
-        # guarantees in docs/CONTRACT.md measured rather than asserted.
+        # has never failed is a decoration. This step is what makes every
+        # guarantee in docs/CONTRACT.md measured rather than asserted.
+        #
+        # No count is written here on purpose: the script derives the set from
+        # tests/_guarantees.py and refuses to run if a guarantee has no control,
+        # so a number in this comment could only ever go stale. One did -- it
+        # said eight after the cut round took the set to eleven.
         run: python scripts/fail_controls.py
 
-      - name: The working tree is unchanged after planting eight defects
+      - name: The working tree is unchanged after every defect was planted
         # Every plant restores in a `finally` and verifies the bytes. This is the
         # independent check on that: a control that left a defect behind would
         # otherwise be discovered by whatever ran next.
