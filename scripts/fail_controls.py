@@ -111,6 +111,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
+    "F11": (
+        "tests/test_f11_conflicts_are_refused.py",
+        "engine.py",
+        "        if len(qualifying) > 1:",
+        "        if False:  # PLANTED: a conflict is no longer detected",
+        "two rules qualifying at one stage stop being refused, so the pipeline "
+        "silently applies both and the plan's resolution mode is never consulted",
+    ),
     "F10": (
         "tests/test_f10_unambiguous_plan_selection.py",
         "engine.py",

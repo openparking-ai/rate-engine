@@ -61,6 +61,10 @@ GUARANTEES: dict[str, str] = {
         "A rule's only channel to the fee is a list of Lines. A malformed return is "
         "REFUSED by name, not left to crash inside the ledger."
     ),
+    "F11": (
+        "Two rules qualifying at one pipeline stage are REFUSED and both named, with "
+        "the plan's stated resolution mode quoted back. A1 detects; it does not resolve."
+    ),
     "F10": (
         "Plan selection is never ambiguous. Two versions in force at the same instant "
         "are REFUSED and both named, never resolved by the order of the caller's list."
