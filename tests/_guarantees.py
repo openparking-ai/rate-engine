@@ -57,6 +57,10 @@ GUARANTEES: dict[str, str] = {
         "The fee is the sum of the breakdown's deltas, by construction. There is no "
         "second route to the total."
     ),
+    "F8b": (
+        "A rule's only channel to the fee is a list of Lines. A malformed return is "
+        "REFUSED by name, not left to crash inside the ledger."
+    ),
     "F10": (
         "Plan selection is never ambiguous. Two versions in force at the same instant "
         "are REFUSED and both named, never resolved by the order of the caller's list."

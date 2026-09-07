@@ -119,6 +119,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "two plan versions sharing an effective date stop being refused, so the fee "
         "goes back to depending on which one the caller put first in the array",
     ),
+    # K3's half of F8, with its own plant: the amendment's "refused at
+    # registration" reduced, on execution, to the one shape that was actually
+    # broken -- a malformed return reaching Ledger.add and dying there.
+    "F8b": (
+        "tests/test_f8_breakdown_adds_up.py",
+        "engine.py",
+        "        if not isinstance(item, Line):",
+        "        if False:  # PLANTED: a non-Line return is no longer refused",
+        "a rule returning something that is not a Line stops being refused by "
+        "name, and dies inside the ledger with a stack trace naming neither the "
+        "rule nor its type",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
