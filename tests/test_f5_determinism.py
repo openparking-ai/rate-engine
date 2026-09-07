@@ -28,6 +28,7 @@ from fixtures import CORPUS, DOWNTOWN_V2, loaded, stay
 from rate_engine.contract import run_quote
 from rate_engine.engine import quote
 from rate_engine.findings import Refused
+from rate_engine.plan import load_plan
 
 
 def _answer(s):
@@ -71,7 +72,7 @@ def test_the_server_timezone_does_not_move_the_answer():
 
 
 @pytest.mark.guarantee("F5")
-def test_a_dst_day_is_priced_by_the_local_clock_not_by_elapsed_hours():
+def test_a_spring_forward_day_is_priced_by_the_local_clock_not_by_elapsed_hours():
     """The US spring-forward on 2026-03-08 makes that local day 23 hours long.
 
     A stay of exactly 1440 minutes starting the day before therefore ends on the
@@ -79,13 +80,63 @@ def test_a_dst_day_is_priced_by_the_local_clock_not_by_elapsed_hours():
     That is the correct answer and it is only reachable because the plan names a
     real IANA zone: a fixed UTC offset cannot express the transition at all.
     """
-    result = quote([loaded()], CORPUS["dst_day"])
+    result = quote([loaded()], CORPUS["dst_day_spring"])
     cap_line = next(x for x in result.breakdown.lines if x.code.startswith("daily_max"))
-    assert "2 days" in cap_line.text, (
-        "a 24-hour stay across the spring-forward ends on the following local date "
-        "and is allowed two calendar-day caps"
-    )
+    assert "2 days" in cap_line.text
     assert result.fee_minor == 6000
+
+
+@pytest.mark.guarantee("F5")
+def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
+    """2026-11-01 is 25 hours on the local clock, and it is the whole reason
+    `day_boundary` has to be stated in the plan.
+
+    A stay of 1499 minutes beginning at local midnight that day ends at 23:59 the
+    SAME date — so it is one calendar day, and two rolling 24-hour windows. The
+    same stay is 3000 under one rule and 6000 under the other.
+
+    On an ordinary day the two agree, which is why an axis carrying only the
+    spring transition proves nothing about this: the spring day is shorter, so
+    both rules still say one. Only the fall-back day separates them.
+    """
+    import copy
+
+    def with_boundary(boundary: str):
+        document = copy.deepcopy(DOWNTOWN_V2)
+        for rule in document["rules"]:
+            if rule["id"] == "cap":
+                rule["day_boundary"] = boundary
+            if rule["id"] == "hourly":
+                rule["max_duration_minutes"] = None
+        return load_plan(document)
+
+    long_fall_back = stay("2026-11-01T00:00:00-04:00", 24 * 60 + 59)
+    calendar = quote([with_boundary("calendar_day")], long_fall_back)
+    rolling = quote([with_boundary("rolling_24h")], long_fall_back)
+
+    zone = with_boundary("calendar_day").timezone
+    entry_local = long_fall_back.entry_at.astimezone(zone)
+    exit_local = long_fall_back.exit_at.astimezone(zone)
+    assert entry_local.date() == exit_local.date(), (
+        "this fixture must begin and end inside ONE local date, or the calendar-day "
+        "answer below is ordinary arithmetic and says nothing about the transition"
+    )
+    assert entry_local.utcoffset() != exit_local.utcoffset(), (
+        "and it must actually cross the transition"
+    )
+
+    assert calendar.fee_minor == 3000, "one local calendar date, so one cap"
+    assert rolling.fee_minor == 6000, "24h59m is two rolling windows, so two caps"
+    assert calendar.fee_minor != rolling.fee_minor
+
+    # And on an ordinary day the two rules agree, which is what makes the
+    # disagreement above a property of the TRANSITION rather than of the stay.
+    ordinary = stay("2026-11-08T00:00:00-05:00", 24 * 60 + 59)
+    assert (
+        quote([with_boundary("calendar_day")], ordinary).fee_minor
+        == quote([with_boundary("rolling_24h")], ordinary).fee_minor
+        == 6000
+    )
 
 
 @pytest.mark.guarantee("F5")

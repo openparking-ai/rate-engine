@@ -123,3 +123,28 @@ def test_the_plan_corpus_contains_a_clean_plan_and_a_plan_with_gaps():
     counts = {name: len(findings) for name, findings in results.items()}
     assert clean, f"no plan on disk validates clean; findings per plan: {counts}"
     assert with_gaps, "no plan on disk has a gap, so a validator finding nothing would pass"
+
+
+def test_the_corpus_covers_BOTH_dst_transitions():
+    """An axis with one side is the fixture defect §6 names.
+
+    Spring-forward shortens a local day to 23 hours; fall-back stretches one to
+    25. Only the second can separate `calendar_day` from `rolling_24h`, so a
+    corpus carrying only the spring case cannot exercise the disagreement that
+    `day_boundary` exists to settle. Derived by asking the fixtures what their
+    UTC offsets do, not by trusting their names.
+    """
+    from fixtures import CORPUS, loaded
+
+    zone = loaded().timezone
+    transitions = set()
+    for s in CORPUS.values():
+        before = s.entry_at.astimezone(zone).utcoffset()
+        after = s.exit_at.astimezone(zone).utcoffset()
+        if before != after:
+            transitions.add("spring" if after > before else "fall")
+
+    assert transitions == {"spring", "fall"}, (
+        f"the corpus crosses only {sorted(transitions) or 'no'} DST transition(s); "
+        "the missing side is unmeasured"
+    )
