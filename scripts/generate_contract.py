@@ -76,8 +76,11 @@ def gen_stages() -> str:
 
 def gen_rule_types() -> str:
     rows = ["| rule type | stage |", "| --- | --- |"]
-    rows += [f"| `{name}` | {stage} |" for name, (stage, _b) in sorted(RULE_TYPES.items())]
-    empty = sorted({s for s in STAGES} - {stage for stage, _ in RULE_TYPES.values()})
+    rows += [
+        f"| `{name}` | {' or '.join(stages)} |"
+        for name, (stages, _b) in sorted(RULE_TYPES.items())
+    ]
+    empty = sorted({s for s in STAGES} - {s for stages, _ in RULE_TYPES.values() for s in stages})
     note = (
         f"\n\nStages with no rule type in this version: {', '.join(empty)}."
         if empty
@@ -165,9 +168,36 @@ tolerate new fields appearing in a response.
 
 The rule runs the other way for requests, and it is what makes the assumption
 safe: **a key this engine does not understand is REJECTED and named, never
-ignored.** An operator who adds `weekend_rate` to a plan running on a version
-with no weekend rule would otherwise have a garage pricing weekends wrong and a
-document saying it does not.
+ignored.** An operator who adds a key to a plan running on a version that has no
+rule for it would otherwise have a garage pricing something wrong and a document
+saying it does not.
+
+### What changed in version 2
+
+**A rule type was REMOVED, and that is why the number moved.** `early_bird` is
+gone. It was a time window with its days hardcoded to every day and its effect
+hardcoded to a flat price, and it is now expressible — with the days and the
+effect stated — as a `time_window`. A plan written for version 1 does not load on
+version 2: an unknown rule type is rejected rather than skipped, which is the
+same rule that protects an unknown key.
+
+No operator plans exist in the wild today, so removing a rule type costs nothing
+now and could not be done quietly later. It is recorded here rather than left for
+somebody to discover from a refusal.
+
+**The other changes are additions.** `time_window` carries an `effect` that is a
+flat price, a completely different time-based rate, or an adjustment up or down
+on the whole fee — and the third of those brought the ADJUST stage live, so a
+rule type now runs at a stage that depends on the rule rather than only on its
+type. The stage is still stated in every plan, and the engine refuses a plan
+whose stated stage disagrees with the one the rule's own shape implies.
+
+**A window that would have to wrap past midnight is REFUSED, and that is a stated
+gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
+not expressible as one rule. It is refused at load, naming the field, and the
+message says to write it as two rules: one running to 23:59 and one starting at
+00:00, each stating its own days. The engine will not split it, because which
+days each half applies on is a pricing decision.
 
 ## Money
 
@@ -184,7 +214,7 @@ Every plan names an **IANA timezone**, and entry and exit arrive as offset-aware
 ISO 8601. A naive timestamp is refused: it would be read in whatever zone the
 server happens to run in, which is a different fee on a different machine.
 
-This is not incidental. `early_bird` speaks of "enter by 09:00" and `daily_max`
+This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state whether a day means a local `calendar_day` or a `rolling_24h` window,
@@ -258,9 +288,10 @@ never failed is a decoration.
 Named here so nobody adds them helpfully:
 
 - **No resolution of conflicts.** The modes are recorded and not applied. Two
-  rules qualifying at one stage is a refusal in this version, because resolving
-  it honestly needs two rule types that can qualify at once, which is round A2.
-- **No weekend, holiday, event, weekly-max or occupancy rules.** Round A2.
+  rules qualifying at one stage is a refusal in this version — including two
+  `time_window` rules, which a plan can now express. Resolving it is not done
+  here.
+- **No weekly maximum, and no occupancy-driven rule.** Not in this version.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.
 - **No forecast and no competitor comparison.** Round C.
@@ -295,29 +326,43 @@ paragraph would then describe only a plan that declares no grace. Grace is not i
 this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
-## The occupancy multiplier, and why money stays an integer
+## The first money rounding, and why money stays an integer
 
-Round A2's occupancy rule is a multiplier, and a multiplier is fractional. It
-will be expressed as a **rational** — an integer numerator over an integer
-denominator, applied as `value * numerator // denominator` — and the plan will
-state the rounding direction explicitly, with no default.
+**A percentage adjustment is the first thing in this module that rounds MONEY,
+and it arrives with the version bump §2 says a commercial contract makes.** Every
+rule before it was an integer add or an integer replace, and `money.py` said in
+as many words that this module rounds no money anywhere. That sentence is now
+qualified rather than deleted: it rounds money in exactly one place, the place is
+named, and the direction is the plan's to state.
 
-**That rounding is not the rounding this version already has.**
+**A percentage is INTEGER BASIS POINTS.** 20% is `2000`; 12.5% is `1250`. Not a
+decimal, because a float anywhere in a plan is refused at load — so a percent
+field that could hold `20.5` would either be rejected or would put a float into
+the pricing path through a field nobody was watching. The arithmetic is
+`total * percent_bp // 10000` with the division rounded the way the rule says,
+and no float is constructed at any point.
+
+**`rounding` is stated per rule with no default**, because a percentage of a fee
+lands on a fraction of a minor unit and who keeps that fraction is the owner's
+decision. The breakdown line says which way it went and by how much, so a
+customer disputing a cent can be shown the answer rather than told it.
+
+**That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
 stay is two hours. **The applier reads that field and refuses a mode it does not
-implement** — so A2 adding `floor` to the modes a plan may state is a real
-change, not a plan that quietly keeps pricing as `ceil` (F15).
+implement**, so adding a mode to the ones a plan may state is a real change
+rather than a plan that quietly keeps pricing as `ceil` (F15). The two roundings
+share a word and nothing else.
 
-A multiplier's rounding direction decides fractions of a
-**cent**. The two share a word and nothing else, and **this module does not round
-money anywhere today** — `money.py` says so in as many words, and the arithmetic
-matches it: every A1 rule is an integer add or an integer replace. A2 introduces
-the first money rounding this contract has ever carried, and it arrives with a
-version bump, which is what §2 says a commercial contract does.
+**One wart, recorded rather than hidden:** `rounding` is required on every
+`adjust` effect, and a `fixed` amount has nothing to round — on that shape the
+field is stated and never read. It is written down here rather than left for a
+reader to notice.
 
-Money stays an integer of minor units at every depth. The multiplier will not
-introduce a float, and it will not change what any plan written against this
-version answers.
+Money stays an integer of minor units at every depth. Nothing here introduces a
+float, and nothing here changes what a plan written against the previous version
+answers, because such a plan no longer loads at all — see "What changed in
+version 2".
 
 ---
 

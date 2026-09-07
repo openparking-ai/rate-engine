@@ -10,18 +10,28 @@ is the thing calling it repeatedly.
 **The probe matrix is DERIVED from the plan, not written down.** A fixed list of
 scenarios can only find the gaps whoever wrote the list already thought of. So
 the probes are built from the plan's own thresholds -- every rule's period
-lengths, every stated ceiling, every early-bird limit -- with a stay either side
-of each. A plan whose ceiling is 24 hours gets probed at 24h and at 24h+1m
-whatever those numbers are, because they are read out of the rules.
+lengths, every stated ceiling, every window limit -- with a stay either side of
+each. A plan whose ceiling is 24 hours gets probed at 24h and at 24h+1m whatever
+those numbers are, because they are read out of the rules.
+
+**THREE axes, and the third arrived with `time_window`.** The README says, in as
+many words, that a rule type qualifying on something it does not declare as a
+time or a duration "would need its own probe axis, and adding one is part of
+adding the rule type". `time_window` qualifies on the DAY, so the day is an axis
+now: every probe used to enter on one fixed Tuesday, and two weekend rules that
+conflict with each other would have gone unreported exactly the way the two dawn
+rules did before entry became an axis. That is the same defect in a new place,
+and it is closed here rather than left for the next outside pass to find.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from .engine import Stay, find_conflicts, find_gaps
 from .findings import Finding
 from .plan import Plan
+from .rules.time_window import DAYS_OF_WEEK
 from .stages import ACCUMULATE, QUALIFY
 
 #: The reference entry the validator has always used: early enough that an
@@ -29,6 +39,11 @@ from .stages import ACCUMULATE, QUALIFY
 #: that declares no entry limit at all. Kept as one mark among many rather than
 #: as THE entry -- being the only one was the defect.
 DEFAULT_PROBE_ENTRY_MINUTE = 7 * 60
+
+#: The reference local DATE every probe used to enter on, and still the one a
+#: plan that names no days is probed on. A Tuesday, so an ordinary weekday rule
+#: qualifies against it.
+REFERENCE_DATE = date(2026, 3, 3)
 
 
 def _entry_minutes_of_day(plan: Plan) -> set[int]:
@@ -51,7 +66,42 @@ def _entry_minutes_of_day(plan: Plan) -> set[int]:
             # rules overlap. One minute after is covered by the next rule's marks
             # and by the base entry.
             marks.update({at, at - 1})
+        enter_from = rule.params.get("enter_from")
+        if enter_from is not None:
+            # The window's OTHER end, and it is a boundary the plan declares as
+            # plainly as the first. ON the opening minute and one minute after:
+            # both qualify, which is what lets two evening rules overlap. The
+            # minute BEFORE is a non-qualifying probe and is covered by midnight.
+            at = enter_from.hour * 60 + enter_from.minute
+            marks.update({at, at + 1})
     return {m for m in marks if 0 <= m < 24 * 60}
+
+
+def _entry_dates(plan: Plan) -> set[date]:
+    """Every local DATE this plan makes interesting.
+
+    A `time_window` qualifies on the day the car arrived, so a day a rule names
+    is a day worth probing -- and a plan whose only rules apply at the weekend
+    would otherwise be probed exclusively on a Tuesday, where none of them can
+    qualify and none of them can therefore conflict with each other.
+
+    Derived, like every other axis here: stated weekday names become the dates in
+    the reference date's own week, and stated dates are used as they are written.
+    """
+    dates = {REFERENCE_DATE}
+    week_starts = REFERENCE_DATE - timedelta(days=REFERENCE_DATE.weekday())
+    for rule in plan.rules_for_stage(QUALIFY):
+        applies_on = rule.params.get("applies_on")
+        if applies_on is None:
+            continue
+        if applies_on["kind"] == "days_of_week":
+            dates.update(
+                week_starts + timedelta(days=DAYS_OF_WEEK.index(name))
+                for name in applies_on["days"]
+            )
+        else:
+            dates.update(applies_on["dates"])
+    return dates
 
 
 def _duration_marks(plan: Plan, entry_minute: int) -> set[int]:
@@ -98,27 +148,33 @@ def probe_stays(plan: Plan) -> list[Stay]:
     the gaps whoever wrote it already thought of -- and neither is a search: the
     probes are the plan's own stated times, each side of each.
 
+    THREE axes, all read out of the rules: which DAY the stay enters on, when it
+    ENTERS on that day, and how long it LASTS. None is a written list of
+    scenarios -- a fixed list can only find the gaps whoever wrote it already
+    thought of -- and none is a search: the probes are the plan's own stated
+    days and times, each side of each.
+
     **What this does NOT claim.** It is not exhaustive over all possible stays,
     and no bounded probe set could be. It is exhaustive over the boundaries the
-    plan STATES, which is the class of conflict a rule can express in A1: every
-    qualification a rule makes turns on a time it declares or a duration it
-    declares. `validate_plan`'s docstring and the README say exactly that and no
-    more -- see the limit recorded there.
+    plan STATES, which is the class of conflict a rule can express: every
+    qualification a rule makes turns on a day, a time or a duration it declares.
+    `validate_plan`'s docstring and the README say exactly that and no more --
+    see the limit recorded there.
     """
-    day = datetime(2026, 3, 3, 0, 0, tzinfo=plan.timezone)  # a Tuesday, local midnight
-
     stays: list[Stay] = []
     for space_class in plan.space_classes:
-        for entry_minute in sorted(_entry_minutes_of_day(plan)):
-            entry_at = day + timedelta(minutes=entry_minute)
-            for minutes in sorted(_duration_marks(plan, entry_minute)):
-                stays.append(
-                    Stay(
-                        entry_at=entry_at,
-                        exit_at=entry_at + timedelta(minutes=minutes),
-                        space_class=space_class,
+        for day in sorted(_entry_dates(plan)):
+            midnight = datetime(day.year, day.month, day.day, 0, 0, tzinfo=plan.timezone)
+            for entry_minute in sorted(_entry_minutes_of_day(plan)):
+                entry_at = midnight + timedelta(minutes=entry_minute)
+                for minutes in sorted(_duration_marks(plan, entry_minute)):
+                    stays.append(
+                        Stay(
+                            entry_at=entry_at,
+                            exit_at=entry_at + timedelta(minutes=minutes),
+                            space_class=space_class,
+                        )
                     )
-                )
     return stays
 
 

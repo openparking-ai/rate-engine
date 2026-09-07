@@ -1,10 +1,11 @@
 """Wall-clock limits and the granularity they are compared at. ONE place.
 
-**The defect this closes.** `early_bird` compared `entry_local.time()` against an
-`enter_by` of `09:00` at full `datetime.time` precision, so an entry at
-`09:00:00.001` failed -- and the breakdown, which renders both sides with `%H:%M`,
-said *"entry 09:00 is after the 09:00 entry limit"*. A sentence that contradicts
-itself on its face, deciding an $18 difference on a microsecond nobody can see.
+**The defect this closes.** `time_window` -- then called `early_bird` -- compared
+`entry_local.time()` against an `enter_by` of `09:00` at full `datetime.time`
+precision, so an entry at `09:00:00.001` failed -- and the breakdown, which
+renders both sides with `%H:%M`, said *"entry 09:00 is after the 09:00 entry
+limit"*. A sentence that contradicts itself on its face, deciding an $18
+difference on a microsecond nobody can see.
 §8's first requirement is that this module is EXTREMELY CLEAR; that line is the
 worst available failure of it.
 
@@ -26,7 +27,7 @@ module cannot honour.
 `select_plan` compares `plan.effective_from <= stay.entry_at`: two absolute
 INSTANTS, not times of day. Truncating there would change which plan version is in
 force at a boundary -- a different rate card, not a rounder sentence. The date
-comparisons in `early_bird` and `daily_max.days_covered` are likewise unaffected:
+comparisons in `time_window` and `daily_max.days_covered` are likewise unaffected:
 truncating seconds cannot move a calendar date.
 """
 

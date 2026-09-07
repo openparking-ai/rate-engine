@@ -14,8 +14,11 @@ The order is load-bearing and is not a detail of this implementation: a cap that
 ran before the surcharge would cap a number the customer is not being charged,
 and a surcharge applied before the cap would be silently capped away.
 
-A1 ships one rule type per stage except ADJUST, which ships none. That is
-deliberate -- see docs/CONTRACT.md, "What this version does not do".
+Every stage now carries at least one rule type. ADJUST was empty in A1 and went
+live in A2 with `time_window`'s `adjust` effect -- a percentage or an amount, up
+or down, on the whole fee. It runs LAST, which is the same argument the order
+above rests on: an adjustment applied before the cap and the surcharge would take
+a percentage of a number the customer is not being charged.
 """
 
 from __future__ import annotations

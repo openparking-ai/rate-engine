@@ -32,8 +32,8 @@ GUARANTEES: dict[str, str] = {
     "F2": (
         "A special rate is all-conditions-or-nothing: miss one condition by a minute "
         "and it does not apply at all -- no pro-rating and no partial credit. "
-        "Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so "
-        "the property is proven of it rather than of a populated stage."
+        "Enforced per rule type; `time_window` is the only special this module "
+        "ships, so the property is proven of it rather than of a populated stage."
     ),
     "F3": (
         "The plan version in force at ENTRY prices the whole stay. A rate change "
@@ -164,8 +164,43 @@ GUARANTEES: dict[str, str] = {
         "integrator to discover as an anomaly."
     ),
     "F25": (
-        "Whether an early bird may run overnight is stated by the PLAN, in "
+        "Whether a time window may run past midnight is stated by the PLAN, in "
         "`day_span`, with no default -- the engine holds no day condition of its own."
+    ),
+    "F26": (
+        "A window applies on the days the PLAN states -- weekday names, or the "
+        "garage's own dates for a holiday or an event -- matched against the "
+        "ENTRY's local date, and a window that did not match names the day that "
+        "failed and the days it wanted. There is no built-in calendar and no "
+        "preset: 'weekend' means different days in different countries."
+    ),
+    "F27": (
+        "`enter_from` is CONSULTED, not merely validated and stored. A window "
+        "states BOTH ends of its entry range, which is what makes an evening rate "
+        "expressible, and a stay arriving one minute before it opens does not "
+        "qualify."
+    ),
+    "F28": (
+        "`day_span` `next_day` is BOUNDED: an exit on the following local day "
+        "qualifies and one the day after that does not, where `any_span` accepts "
+        "both. Proven on one stay, so the three spans are an axis rather than "
+        "three unrelated scenarios."
+    ),
+    "F29": (
+        "A `rate` effect is priced by `increment`'s own builder and applier, not "
+        "by a copy of them: identical parameters produce identical lines on the "
+        "same stay, and a change to `increment`'s period counting moves the "
+        "window's lines with it."
+    ),
+    "F30": (
+        "An `adjust` effect applies to the fee AFTER the caps and the surcharges. "
+        "A percentage taken any earlier is a percentage of a number the customer "
+        "is not being charged."
+    ),
+    "F31": (
+        "An `adjust` percentage is integer basis points and its `rounding` is "
+        "CONSULTED: the same stay under `up` and under `down` differs by one minor "
+        "unit, and the breakdown line says which way it went."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

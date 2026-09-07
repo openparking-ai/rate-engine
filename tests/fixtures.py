@@ -84,8 +84,11 @@ def stay(entry: str, minutes: int, space_class: str = "standard") -> Stay:
 # number chosen because it looked plausible; each is a threshold the rules read,
 # or one minute either side of one.
 
-EARLY = "2026-03-03T08:30:00-05:00"  # Tue, before the 09:00 entry limit
-LATE = "2026-03-03T09:14:00-05:00"  # Tue, after it -- the brief's worked example
+EARLY = "2026-03-03T08:30:00-05:00"  # Tue, inside the 06:00-09:00 entry window
+LATE = "2026-03-03T09:14:00-05:00"  # Tue, after the 09:00 limit -- the worked example
+BEFORE_OPEN = "2026-03-03T05:59:00-05:00"  # Tue, one minute before enter_from
+ON_OPEN = "2026-03-03T06:00:00-05:00"  # Tue, exactly on enter_from
+SATURDAY = "2026-03-07T07:00:00-05:00"  # inside the hours, NOT one of the stated days
 FRI_NIGHT = "2026-03-06T22:00:00-05:00"  # crosses local midnight into Saturday
 DST_SPRING = "2026-03-07T12:00:00-05:00"  # the US spring-forward is 2026-03-08
 #: 2026-11-01 is the US fall-back: that LOCAL day is 25 hours long. It is the
@@ -105,11 +108,16 @@ CORPUS: dict[str, Stay] = {
     "ceiling_under": stay(LATE, 1439),
     "ceiling_exact": stay(LATE, 1440),
     "ceiling_over": stay(LATE, 1441),
-    # early_bird: qualifies, and each condition missed by one minute
-    "early_bird_qualifies": stay(EARLY, 240),
-    "early_bird_entry_late": stay(LATE, 60),
-    "early_bird_exit_late": stay(EARLY, 511),  # 08:30 + 8h31m = 17:01
-    "early_bird_exit_on_limit": stay(EARLY, 510),  # 08:30 + 8h30m = 17:00 exactly
+    # time_window: qualifies, and each condition missed by one minute. Every
+    # axis the rule branches on has a case either side of it -- the entry
+    # window's two ends, the exit limit, and the days it applies on.
+    "window_qualifies": stay(EARLY, 240),
+    "window_entry_late": stay(LATE, 60),
+    "window_entry_before_open": stay(BEFORE_OPEN, 240),  # 05:59, enter_from is 06:00
+    "window_entry_on_open": stay(ON_OPEN, 240),  # 06:00 exactly, so it qualifies
+    "window_day_not_stated": stay(SATURDAY, 240),  # Sat: hours fine, day is not
+    "window_exit_late": stay(EARLY, 511),  # 08:30 + 8h31m = 17:01
+    "window_exit_on_limit": stay(EARLY, 510),  # 08:30 + 8h30m = 17:00 exactly
     # daily_max: either side of the cap, and across a local midnight
     "cap_not_reached": stay(LATE, 120),
     "cap_reached": stay(LATE, 566),
@@ -127,12 +135,20 @@ CORPUS: dict[str, Stay] = {
     "one_minute": stay(LATE, 1),
 }
 
-#: (axis, threshold, the corpus keys strictly below / at-or-above it). Read by
-#: test_fixture_axes.py, which requires both sides of every row to be non-empty.
+#: (axis, the prefix its corpus keys share). A reader's index of what the corpus
+#: is built to straddle.
+#:
+#: **NOTHING READS THIS, and it used to say `test_fixture_axes.py` did.** That
+#: file derives its thresholds from the reference plan directly, which is the
+#: stronger arrangement and the one the header above describes -- a list here
+#: could not notice an axis somebody forgot to add to it. The comment is
+#: corrected rather than the table deleted: a false sentence about a measurement
+#: is the defect this repository keeps finding, and a wrong one pointing AT a
+#: real test is the worst shape of it.
 AXES: tuple[tuple[str, str], ...] = (
     ("increment.first_period_minutes = 60", "first_period"),
     ("increment.max_duration_minutes = 1440", "ceiling"),
-    ("early_bird enter_by 09:00 / exit_by 17:00", "early_bird"),
+    ("time_window enter_from 06:00 / enter_by 09:00 / exit_by 17:00", "window"),
     ("daily_max.max_minor = 3000", "cap"),
     ("space_class in {standard, vip}", "space"),
     ("both DST transitions", "dst_day"),

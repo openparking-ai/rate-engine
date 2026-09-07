@@ -17,15 +17,30 @@
   "rules": [
     {
       "id": "eb-weekday",
-      "type": "early_bird",
+      "type": "time_window",
       "stage": "QUALIFY",
       "space_classes": [
         "standard"
       ],
+      "label": "Early bird",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "enter_from": "06:00",
       "enter_by": "09:00",
       "exit_by": "17:00",
-      "price_minor": 1200,
-      "day_span": "same_day"
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1200
+      }
     },
     {
       "id": "hourly",

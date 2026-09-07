@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 1. One contract, three surfaces: `POST /v1/quote`, `POST
+Version 2. One contract, three surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, and the `rate-engine` CLI. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
 interface is inadequate we find out before an integrator does.
@@ -9,7 +9,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **1**
+`schema_version` **2**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -20,9 +20,36 @@ tolerate new fields appearing in a response.
 
 The rule runs the other way for requests, and it is what makes the assumption
 safe: **a key this engine does not understand is REJECTED and named, never
-ignored.** An operator who adds `weekend_rate` to a plan running on a version
-with no weekend rule would otherwise have a garage pricing weekends wrong and a
-document saying it does not.
+ignored.** An operator who adds a key to a plan running on a version that has no
+rule for it would otherwise have a garage pricing something wrong and a document
+saying it does not.
+
+### What changed in version 2
+
+**A rule type was REMOVED, and that is why the number moved.** `early_bird` is
+gone. It was a time window with its days hardcoded to every day and its effect
+hardcoded to a flat price, and it is now expressible — with the days and the
+effect stated — as a `time_window`. A plan written for version 1 does not load on
+version 2: an unknown rule type is rejected rather than skipped, which is the
+same rule that protects an unknown key.
+
+No operator plans exist in the wild today, so removing a rule type costs nothing
+now and could not be done quietly later. It is recorded here rather than left for
+somebody to discover from a refusal.
+
+**The other changes are additions.** `time_window` carries an `effect` that is a
+flat price, a completely different time-based rate, or an adjustment up or down
+on the whole fee — and the third of those brought the ADJUST stage live, so a
+rule type now runs at a stage that depends on the rule rather than only on its
+type. The stage is still stated in every plan, and the engine refuses a plan
+whose stated stage disagrees with the one the rule's own shape implies.
+
+**A window that would have to wrap past midnight is REFUSED, and that is a stated
+gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
+not expressible as one rule. It is refused at load, naming the field, and the
+message says to write it as two rules: one running to 23:59 and one starting at
+00:00, each stating its own days. The engine will not split it, because which
+days each half applies on is a pricing decision.
 
 ## Money
 
@@ -39,7 +66,7 @@ Every plan names an **IANA timezone**, and entry and exit arrive as offset-aware
 ISO 8601. A naive timestamp is refused: it would be read in whatever zone the
 server happens to run in, which is a different fee on a different machine.
 
-This is not incidental. `early_bird` speaks of "enter by 09:00" and `daily_max`
+This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state whether a day means a local `calendar_day` or a `rolling_24h` window,
@@ -60,11 +87,11 @@ surcharge that survives it.
 | rule type | stage |
 | --- | --- |
 | `daily_max` | CAP |
-| `early_bird` | QUALIFY |
 | `increment` | ACCUMULATE |
 | `space_surcharge` | SURCHARGE |
+| `time_window` | QUALIFY or ADJUST |
 
-Stages with no rule type in this version: ADJUST.
+Every stage has at least one rule type in this version.
 <!--/gen:rule_types-->
 
 ## The plan document
@@ -176,14 +203,20 @@ never failed is a decoration.
 | **F18** | A wall-clock limit is compared at the granularity it is written and rendered in: the stay is truncated to the minute, so no breakdown line can say a time is after itself. |
 | **F18b** | And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; anything finer is rejected at load, because rounding it would silently discard a pricing decision the operator wrote. |
 | **F19** | `validate-plan` probes every boundary the plan DECLARES -- entry limits and exit limits as well as durations, each side of each -- so a conflict the engine would refuse is one the owner was shown before the plan went live. |
-| **F2** | A special rate is all-conditions-or-nothing: miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so the property is proven of it rather than of a populated stage. |
+| **F2** | A special rate is all-conditions-or-nothing: miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. Enforced per rule type; `time_window` is the only special this module ships, so the property is proven of it rather than of a populated stage. |
 | **F20** | There are TWO time roundings and both are declared: a part-minute is a whole minute (assumed, module-wide) and minutes into periods is stated per rule. Every comparison against a duration reads the same rounded value. |
 | **F21** | A refusal's CODE names the cause that actually occurred. A negative total is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed. |
 | **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
 | **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
-| **F25** | Whether an early bird may run overnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. |
+| **F25** | Whether a time window may run past midnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. |
+| **F26** | A window applies on the days the PLAN states -- weekday names, or the garage's own dates for a holiday or an event -- matched against the ENTRY's local date, and a window that did not match names the day that failed and the days it wanted. There is no built-in calendar and no preset: 'weekend' means different days in different countries. |
+| **F27** | `enter_from` is CONSULTED, not merely validated and stored. A window states BOTH ends of its entry range, which is what makes an evening rate expressible, and a stay arriving one minute before it opens does not qualify. |
+| **F28** | `day_span` `next_day` is BOUNDED: an exit on the following local day qualifies and one the day after that does not, where `any_span` accepts both. Proven on one stay, so the three spans are an axis rather than three unrelated scenarios. |
+| **F29** | A `rate` effect is priced by `increment`'s own builder and applier, not by a copy of them: identical parameters produce identical lines on the same stay, and a change to `increment`'s period counting moves the window's lines with it. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
+| **F30** | An `adjust` effect applies to the fee AFTER the caps and the surcharges. A percentage taken any earlier is a percentage of a number the customer is not being charged. |
+| **F31** | An `adjust` percentage is integer basis points and its `rounding` is CONSULTED: the same stay under `up` and under `down` differs by one minor unit, and the breakdown line says which way it went. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
@@ -201,9 +234,10 @@ never failed is a decoration.
 Named here so nobody adds them helpfully:
 
 - **No resolution of conflicts.** The modes are recorded and not applied. Two
-  rules qualifying at one stage is a refusal in this version, because resolving
-  it honestly needs two rule types that can qualify at once, which is round A2.
-- **No weekend, holiday, event, weekly-max or occupancy rules.** Round A2.
+  rules qualifying at one stage is a refusal in this version — including two
+  `time_window` rules, which a plan can now express. Resolving it is not done
+  here.
+- **No weekly maximum, and no occupancy-driven rule.** Not in this version.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.
 - **No forecast and no competitor comparison.** Round C.
@@ -238,29 +272,43 @@ paragraph would then describe only a plan that declares no grace. Grace is not i
 this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
-## The occupancy multiplier, and why money stays an integer
+## The first money rounding, and why money stays an integer
 
-Round A2's occupancy rule is a multiplier, and a multiplier is fractional. It
-will be expressed as a **rational** — an integer numerator over an integer
-denominator, applied as `value * numerator // denominator` — and the plan will
-state the rounding direction explicitly, with no default.
+**A percentage adjustment is the first thing in this module that rounds MONEY,
+and it arrives with the version bump §2 says a commercial contract makes.** Every
+rule before it was an integer add or an integer replace, and `money.py` said in
+as many words that this module rounds no money anywhere. That sentence is now
+qualified rather than deleted: it rounds money in exactly one place, the place is
+named, and the direction is the plan's to state.
 
-**That rounding is not the rounding this version already has.**
+**A percentage is INTEGER BASIS POINTS.** 20% is `2000`; 12.5% is `1250`. Not a
+decimal, because a float anywhere in a plan is refused at load — so a percent
+field that could hold `20.5` would either be rejected or would put a float into
+the pricing path through a field nobody was watching. The arithmetic is
+`total * percent_bp // 10000` with the division rounded the way the rule says,
+and no float is constructed at any point.
+
+**`rounding` is stated per rule with no default**, because a percentage of a fee
+lands on a fraction of a minor unit and who keeps that fraction is the owner's
+decision. The breakdown line says which way it went and by how much, so a
+customer disputing a cent can be shown the answer rather than told it.
+
+**That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
 stay is two hours. **The applier reads that field and refuses a mode it does not
-implement** — so A2 adding `floor` to the modes a plan may state is a real
-change, not a plan that quietly keeps pricing as `ceil` (F15).
+implement**, so adding a mode to the ones a plan may state is a real change
+rather than a plan that quietly keeps pricing as `ceil` (F15). The two roundings
+share a word and nothing else.
 
-A multiplier's rounding direction decides fractions of a
-**cent**. The two share a word and nothing else, and **this module does not round
-money anywhere today** — `money.py` says so in as many words, and the arithmetic
-matches it: every A1 rule is an integer add or an integer replace. A2 introduces
-the first money rounding this contract has ever carried, and it arrives with a
-version bump, which is what §2 says a commercial contract does.
+**One wart, recorded rather than hidden:** `rounding` is required on every
+`adjust` effect, and a `fixed` amount has nothing to round — on that shape the
+field is stated and never read. It is written down here rather than left for a
+reader to notice.
 
-Money stays an integer of minor units at every depth. The multiplier will not
-introduce a float, and it will not change what any plan written against this
-version answers.
+Money stays an integer of minor units at every depth. Nothing here introduces a
+float, and nothing here changes what a plan written against the previous version
+answers, because such a plan no longer loads at all — see "What changed in
+version 2".
 
 ---
 

@@ -46,8 +46,8 @@ def _quote(entry: str, exit_: str, plan: dict | None = None):
     )
 
 
-def _early_bird_line(body: dict) -> str:
-    return [ln["text"] for ln in body["breakdown"] if ln["code"].startswith("early_bird")][0]
+def _window_line(body: dict) -> str:
+    return [ln["text"] for ln in body["breakdown"] if ln["code"].startswith("time_window")][0]
 
 
 #: Every instant inside the 09:00 minute is an arrival at nine.
@@ -64,8 +64,8 @@ WITHIN_THE_LIMIT_MINUTE = (
 def test_an_entry_inside_the_limits_own_minute_QUALIFIES(entry):
     status, body = _quote(entry, "2026-03-03T16:00:00-05:00")
     assert status == 200
-    assert body["fee_minor"] == EARLY_BIRD_PRICE, _early_bird_line(body)
-    assert "NOT applied" not in _early_bird_line(body)
+    assert body["fee_minor"] == EARLY_BIRD_PRICE, _window_line(body)
+    assert "NOT applied" not in _window_line(body)
 
 
 @pytest.mark.guarantee("F18")
@@ -74,15 +74,15 @@ def test_the_NEXT_minute_still_fails_so_the_limit_was_not_merely_relaxed():
     status, body = _quote("2026-03-03T09:01:00-05:00", "2026-03-03T16:00:00-05:00")
     assert status == 200
     assert body["fee_minor"] == TIME_BASED_CAPPED
-    assert "NOT applied" in _early_bird_line(body)
+    assert "NOT applied" in _window_line(body)
 
 
 @pytest.mark.guarantee("F18")
 def test_the_exit_limit_has_the_same_granularity():
     within = _quote("2026-03-03T08:00:00-05:00", "2026-03-03T17:00:59.999999-05:00")[1]
-    assert within["fee_minor"] == EARLY_BIRD_PRICE, _early_bird_line(within)
+    assert within["fee_minor"] == EARLY_BIRD_PRICE, _window_line(within)
     beyond = _quote("2026-03-03T08:00:00-05:00", "2026-03-03T17:01:00-05:00")[1]
-    assert "NOT applied" in _early_bird_line(beyond)
+    assert "NOT applied" in _window_line(beyond)
 
 
 @pytest.mark.guarantee("F18")
@@ -96,7 +96,7 @@ def test_NO_RENDERED_LINE_CAN_CONTRADICT_ITSELF():
     offsets = ("00", "00.000001", "15", "30", "59", "59.999999")
     for second in offsets:
         _status, body = _quote(f"2026-03-03T09:00:{second}-05:00", "2026-03-03T16:00:00-05:00")
-        line = _early_bird_line(body)
+        line = _window_line(body)
         assert "entry 09:00 is after the 09:00" not in line, (
             f"the breakdown contradicts itself at 09:00:{second} -> {line}"
         )
