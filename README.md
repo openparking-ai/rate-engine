@@ -90,8 +90,11 @@ be byte-identical over every fixture.
 - **Time-based increments** with a configurable first period and repeating
   period — "first 20 min, then each additional 20 min" and "first hour, then each
   additional hour" are one rule with different numbers.
-- **Early bird**, and every special rate, is **all-conditions-or-nothing**. Miss
-  the exit time by a minute and the rate does not apply at all.
+- **Early bird** is **all-conditions-or-nothing**. Miss the exit time by a minute
+  and the rate does not apply at all. That is the rule every special rate will
+  keep — it is enforced per rule type, and **early bird is the only special that
+  ships in A1**, so today the property rests on one rule rather than on a stage
+  full of them.
 - **Daily maximum**, stating whether a day means a local calendar day or a
   rolling 24 hours — because those price a Friday-night stay differently and the
   answer is the operator's.

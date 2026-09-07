@@ -30,8 +30,10 @@ GUARANTEES: dict[str, str] = {
         "the gap, and no number is returned."
     ),
     "F2": (
-        "A special rate is all-conditions-or-nothing. Miss one condition by a minute "
-        "and it does not apply at all -- no pro-rating and no partial credit."
+        "A special rate is all-conditions-or-nothing: miss one condition by a minute "
+        "and it does not apply at all -- no pro-rating and no partial credit. "
+        "Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so "
+        "the property is proven of it rather than of a populated stage."
     ),
     "F3": (
         "The plan version in force at ENTRY prices the whole stay. A rate change "
@@ -145,6 +147,11 @@ GUARANTEES: dict[str, str] = {
     "F6c": (
         "The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal "
         "newline written outside it -- compared as bytes, never as decoded objects."
+    ),
+    "F22": (
+        "Whether a non-qualifying rule appears in the breakdown depends on its STAGE: "
+        "a QUALIFY rule always speaks, at delta zero; a rule at another stage that "
+        "does not cover the stay is silent."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

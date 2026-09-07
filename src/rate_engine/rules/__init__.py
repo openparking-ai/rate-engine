@@ -15,10 +15,23 @@ by returning a Line.
 2. It is a pure function of (stay, plan, rule). No clock, no randomness, no
    ambient state -- F5.
 3. Its money is integer minor units at every step -- F4.
-4. It declares whether it qualified. A rule that did NOT qualify still returns a
-   line, with delta zero, saying why not. That is not politeness: "why didn't
-   early bird apply?" is the question operators ask, and a breakdown that
-   answers it only when the answer is good news is a breakdown nobody trusts.
+4. It declares whether it qualified -- **and whether a non-qualifying rule SPEAKS
+   depends on its stage.** A QUALIFY rule always returns a line: at delta zero,
+   saying which condition failed. That is not politeness: "why didn't early bird
+   apply?" is the question operators ask, and a breakdown that answers it only
+   when the answer is good news is a breakdown nobody trusts. A rule at any other
+   stage that does not cover the stay returns NOTHING -- the engine skips it --
+   because a standard-space receipt listing every VIP tier the garage does not
+   charge for is noise, not clarity.
+
+   **This item used to say a non-qualifying rule ALWAYS returns a zero line, full
+   stop, and that was false for every stage except QUALIFY.** `space_surcharge`
+   documented the opposite in its own docstring, so the framework contract and a
+   shipped rule type contradicted each other and nothing measured either. The
+   distinction is real and worth keeping -- "this special could have applied to
+   you and did not" is information; "a tier that was never about your space
+   exists" is not -- but it is a rule about STAGES, not a blanket one.
+   `tests/test_f22_the_silence_rule_is_per_stage.py` holds both halves.
 """
 
 from __future__ import annotations
