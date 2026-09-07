@@ -37,7 +37,21 @@ sys.path.insert(0, str(ROOT / "src"))
 from _guarantees import GUARANTEES  # noqa: E402
 from plant import planted, resolve  # noqa: E402
 
-#: guarantee id -> (test target, source file, anchor, replacement, what breaks)
+
+def guarantee_of(control_id: str) -> str:
+    """The guarantee a control id names. `F6b/imported-name-form` -> `F6b`.
+
+    One guarantee can need more than one plant, and F6b's does. The one-encoder
+    guard has to be shown catching BOTH the `json.dumps` attribute form and the
+    `from json import dumps` form -- a single plant carrying both would go red if
+    it caught EITHER, which is the arrangement that hid the second form in the
+    first place. So a control id is a guarantee id, optionally with an arm after
+    a slash, and every arm has to fire on its own.
+    """
+    return control_id.split("/", 1)[0]
+
+
+#: control id -> (test target, source file, anchor, replacement, what breaks)
 CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F1": (
         "tests/test_f1_never_guesses.py",
@@ -325,7 +339,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # that one function, so they move together and stay equal -- which is the fix
     # working, not a control failing. fail_controls.py reported it GREEN and the
     # plant was replaced rather than argued with.
-    "F6b": (
+    "F6b/attribute-form": (
         "tests/test_f6_one_code_path.py",
         "service.py",
         "        payload = encode(body)",
@@ -333,6 +347,24 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the route encodes its own response again instead of calling the one "
         "encoder, which is the arrangement that let the two doors' bytes diverge "
         "while the contract claimed one serializer",
+    ),
+    # The second arm, and the reason the guard was widened. It plants the SAME
+    # defect written the other common way -- and deliberately BYTE-IDENTICALLY,
+    # `indent=2, sort_keys=False` being exactly what `contract.encode` passes, so
+    # not one byte diverges and no other test in the file can supply the red.
+    # That is why this arm names the single node id rather than the module: the
+    # structural guard has to catch it alone or it has caught nothing. Measured
+    # against the pre-fix guard it was GREEN, 1 passed.
+    "F6b/imported-name-form": (
+        "tests/test_f6_one_code_path.py::"
+        "test_THERE_IS_ONE_ENCODER_and_no_surface_re_implements_it",
+        "service.py",
+        "        payload = encode(body)",
+        "        from json import dumps  # PLANTED: a second encoder, imported by name\n"
+        "        payload = dumps(body, indent=2, sort_keys=False).encode()  # PLANTED",
+        "a second encode site is added in the import style that used to walk past "
+        "this guard -- byte-identical, so the byte tests cannot see it either, and "
+        "the package quietly has two serializers again",
     ),
     "F6c": (
         "tests/test_f6_one_code_path.py",
@@ -428,7 +460,7 @@ def check_anchors() -> int:
 
 def run_control(gid: str) -> bool:
     target, path, anchor, replacement, why = CONTROLS[gid]
-    print(f"\n=== {gid} — {GUARANTEES[gid]}")
+    print(f"\n=== {gid} — {GUARANTEES[guarantee_of(gid)]}")
     print(f"    plant: {path}")
     print(f"    breaks: {why}")
 
@@ -466,13 +498,20 @@ def main(argv: list[str]) -> int:
     if "--anchors" in argv:
         return check_anchors()
 
-    wanted = [a for a in argv if a in CONTROLS] or sorted(CONTROLS)
-    unknown = [a for a in argv if a not in CONTROLS and not a.startswith("-")]
+    # An argument selects a control id exactly, or a guarantee id and then every
+    # arm of it -- `F6b` has to keep meaning "F6b", not "no such control".
+    named = [a for a in argv if not a.startswith("-")]
+    wanted = [c for c in sorted(CONTROLS) if c in named or guarantee_of(c) in named]
+    unknown = [
+        a for a in named
+        if a not in CONTROLS and a not in {guarantee_of(c) for c in CONTROLS}
+    ]
     if unknown:
         print(f"no such control: {', '.join(unknown)}")
         return 2
+    wanted = wanted or sorted(CONTROLS)
 
-    missing = sorted(set(GUARANTEES) - set(CONTROLS))
+    missing = sorted(set(GUARANTEES) - {guarantee_of(c) for c in CONTROLS})
     if missing:
         print(
             f"registered guarantees with no fail-control: {', '.join(missing)}. "

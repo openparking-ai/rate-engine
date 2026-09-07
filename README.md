@@ -80,10 +80,13 @@ Or over HTTP — `POST /v1/quote`, `POST /v1/validate-plan`:
 python -c "from rate_engine.service import serve; serve()"
 ```
 
-The CLI and the HTTP route are the same code path and return the same bytes.
 There is no simulation mode: the function an operator types entry and exit into
-**is** the production pricing path, and a test proves it by requiring the two to
-be byte-identical over every fixture.
+**is** the production pricing path, reached through one code path and one
+encoder. Exactly what is byte-identical between the two doors, and where the
+CLI's terminal newline sits, is stated once -- in `docs/CONTRACT.md`, guarantees
+F6, F6b and F6c, generated from the tests that measure them. This page does not
+restate it, because the hand-written second copy of a claim is the one that
+drifts.
 
 ## What it does
 
