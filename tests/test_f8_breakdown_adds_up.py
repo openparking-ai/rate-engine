@@ -24,7 +24,7 @@ import pytest
 from fixtures import CORPUS, DOWNTOWN_V2, loaded
 from rate_engine.breakdown import Ledger, Line
 from rate_engine.engine import quote
-from rate_engine.findings import Refused
+from rate_engine.findings import FAULT_RULE_RETURNED_NOT_LINES, Refused
 from rate_engine.money import NotMinorUnits
 
 
@@ -125,8 +125,6 @@ def test_the_sum_check_can_tell_a_wrong_total_from_a_right_one():
 
 def _stay_and_plan(applier, name: str):
     """Register a test-only rule type and build a plan whose only rule is it."""
-    import copy
-
     from rate_engine.engine import QUALIFIERS
     from rate_engine.plan import load_plan
     from rate_engine.rules import Rule, common_fields, register
@@ -142,6 +140,17 @@ def _stay_and_plan(applier, name: str):
     register(name, ACCUMULATE, build, applier)
     QUALIFIERS[name] = lambda rule, stay, plan: rule.covers(stay.space_class)
 
+    return load_plan(_plan_document(name))
+
+
+def _plan_document(name: str) -> dict:
+    """The raw document, so a test can hand it to `run_quote` rather than to `quote`.
+
+    Split out because the surface test needs the DOCUMENT: `quote()` takes loaded
+    plans, and the boundary this guarantee is about is the one `run_quote` owns.
+    """
+    import copy
+
     document = copy.deepcopy(DOWNTOWN_V2)
     document["rules"] = [
         r for r in document["rules"] if r["id"] not in ("hourly", "eb-weekday")
@@ -151,7 +160,7 @@ def _stay_and_plan(applier, name: str):
             "space_classes": ["standard", "vip"], "amount": 500,
         }
     ]
-    return load_plan(document)
+    return document
 
 
 def _unregister(name: str) -> None:
@@ -180,17 +189,27 @@ def test_a_rule_cannot_produce_an_effect_without_a_ledger_entry():
 
 @pytest.mark.guarantee("F8b")
 def test_a_rule_returning_something_that_is_not_a_line_is_refused_by_name():
-    """It used to be an AttributeError from inside Ledger.add, two files away."""
+    """It used to be an AttributeError from inside Ledger.add, two files away.
+
+    Then it was a `TypeError`, which was still not a refusal: `run_quote` catches
+    `Refused`, so the guarantee's own sentence -- "REFUSED by name, not left to
+    crash inside the ledger" -- was false at the boundary. **This test asserted
+    the `TypeError`**, which made it a test blessing the opposite of the thing it
+    protects. It now asserts the refusal, and the surface assertion below is the
+    half that was missing: what an operator actually receives.
+    """
     plan = _stay_and_plan(
         lambda rule, stay, plan: [{"code": "x", "delta_minor": 500}], "k3_not_a_line"
     )
     try:
-        with pytest.raises(TypeError) as caught:
+        with pytest.raises(Refused) as caught:
             quote([plan], CORPUS["worked_example"])
-        message = str(caught.value)
-        assert "k3_not_a_line" in message, "the refusal must name the rule TYPE"
-        assert "k3_not_a_line-1" in message, "and the offending rule"
-        assert "dict" in message
+        finding = caught.value.findings[0]
+        assert finding.code == FAULT_RULE_RETURNED_NOT_LINES
+        assert finding.kind == "fault", "not a gap and not a conflict -- no owner can decide it"
+        assert "k3_not_a_line" in finding.text, "the refusal must name the rule TYPE"
+        assert "k3_not_a_line-1" in finding.text, "and the offending rule"
+        assert "dict" in finding.text
     finally:
         _unregister("k3_not_a_line")
 
@@ -199,12 +218,46 @@ def test_a_rule_returning_something_that_is_not_a_line_is_refused_by_name():
 def test_a_rule_returning_a_bare_value_instead_of_a_list_is_refused_by_name():
     plan = _stay_and_plan(lambda rule, stay, plan: 500, "k3_bare_value")
     try:
-        with pytest.raises(TypeError) as caught:
+        with pytest.raises(Refused) as caught:
             quote([plan], CORPUS["worked_example"])
-        assert "k3_bare_value" in str(caught.value)
-        assert "int" in str(caught.value)
+        finding = caught.value.findings[0]
+        assert finding.code == FAULT_RULE_RETURNED_NOT_LINES
+        assert "k3_bare_value" in finding.text
+        assert "int" in finding.text
     finally:
         _unregister("k3_bare_value")
+
+
+@pytest.mark.guarantee("F8b")
+def test_a_malformed_rule_return_reaches_A_CALLER_as_a_refusal_not_an_exception():
+    """The half the old test could not see, because it stopped at `quote()`.
+
+    `run_quote` is what both surfaces call. A `TypeError` went straight past its
+    except clause and out of the contract; over HTTP that was a dropped
+    connection with no response at all. This asserts the STATUS and the BODY an
+    integrator actually receives.
+    """
+    from rate_engine.contract import run_quote
+
+    # Called for the REGISTRATION side effect only -- run_quote loads the plan
+    # itself from the document, which is the boundary this test is about.
+    _stay_and_plan(lambda rule, stay, plan: 500, "k3_surface")
+    try:
+        status, body = run_quote(
+            {
+                "plans": [_plan_document("k3_surface")],
+                "entry_at": "2026-03-03T09:14:00-05:00",
+                "exit_at": "2026-03-03T18:40:00-05:00",
+                "space_class": "standard",
+                "currency": "USD",
+            }
+        )
+        assert status == 422, "a malformed rule return must not escape as an exception"
+        assert body["refused"] is True
+        assert body["findings"][0]["code"] == FAULT_RULE_RETURNED_NOT_LINES
+        assert body["findings"][0]["kind"] == "fault"
+    finally:
+        _unregister("k3_surface")
 
 
 def test_a_zero_delta_line_is_correct_and_stays_accepted():

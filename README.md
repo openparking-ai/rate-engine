@@ -45,10 +45,23 @@ missing**, never a number somebody would have had to invent:
       that class and no special rate qualified
 ```
 
-`rate-engine validate-plan` reports every such gap, and every conflict between
-rules, **before** a plan goes live — so the owner decides, not the software.
+`rate-engine validate-plan` probes **every boundary the plan itself declares** —
+every entry limit, every exit limit, every period length and stated ceiling, each
+side of each, across every space class — and reports the gaps and conflicts it
+finds **before** a plan goes live, so the owner decides rather than the software.
 That is the same mechanism in both places, not two implementations that agree
-today.
+today: a gap the validator reports and a gap a quote refuses on are the same
+object with the same identifier.
+
+**What it does not claim.** It is not a search over all possible stays, and no
+bounded probe set could be. Those boundaries are where a rule starts or stops
+qualifying, so a conflict a rule can currently express is one this finds — but a
+future rule type that qualifies on something it does not DECLARE as a time or a
+duration would need its own probe axis, and adding one is part of adding the rule
+type. **This sentence used to say it reported every conflict, full stop, and that
+was false:** every probe entered at 07:00, so two rules that both qualified only
+for an early entry never overlapped in any probe, and a plan reported clean would
+then refuse a real stay.
 
 ## Install and run
 
@@ -67,18 +80,24 @@ Or over HTTP — `POST /v1/quote`, `POST /v1/validate-plan`:
 python -c "from rate_engine.service import serve; serve()"
 ```
 
-The CLI and the HTTP route are the same code path and return the same bytes.
 There is no simulation mode: the function an operator types entry and exit into
-**is** the production pricing path, and a test proves it by requiring the two to
-be byte-identical over every fixture.
+**is** the production pricing path, reached through one code path and one
+encoder. Exactly what is byte-identical between the two doors, and where the
+CLI's terminal newline sits, is stated once -- in `docs/CONTRACT.md`, guarantees
+F6, F6b and F6c, generated from the tests that measure them. This page does not
+restate it, because the hand-written second copy of a claim is the one that
+drifts.
 
 ## What it does
 
 - **Time-based increments** with a configurable first period and repeating
   period — "first 20 min, then each additional 20 min" and "first hour, then each
   additional hour" are one rule with different numbers.
-- **Early bird**, and every special rate, is **all-conditions-or-nothing**. Miss
-  the exit time by a minute and the rate does not apply at all.
+- **Early bird** is **all-conditions-or-nothing**. Miss the exit time by a minute
+  and the rate does not apply at all. That is the rule every special rate will
+  keep — it is enforced per rule type, and **early bird is the only special that
+  ships in A1**, so today the property rests on one rule rather than on a stage
+  full of them.
 - **Daily maximum**, stating whether a day means a local calendar day or a
   rolling 24 hours — because those price a Friday-night stay differently and the
   answer is the operator's.

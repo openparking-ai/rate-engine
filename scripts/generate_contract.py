@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
-from rate_engine.findings import CONFLICT_CODES, GAP_CODES  # noqa: E402
+from rate_engine.findings import CONFLICT_CODES, FAULT_CODES, GAP_CODES  # noqa: E402
 from rate_engine.plan import RESOLUTION_MODES  # noqa: E402
 from rate_engine.rules import RULE_TYPES  # noqa: E402
 from rate_engine.stages import STAGES  # noqa: E402
@@ -87,9 +87,12 @@ def gen_rule_types() -> str:
 
 
 def gen_findings() -> str:
+    # Derived from the registry's own three tuples. A fourth kind added to
+    # findings.py appears here without this function being touched; a kind added
+    # here without a tuple behind it cannot be written at all.
     rows = ["| code | kind |", "| --- | --- |"]
-    rows += [f"| `{c}` | gap |" for c in GAP_CODES]
-    rows += [f"| `{c}` | conflict |" for c in CONFLICT_CODES]
+    for codes, kind in ((GAP_CODES, "gap"), (CONFLICT_CODES, "conflict"), (FAULT_CODES, "fault")):
+        rows += [f"| `{c}` | {kind} |" for c in codes]
     return block("findings", "\n".join(rows), ASSERTION)
 
 
@@ -213,8 +216,15 @@ not do".
 
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
-places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time a gap is a **refusal that names what is missing**.
+places it is needed: `validate-plan` reports them so an owner can decide, and at
+quote time a gap is a **refusal that names what is missing**.
+
+`validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
+exit limit, each period length and stated ceiling, either side of each, across
+every space class -- rather than a written list of scenarios or a search over all
+stays. That is exhaustive over what a rule can express today and is not a claim
+about every possible stay; the probe axes are derived from the rules, so a rule
+type qualifying on something new brings its own axis.
 
 **Deciding a finding does not resolve it.** `decisions[]` records that an owner
 has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
@@ -260,6 +270,29 @@ Named here so nobody adds them helpfully:
   inventing a pricing decision nobody made. An operator who wants the first
   fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
   in the plan.
+
+## A stay of zero length pays the first period
+
+**Entry and exit at the same instant is priced, not free, and not refused.** The
+first period covers `[0, first_period_minutes]`, so a car that enters and leaves
+without stopping pays `first_period_minor` -- the same as a car that stayed one
+minute or fifty-nine.
+
+It is a DECISION, and it is published here because an integrator cannot otherwise
+learn it: the number is correct under the rule as written, and it is the kind of
+edge a garage owner will be asked about at the counter.
+
+**It diverges from the platform's own older fee code, which returns zero for the
+same stay.** That divergence is known and is a later round's to reconcile; it is
+recorded rather than left for whoever notices the two answering differently.
+
+A negative stay -- exit before entry -- is a different thing and is REFUSED as a
+caller bug rather than priced at zero, because pricing it would hide it.
+
+**What would change this, and has not yet:** a grace period. A garage that
+declares one would make a zero-length stay free by the grace rule, and this
+paragraph would then describe only a plan that declares no grace. Grace is not in
+this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
 ## The occupancy multiplier, and why money stays an integer

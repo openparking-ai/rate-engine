@@ -30,6 +30,8 @@ from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
+    CONFLICT_NEGATIVE_TOTAL,
+    FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_STAY_EXCEEDS_MAX_DURATION,
@@ -70,6 +72,21 @@ class Stay:
         Integer arithmetic on a timedelta, never a float division: this number
         feeds the period counts, and a float here would put a float into the
         pricing path through the back door.
+
+        **THIS ROUNDING IS ASSUMED, NOT STATED PER RULE, and that is a decision.**
+        No plan field reaches it: `increment.rounding` governs minutes into
+        PERIODS, downstream of this. money.py used to say the only rounding in the
+        engine was "TIME into periods, stated per rule rather than assumed", which
+        was false about this one -- it is time into MINUTES, and the plan has no
+        say. It is kept because it is the ordinary garage convention and because
+        every consumer of a duration here wants the same answer, but it has a
+        price: a stay one millisecond past a stated ceiling is 1441 minutes
+        against a 1440 limit, and is refused rather than priced.
+
+        Every comparison against a duration reads THIS property -- the rules and
+        the ceiling check alike -- so the edge is coherent rather than one
+        comparison against raw microseconds and another against minutes.
+        `tests/test_f20_time_rounding_is_declared.py` holds that.
         """
         delta = self.exit_at - self.entry_at
         seconds = delta.days * 86400 + delta.seconds
@@ -323,7 +340,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
         raise Refused(
             [
                 Finding(
-                    code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
+                    code=CONFLICT_NEGATIVE_TOTAL,
                     text=(
                         f"the rules produced a negative fee ({fee}); refusing rather than "
                         "charging a customer a negative amount"
@@ -353,6 +370,15 @@ def _lines_of(rule, returned: object) -> list[Line]:
     the same promise as "it is refused, and the message says which rule type is
     wrong", and only the second is any use to somebody writing a rule type.
 
+    **It raised a `TypeError`, and that was still not a refusal.** `run_quote`
+    catches `Refused`; a `TypeError` went straight past it and out of the quote
+    contract, so the promise in docs/CONTRACT.md -- "REFUSED by name, not left to
+    crash inside the ledger" -- was false at the boundary that matters, and a test
+    asserting `pytest.raises(TypeError)` blessed it. It is now a `Refused`
+    carrying its own code, so it reaches a caller the way every other refusal
+    does. See findings.FAULT_RULE_RETURNED_NOT_LINES for why that code is a third
+    KIND rather than a conflict.
+
     Note what is deliberately NOT checked: a Line whose delta is zero. Those are
     required by the design -- every "Early bird NOT applied" line is one -- so a
     ledger entry with no monetary effect is correct behaviour here, not a defect.
@@ -360,19 +386,36 @@ def _lines_of(rule, returned: object) -> list[Line]:
     inventing a check that appears to decide it would be worse than saying so.
     """
     if not isinstance(returned, list):
-        raise TypeError(
-            f"rule type {rule.type!r} (rule {rule.id!r}) returned "
-            f"{type(returned).__name__}, not a list of Line. A rule's only way to "
-            "change the fee is to return Lines; there is no other channel, and "
-            "there is not going to be one."
+        raise Refused(
+            [
+                Finding(
+                    code=FAULT_RULE_RETURNED_NOT_LINES,
+                    text=(
+                        f"rule type {rule.type!r} (rule {rule.id!r}) returned "
+                        f"{type(returned).__name__}, not a list of Line. A rule's only way "
+                        "to change the fee is to return Lines; there is no other channel, "
+                        "and there is not going to be one."
+                    ),
+                    rule_ids=(rule.id,),
+                )
+            ]
         )
     for item in returned:
         if not isinstance(item, Line):
-            raise TypeError(
-                f"rule type {rule.type!r} (rule {rule.id!r}) returned a "
-                f"{type(item).__name__} where a Line was required. Every entry in "
-                "the breakdown carries its own signed delta, and the fee is their "
-                "running total -- an entry that is not a Line has no delta to add."
+            raise Refused(
+                [
+                    Finding(
+                        code=FAULT_RULE_RETURNED_NOT_LINES,
+                        text=(
+                            f"rule type {rule.type!r} (rule {rule.id!r}) returned a "
+                            f"{type(item).__name__} where a Line was required. Every entry "
+                            "in the breakdown carries its own signed delta, and the fee is "
+                            "their running total -- an entry that is not a Line has no "
+                            "delta to add."
+                        ),
+                        rule_ids=(rule.id,),
+                    )
+                ]
             )
     return returned
 

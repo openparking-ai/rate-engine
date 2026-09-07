@@ -37,7 +37,21 @@ sys.path.insert(0, str(ROOT / "src"))
 from _guarantees import GUARANTEES  # noqa: E402
 from plant import planted, resolve  # noqa: E402
 
-#: guarantee id -> (test target, source file, anchor, replacement, what breaks)
+
+def guarantee_of(control_id: str) -> str:
+    """The guarantee a control id names. `F6b/imported-name-form` -> `F6b`.
+
+    One guarantee can need more than one plant, and F6b's does. The one-encoder
+    guard has to be shown catching BOTH the `json.dumps` attribute form and the
+    `from json import dumps` form -- a single plant carrying both would go red if
+    it caught EITHER, which is the arrangement that hid the second form in the
+    first place. So a control id is a guarantee id, optionally with an arm after
+    a slash, and every arm has to fire on its own.
+    """
+    return control_id.split("/", 1)[0]
+
+
+#: control id -> (test target, source file, anchor, replacement, what breaks)
 CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F1": (
         "tests/test_f1_never_guesses.py",
@@ -87,10 +101,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F5": (
         "tests/test_f5_determinism.py",
         "rules/early_bird.py",
-        "    entry_local = stay.entry_at.astimezone(plan.timezone)\n"
-        "    exit_local = stay.exit_at.astimezone(plan.timezone)",
-        "    entry_local = stay.entry_at.astimezone()  # PLANTED: the SERVER's zone\n"
-        "    exit_local = stay.exit_at.astimezone()  # PLANTED: the SERVER's zone",
+        # Re-anchored when X5 moved the comparison onto wallclock.local_minute.
+        # The PLANTED DEFECT IS UNCHANGED -- the plan's zone is swapped for the
+        # server's -- because re-pointing an anchor must not quietly weaken what
+        # the control proves.
+        "    entry_local = local_minute(stay.entry_at, plan.timezone)\n"
+        "    exit_local = local_minute(stay.exit_at, plan.timezone)",
+        "    entry_local = local_minute(stay.entry_at, None)  # PLANTED: the SERVER's zone\n"
+        "    exit_local = local_minute(stay.exit_at, None)  # PLANTED: the SERVER's zone",
         "the engine reads the SERVER's timezone instead of the plan's, so the same "
         "garage bills two different amounts depending on which machine answered",
     ),
@@ -220,6 +238,193 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "merely ACKNOWLEDGED starts coming back as a number -- the module inventing "
         "money from prose, which is the failure it exists to prevent",
     ),
+    # X1. The plant restores the exact escape the L3 measured: NotMinorUnits is a
+    # TypeError, so dropping it from the clause sends a plan float straight past
+    # run_quote again and the HTTP route dies without answering.
+    "F16": (
+        "tests/test_f16_refusals_reach_the_caller.py",
+        "contract.py",
+        "        plans, stay = parse_quote_request(document)\n"
+        "    except (InvalidPlan, NotMinorUnits, ValueError) as exc:",
+        "        plans, stay = parse_quote_request(document)\n"
+        "    except (InvalidPlan, ValueError) as exc:  # PLANTED: NotMinorUnits escapes again",
+        "a plain JSON float in a plan escapes run_quote instead of becoming a named "
+        "400, and the HTTP route drops the connection with no response at all",
+    ),
+    # X3, two arms, because the item was two defects sharing a cause: the
+    # rendering assumed an exponent, and the loader assumed anything shaped like a
+    # code was one. Breaking either must go red on its own.
+    "F17": (
+        "tests/test_f17_currency_is_rendered_by_its_exponent.py",
+        "money.py",
+        "    digits = minor_unit_digits(currency)",
+        "    digits = 2  # PLANTED: every currency is assumed to have two decimals again",
+        "a zero-decimal currency renders a hundred times too small -- 800 yen shown "
+        "as 8.00 JPY -- while the numeric fee stays correct",
+    ),
+    "F17b": (
+        "tests/test_f17_currency_is_rendered_by_its_exponent.py",
+        "plan.py",
+        "    if not is_known(currency):",
+        "    if False:  # PLANTED: an unrenderable currency code loads again",
+        "a code with no known exponent -- ZZZ, or XXX which means 'no currency' -- "
+        "is accepted at load and reaches the renderer",
+    ),
+    # X5, two arms. The first restores the raw comparison the L3 measured; the
+    # second restores the truncation-of-the-limit that the brief's first draft
+    # called for and amendment A3 reversed -- so the reversal itself has a control.
+    "F18": (
+        "tests/test_f18_wall_clock_is_minute_granular.py",
+        "rules/early_bird.py",
+        "    entry_local = local_minute(stay.entry_at, plan.timezone)",
+        "    entry_local = stay.entry_at.astimezone(plan.timezone)  # PLANTED: raw precision",
+        "an entry one microsecond past the limit fails again, and the breakdown "
+        "renders 'entry 09:00 is after the 09:00 entry limit'",
+    ),
+    "F18b": (
+        "tests/test_f18_wall_clock_is_minute_granular.py",
+        "wallclock.py",
+        "    if parsed.second or parsed.microsecond:",
+        "    if False:  # PLANTED: a sub-minute limit is silently accepted again",
+        "a plan stating enter_by 09:00:30 loads, so a limit the breakdown cannot "
+        "render decides the fee -- the engine keeping a decision it cannot explain",
+    ),
+    # X2. The plant collapses the entry axis back to the single fixed reference,
+    # which is exactly the shipped defect: probes vary duration only.
+    "F19": (
+        "tests/test_f19_validator_probes_declared_boundaries.py",
+        "validator.py",
+        "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}  # the original reference, and midnight",
+        "    return {DEFAULT_PROBE_ENTRY_MINUTE}  # PLANTED: every probe enters at 07:00\n"
+        "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}",
+        "every probe enters at one fixed time again, so two rules that both qualify "
+        "only for an early entry never collide and validate-plan reports the plan "
+        "clean while the engine refuses a real stay",
+    ),
+    # X6. A4 established the "two comparisons" half of this item did not exist --
+    # both already read the rounded value. So the control plants what IS real: the
+    # ceiling reading raw seconds instead, which pulls the refusal edge away from
+    # the pricing edge.
+    "F20": (
+        "tests/test_f20_time_rounding_is_declared.py",
+        "rules/increment.py",
+        "    return ceiling is None or stay.duration_minutes <= ceiling",
+        # NOTE: the obvious plant here -- comparing raw elapsed minutes -- is a
+        # behavioural NO-OP, because ceil(x) > n is equivalent to x > n for an
+        # integer n. fail_controls.py reported it GREEN and it was replaced rather
+        # than argued with. FLOOR genuinely separates the two: a stay one
+        # millisecond past the ceiling floors back INSIDE it and gets priced.
+        "    return ceiling is None or int((stay.exit_at - stay.entry_at).total_seconds() // 60)"
+        " <= ceiling  # PLANTED: the ceiling floors raw time, the rules ceil minutes",
+        "the stated ceiling is compared against raw elapsed time while the rules "
+        "price on rounded minutes, so a stay past the ceiling is priced anyway and "
+        "the refusal edge no longer matches the pricing edge",
+    ),
+    # X7. The plant restores the borrowed code exactly as it shipped.
+    "F21": (
+        "tests/test_f21_a_refusal_names_its_own_cause.py",
+        "engine.py",
+        "                    code=CONFLICT_NEGATIVE_TOTAL,",
+        "                    code=CONFLICT_MULTIPLE_RULES_AT_STAGE,  # PLANTED: borrowed again",
+        "a negative total is refused under the code documented for two rules "
+        "qualifying at one stage, so a consumer routing on the code is told to "
+        "settle a resolution order that was never the problem",
+    ),
+    # X8, and the three ids guard three DIFFERENT properties -- writing one plant
+    # for all of them was how the original F6 ended up unable to see the defect
+    # that actually shipped.
+    #
+    # NOTE, recorded so it is not re-attempted: changing `contract.encode` to
+    # indent=4/sort_keys=True is NOT a usable plant any more. Both surfaces read
+    # that one function, so they move together and stay equal -- which is the fix
+    # working, not a control failing. fail_controls.py reported it GREEN and the
+    # plant was replaced rather than argued with.
+    "F6b/attribute-form": (
+        "tests/test_f6_one_code_path.py",
+        "service.py",
+        "        payload = encode(body)",
+        "        payload = json.dumps(body, indent=2).encode()  # PLANTED: a second encoder",
+        "the route encodes its own response again instead of calling the one "
+        "encoder, which is the arrangement that let the two doors' bytes diverge "
+        "while the contract claimed one serializer",
+    ),
+    # The second arm, and the reason the guard was widened. It plants the SAME
+    # defect written the other common way -- and deliberately BYTE-IDENTICALLY,
+    # `indent=2, sort_keys=False` being exactly what `contract.encode` passes, so
+    # not one byte diverges and no other test in the file can supply the red.
+    # That is why this arm names the single node id rather than the module: the
+    # structural guard has to catch it alone or it has caught nothing. Measured
+    # against the pre-fix guard it was GREEN, 1 passed.
+    "F6b/imported-name-form": (
+        "tests/test_f6_one_code_path.py::"
+        "test_THERE_IS_ONE_ENCODER_and_no_surface_re_implements_it",
+        "service.py",
+        "        payload = encode(body)",
+        "        from json import dumps  # PLANTED: a second encoder, imported by name\n"
+        "        payload = dumps(body, indent=2, sort_keys=False).encode()  # PLANTED",
+        "a second encode site is added in the import style that used to walk past "
+        "this guard -- byte-identical, so the byte tests cannot see it either, and "
+        "the package quietly has two serializers again",
+    ),
+    "F6c": (
+        "tests/test_f6_one_code_path.py",
+        "cli.py",
+        "    stream.write(payload)",
+        "    stream.write(payload + b' ')  # PLANTED: a byte the route does not send",
+        "the CLI writes a byte inside the payload that the route does not send -- "
+        "the exact shape of the defect that shipped, print() appending a newline, "
+        "and the one the old decoded comparison could not see",
+    ),
+    # X9. The plant makes every stage behave the way the framework contract used
+    # to CLAIM they all did -- non-qualifying rules everywhere emitting zero lines.
+    "F22": (
+        "tests/test_f22_the_silence_rule_is_per_stage.py",
+        "engine.py",
+        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n                continue",
+        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n"
+        "                ledger.add(Line(code=f'{rule.type}.not_applied', rule_id=rule.id,\n"
+        "                                text='PLANTED', delta_minor=0))\n"
+        "                continue",
+        "every non-qualifying rule at every stage emits an explanatory zero line, so "
+        "a standard-space receipt lists VIP tiers that were never about that space",
+    ),
+    # X10. The plant is the L3's own probe: no-op the production invariant. Before
+    # this control existed the WHOLE SUITE stayed green under it -- 97 passed.
+    "F23": (
+        "tests/test_f23_the_production_invariant_is_guarded.py",
+        "engine.py",
+        "    summed = sum(line.delta_minor for line in ledger.lines)",
+        "    return  # PLANTED: the production invariant is a no-op\n"
+        "    summed = sum(line.delta_minor for line in ledger.lines)",
+        "the invariant that makes the breakdown the product rather than a report "
+        "stops reacting at all -- the exact deletion that left all 97 tests green "
+        "when the outside pass measured it",
+    ),
+    # X11. The plant makes a zero-length stay free -- the behaviour Grok proposed
+    # and Gokhan has not overruled. The control exists so the DECISION cannot be
+    # changed by accident; changing it on purpose is a brief.
+    "F24": (
+        "tests/test_f24_a_zero_length_stay_is_priced.py",
+        "rules/increment.py",
+        "    if minutes <= first_len:",
+        "    if minutes == 0:  # PLANTED: a zero-length stay silently becomes free\n"
+        "        return []\n"
+        "    if minutes <= first_len:",
+        "a stay of zero minutes stops paying the first period, which is a pricing "
+        "decision being changed with nothing said -- and it is the exact behaviour "
+        "an outside reviewer asked for and the owner has not agreed to",
+    ),
+    # X4. The plant restores the undeclared condition exactly as it shipped: the
+    # engine deciding the day span for every plan, whatever the plan says.
+    "F25": (
+        "tests/test_f25_day_span_is_declared_by_the_plan.py",
+        "rules/early_bird.py",
+        '    if rule.params["day_span"] == "same_day" and crosses_a_day:',
+        "    if crosses_a_day:  # PLANTED: the engine decides the day span again",
+        "the engine imposes a same-local-day condition the plan cannot state or "
+        "remove, so an overnight stay meeting both declared wall-clock limits is "
+        "charged the time-based rate -- 60.00 where the early bird is 12.00",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
@@ -255,7 +460,7 @@ def check_anchors() -> int:
 
 def run_control(gid: str) -> bool:
     target, path, anchor, replacement, why = CONTROLS[gid]
-    print(f"\n=== {gid} — {GUARANTEES[gid]}")
+    print(f"\n=== {gid} — {GUARANTEES[guarantee_of(gid)]}")
     print(f"    plant: {path}")
     print(f"    breaks: {why}")
 
@@ -293,13 +498,20 @@ def main(argv: list[str]) -> int:
     if "--anchors" in argv:
         return check_anchors()
 
-    wanted = [a for a in argv if a in CONTROLS] or sorted(CONTROLS)
-    unknown = [a for a in argv if a not in CONTROLS and not a.startswith("-")]
+    # An argument selects a control id exactly, or a guarantee id and then every
+    # arm of it -- `F6b` has to keep meaning "F6b", not "no such control".
+    named = [a for a in argv if not a.startswith("-")]
+    wanted = [c for c in sorted(CONTROLS) if c in named or guarantee_of(c) in named]
+    unknown = [
+        a for a in named
+        if a not in CONTROLS and a not in {guarantee_of(c) for c in CONTROLS}
+    ]
     if unknown:
         print(f"no such control: {', '.join(unknown)}")
         return 2
+    wanted = wanted or sorted(CONTROLS)
 
-    missing = sorted(set(GUARANTEES) - set(CONTROLS))
+    missing = sorted(set(GUARANTEES) - {guarantee_of(c) for c in CONTROLS})
     if missing:
         print(
             f"registered guarantees with no fail-control: {', '.join(missing)}. "

@@ -292,11 +292,18 @@ def test_this_suite_registers_a_control_for_every_guarantee():
     Derived from both registries, not from a list here -- so a guarantee added
     without a fail-control fails this immediately rather than shipping as an
     unproven promise.
+
+    Compared on GUARANTEE ids, because a guarantee may need more than one plant:
+    a control id is `F6b` or `F6b/imported-name-form`, and `guarantee_of` is the
+    one place that knows it. The equality still runs in BOTH directions -- an arm
+    naming a guarantee that does not exist is as much a defect as a guarantee
+    with no arm.
     """
     sys.path.insert(0, str(ROOT / "scripts"))
-    from fail_controls import CONTROLS
+    from fail_controls import CONTROLS, guarantee_of
 
-    assert set(CONTROLS) == set(GUARANTEES), (
-        f"guarantees with no fail-control: {sorted(set(GUARANTEES) - set(CONTROLS))}; "
-        f"controls with no guarantee: {sorted(set(CONTROLS) - set(GUARANTEES))}"
+    covered = {guarantee_of(control) for control in CONTROLS}
+    assert covered == set(GUARANTEES), (
+        f"guarantees with no fail-control: {sorted(set(GUARANTEES) - covered)}; "
+        f"controls with no guarantee: {sorted(covered - set(GUARANTEES))}"
     )

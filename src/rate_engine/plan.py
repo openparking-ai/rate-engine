@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .currency import excluded_reason, is_known
 from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
 from .stages import STAGES
@@ -146,6 +147,32 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         raise InvalidPlan(
             f"{where}.currency must be a three-letter uppercase ISO 4217 code, "
             f"got {currency!r}."
+        )
+    # AND IT MUST BE ONE THIS MODULE CAN RENDER. The sentence above said "ISO
+    # 4217" and the check tested only shape, so `ZZZ` loaded and priced. That was
+    # half of one defect: the other half was `format_minor` assuming every
+    # currency has two decimal places. Both need the same thing -- the currency's
+    # minor-unit exponent -- so membership is checked here and the exponent is
+    # read there, from one table. See currency.py for what is excluded and why.
+    if not is_known(currency):
+        # A code refused BY DECISION says which decision. One that is merely
+        # absent gets the generic sentence -- it may be a real currency this
+        # table is missing, and inventing a reason would be a confident wrong
+        # answer about somebody's money.
+        reason = excluded_reason(currency)
+        because = (
+            f" It is refused because {reason}."
+            if reason
+            else (
+                " If it is a real ISO 4217 currency, this module's table is missing it:"
+                " that is a defect to report rather than something to work around."
+            )
+        )
+        raise InvalidPlan(
+            f"{where}.currency is {currency!r}, which is not an ISO 4217 currency this "
+            f"module prices in.{because} The number of minor units in a major one would "
+            "have to be guessed to render any amount, and a guessed exponent renders "
+            "money wrong by a factor of ten or a hundred."
         )
 
     space_classes = document["space_classes"]

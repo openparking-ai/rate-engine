@@ -168,6 +168,17 @@ def apply(rule: Rule, stay, plan) -> list[Line]:
     # rounding decision: a stay shorter than one first period is one first
     # period under every mode, which is why a zero `first_period_minor` is the
     # only way to express a free interval.
+    #
+    # AND THAT INCLUDES A STAY OF ZERO MINUTES, which is a DECISION rather than a
+    # consequence nobody looked at. The first period covers [0, first_len], so a
+    # car that enters and leaves at the same instant pays first_period_minor --
+    # the same as one that stayed a minute. It diverges from the platform's older
+    # fee code, which returns zero for that stay, and the divergence is a later
+    # round's to reconcile. Published in docs/CONTRACT.md because an integrator
+    # cannot learn it from the arithmetic, and pinned by
+    # tests/test_f24_a_zero_length_stay_is_priced.py so it cannot change silently.
+    # (A negative stay is refused in make_stay -- a different case, and a caller
+    # bug rather than a price.)
     if minutes <= first_len:
         repeats = 0
     else:
