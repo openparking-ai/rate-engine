@@ -37,6 +37,17 @@ GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 #: resolution modes that would settle it are round A2 (see docs/CONTRACT.md,
 #: "What this version does not do").
 CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"
+#: Two or more plan versions share the latest `effective_from` at or before the
+#: stay's entry, so "the version in force at entry" names more than one document.
+#:
+#: This was a LIVE DEFECT, not a hypothetical. `select_plan` used
+#: `max(in_force, key=...effective_from)`, and `max` returns the FIRST maximal
+#: element -- so two versions carrying the same date priced the same car at 300
+#: or at 2700 minor units depending only on which the caller happened to put
+#: first in a JSON array, with nothing said. Deciding money by the order of a
+#: list, silently, is the exact opposite of this project's standing acceptance,
+#: and the answer is the same as everywhere else here: refuse, and name both.
+CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
@@ -45,7 +56,10 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
 )
 
-CONFLICT_CODES: tuple[str, ...] = (CONFLICT_MULTIPLE_RULES_AT_STAGE,)
+CONFLICT_CODES: tuple[str, ...] = (
+    CONFLICT_MULTIPLE_RULES_AT_STAGE,
+    CONFLICT_AMBIGUOUS_PLAN_SELECTION,
+)
 
 ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES
 
