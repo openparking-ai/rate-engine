@@ -42,8 +42,7 @@ PLAN = {
     "currency": "USD",
     "space_classes": ["standard"],
     "resolution": {
-        "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-        "SURCHARGE": "stated_order", "ADJUST": "stated_order",
+        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
     },
     "adjust_order": None,
     "rules": [

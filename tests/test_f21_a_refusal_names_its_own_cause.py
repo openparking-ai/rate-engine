@@ -124,7 +124,7 @@ def test_the_MULTI_RULE_conflict_still_uses_the_multi_rule_code():
          "space_classes": ["standard"], "label": "Early bird B",
          "applies_on": {"kind": "days_of_week", "days": ["tue"]},
          "enter_from": "00:00", "enter_by": "10:00", "exit_by": "18:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1100}},
+         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,

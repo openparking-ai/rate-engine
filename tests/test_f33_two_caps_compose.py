@@ -29,10 +29,7 @@ from rate_engine.plan import load_plan, parse_instant
 from rate_engine.rules import RULE_APPLIERS
 from rate_engine.stages import CAP
 
-RESOLUTION = {
-    "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-    "SURCHARGE": "stated_order", "ADJUST": "stated_order",
-}
+RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
 
 PLAN = {
     "plan_version": "twocaps-2026-03",

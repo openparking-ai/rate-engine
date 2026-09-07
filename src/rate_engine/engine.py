@@ -137,6 +137,92 @@ def _in_application_order(plan: Plan, stage: str, rules):
     return sorted(rules, key=lambda rule: rule.id)
 
 
+def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
+    """What each competing rule would charge for this stay, by rule id.
+
+    Asked of the RULES rather than computed from their fields: a rule's only
+    channel to the fee is a list of Lines, so the honest way to find out what one
+    costs is to add up the lines it returns. That is also the only way this can
+    stay type-agnostic -- a flat price and a whole time-based rate are compared
+    by the same code, and a rule type added later is comparable the day it exists.
+
+    **What this compares, stated because it is a limit.** It is what the
+    COMPETING RULES themselves charge, not the final fee: a cap or an adjustment
+    downstream applies to whichever wins, and could in principle bring two
+    different bases to the same number. Comparing final fees would mean running
+    the whole pipeline once per candidate, and would still not be the customer's
+    fee for the rules that lost. See docs/CONTRACT.md.
+    """
+    totals: dict[str, int] = {}
+    for rule in rules:
+        lines = _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan))
+        totals[rule.id] = sum(line.delta_minor for line in lines)
+    return totals
+
+
+def _tied_cheapest(plan: Plan, stay: Stay, stage: str, qualifying: list) -> list:
+    """The rules that tie for cheapest, if more than one does. Else an empty list.
+
+    ONE implementation, called by `find_conflicts` to refuse the tie and by
+    `_winner` to pick when there is none -- so the refusal and the choice can
+    never disagree about which rule was cheapest.
+    """
+    if plan.resolution[stage]["mode"] != "cheapest_wins":
+        return []
+    totals = _candidate_totals(qualifying, stay, plan)
+    cheapest = min(totals.values())
+    tied = [rule for rule in qualifying if totals[rule.id] == cheapest]
+    return tied if len(tied) > 1 else []
+
+
+def _winner(plan: Plan, stay: Stay, stage: str, qualifying: list):
+    """Which of several qualifying rules APPLIES at a resolving stage.
+
+    Terminality first, because it is a property of the rule type and beats
+    anything the plan says. Then the plan's own mode. A tie under
+    `cheapest_wins` has already been refused by `find_conflicts` before any
+    pricing happens, so this is never asked to guess.
+    """
+    if not qualifying:
+        return None
+    terminal = _terminal_rule(qualifying)
+    if terminal is not None:
+        return terminal
+    if len(qualifying) == 1:
+        return qualifying[0]
+    settings = plan.resolution[stage]
+    if settings["mode"] == "stated_order":
+        position = {rule_id: index for index, rule_id in enumerate(settings["order"])}
+        return min(qualifying, key=lambda rule: position[rule.id])
+    totals = _candidate_totals(qualifying, stay, plan)
+    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))
+
+
+def _resolved_line(rule, winner, stage: str, plan: Plan, totals: dict[str, int]) -> Line:
+    """A rule that qualified and lost, said out loud, with the reason.
+
+    §8's first requirement is that a customer can read WHY. "Weekend rate
+    qualified at 15.00 USD -- Early bird 12.00 USD applied instead" is the whole
+    answer to the question an attendant is asked, and dropping the loser would
+    leave a breakdown in which a rate the customer was entitled to is simply
+    absent.
+    """
+    from .money import format_minor
+
+    return Line(
+        code="resolved",
+        rule_id=rule.id,
+        text=(
+            f"{rule.display_name} qualified at "
+            f"{format_minor(totals[rule.id], plan.currency)} -- "
+            f"{winner.display_name} {format_minor(totals[winner.id], plan.currency)} "
+            f"applied instead (plan resolves {stage} by "
+            f"{plan.resolution[stage]['mode']})"
+        ),
+        delta_minor=0,
+    )
+
+
 def _superseded_line(rule, terminal) -> Line:
     """A rule that qualified and was beaten outright, said out loud.
 
@@ -150,8 +236,9 @@ def _superseded_line(rule, terminal) -> Line:
         code="superseded",
         rule_id=rule.id,
         text=(
-            f"{rule.id!r} also qualified and was NOT applied: {terminal.id!r} is "
-            "terminal, so it prices this stay by itself and nothing further is charged"
+            f"{rule.display_name} also qualified and was NOT applied: "
+            f"{terminal.display_name} prices this stay by itself, so nothing further "
+            "is charged"
         ),
         delta_minor=0,
     )
@@ -380,13 +467,13 @@ def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
     for stage in STAGES:
         qualifying = _qualifying(plan, stay, stage)
         if len(qualifying) > 1:
-            finding = _conflict_at(plan, stage, qualifying)
+            finding = _conflict_at(plan, stay, stage, qualifying)
             if finding is not None:
                 findings.append(finding)
     return findings
 
 
-def _conflict_at(plan: Plan, stage: str, qualifying: list) -> Finding | None:
+def _conflict_at(plan: Plan, stay: Stay, stage: str, qualifying: list) -> Finding | None:
     """What more than one qualifying rule MEANS at this stage. None means nothing."""
     ids = tuple(r.id for r in qualifying)
     if stage in RESOLVING:
@@ -395,14 +482,22 @@ def _conflict_at(plan: Plan, stage: str, qualifying: list) -> Finding | None:
             # Not an ambiguity: one of them wins outright by what its type is,
             # and the others get a `superseded` line saying so.
             return None
+        tied = _tied_cheapest(plan, stay, stage, qualifying)
+        if not tied:
+            # The plan's mode settles it. This is the whole of W4: the field an
+            # owner was made to fill in now decides something.
+            return None
+        tied_ids = tuple(r.id for r in tied)
         return Finding(
             code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
             text=(
-                f"{len(qualifying)} rules qualify at {stage} ({', '.join(ids)}); the "
-                f"plan states resolution {plan.resolution[stage]!r} for that stage, "
-                "which this version records but does not apply"
+                f"{len(tied)} rules qualify at {stage} ({', '.join(tied_ids)}) and "
+                f"charge the same amount, so resolution "
+                f"{plan.resolution[stage]['mode']!r} cannot choose between them. "
+                "State an order for that stage, or price them differently -- the "
+                "engine will not pick"
             ),
-            rule_ids=ids,
+            rule_ids=tied_ids,
         )
     if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is None:
         return Finding(
@@ -458,25 +553,33 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
             # A special that qualified IS the base. Not a discount on the
             # time-based charge and not the cheaper of the two -- it replaces it.
             continue
-        rules = plan.rules_for_stage(stage)
-        if stage not in RESOLVING:
-            rules = _in_application_order(plan, stage, rules)
-        for rule in rules:
+
+        if stage in RESOLVING:
+            # ONE of the qualifying rules applies, and the plan says which. The
+            # rest are not dropped: each gets a line naming the winner, the two
+            # prices, and the mode that chose -- which is the answer to the
+            # question an attendant is asked at the counter.
+            qualifying = _qualifying(plan, stay, stage)
+            winner = _winner(plan, stay, stage, qualifying)
+            totals = _candidate_totals(qualifying, stay, plan) if len(qualifying) > 1 else {}
+            for rule in plan.rules_for_stage(stage):
+                if rule in qualifying and rule is not winner:
+                    ledger.add(
+                        _superseded_line(rule, winner)
+                        if terminal is not None
+                        else _resolved_line(rule, winner, stage, plan, totals)
+                    )
+                    continue
+                # A QUALIFY rule speaks either way -- a special that did not apply
+                # is the line an operator most wants to read. Elsewhere, a rule
+                # that did not qualify is silent.
+                if rule is winner or stage == QUALIFY:
+                    for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
+                        ledger.add(line)
+            continue
+
+        for rule in _in_application_order(plan, stage, plan.rules_for_stage(stage)):
             applier = RULE_APPLIERS[rule.type]
-            if stage == QUALIFY:
-                # Emits its line either way: a special that did not apply is the
-                # line an operator most wants to read. A special that DID qualify
-                # and was beaten by a terminal rule says that instead -- calling
-                # its applier here would add its price to the ledger.
-                beaten = terminal is not None and rule is not terminal
-                lines = (
-                    [_superseded_line(rule, terminal)]
-                    if beaten and rule in qualified_at_qualify
-                    else applier(rule, stay, plan)
-                )
-                for line in _lines_of(rule, lines):
-                    ledger.add(line)
-                continue
             if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
                 continue
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:

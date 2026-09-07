@@ -31,10 +31,7 @@ import pytest
 from rate_engine.contract import run_quote
 from rate_engine.plan import parse_instant
 
-RESOLUTION = {
-    "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-    "SURCHARGE": "stated_order", "ADJUST": "stated_order",
-}
+RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
 EVERY_DAY = {"kind": "days_of_week",
              "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
 
@@ -155,7 +152,11 @@ def test_grace_BEATS_a_window_that_also_qualified_and_the_window_SAYS_SO():
     line = [ln for ln in body["breakdown"] if ln["code"] == "superseded"][0]
     assert line["rule_id"] == "eb-weekday"
     assert line["delta_minor"] == 0
-    assert "'grace-10' is terminal" in line["text"], line["text"]
+    assert line["text"].startswith("Early bird also qualified and was NOT applied"), (
+        f"the receipt names a rule by its database key rather than by what the "
+        f"operator called it: {line['text']}"
+    )
+    assert "grace-10 prices this stay by itself" in line["text"], line["text"]
 
 
 @pytest.mark.guarantee("F32")

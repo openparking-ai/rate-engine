@@ -27,10 +27,7 @@ import pytest
 
 from rate_engine.contract import run_quote
 
-RESOLUTION = {
-    "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-    "SURCHARGE": "stated_order", "ADJUST": "stated_order",
-}
+RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
 
 #: 999 minor units for the stay, so 12.5% is 124.875 -- a genuine fraction.
 BASE = 999

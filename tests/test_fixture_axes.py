@@ -51,7 +51,7 @@ def test_the_corpus_straddles_EVERY_time_window_condition():
     `applies_on` arrived. Each row below must have a fixture on both sides or F2,
     F26 and F27 would pass against a corpus that could only ever reach one branch.
     """
-    from rate_engine.rules.time_window import DAYS_OF_WEEK
+    from rate_engine.wallclock import DAYS_OF_WEEK
 
     plan = loaded()
     window = plan.rules[0].params

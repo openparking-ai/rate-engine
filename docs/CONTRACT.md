@@ -44,16 +44,30 @@ rule type now runs at a stage that depends on the rule rather than only on its
 type. The stage is still stated in every plan, and the engine refuses a plan
 whose stated stage disagrees with the one the rule's own shape implies.
 
-Two rule types arrived with it: `grace`, and `weekly_max`. And one field: every
-plan now states `adjust_order`, null included.
+Two rule types arrived with it: `grace`, and `weekly_max`. And two plan fields:
+every plan now states `adjust_order`, null included, and `resolution` changed
+shape.
 
-**A latent defect was fixed on the way, and it is worth stating because a plan
-that used to be refused now prices.** More than one rule qualifying at one stage
-was treated as a conflict at EVERY stage. That is right where rules compete and
-wrong where they compose, and it was harmless only while no second rule type
-existed at a composing stage. `weekly_max` is that second type: without the fix,
-every plan carrying a daily AND a weekly cap would have refused every stay in the
-garage.
+**`resolution` is keyed by the RESOLVING stages only, and its values are
+objects.** It used to require an entry for all five stages, as a bare mode
+string, and to be acted on by nothing. It now decides which of several qualifying
+rules applies — and the three stages it could never act on are refused as keys
+this version does not understand, because a mode stated for CAP cannot choose
+between two caps when both of them apply.
+
+**Two classes of plan that used to be REFUSED now price, and that is a behaviour
+change rather than a bug fix nobody notices.**
+
+More than one rule qualifying at one stage was treated as a conflict at EVERY
+stage. That is right where rules compete and wrong where they compose, and it was
+harmless only while no second rule type existed at a composing stage.
+`weekly_max` is that second type: without the fix, every plan carrying a daily
+AND a weekly cap would have refused every stay in the garage.
+
+And at a resolving stage, two rules at different prices are now settled by the
+plan's mode instead of refused. `CONFLICT_MULTIPLE_RULES_AT_STAGE` therefore
+means something narrower than it did: a TIE, which no mode can settle. The code
+is unchanged and still reachable; what changed is how much it covers.
 
 **A window that would have to wrap past midnight is REFUSED, and that is a stated
 gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
@@ -114,11 +128,26 @@ default anywhere**, because a default is a pricing decision made by whoever wrot
 the engine and applied to a garage whose owner never saw it. Where a plan is
 silent, the engine refuses and names the field.
 
-A plan states a resolution mode per stage, from: <!--gen:resolution kind=1-->
+A plan states a resolution mode for each stage that can RESOLVE — QUALIFY and
+ACCUMULATE — from: <!--gen:resolution kind=1-->
 `cheapest_wins`, `stated_order`
-<!--/gen:resolution-->. This
-version validates that field and does not act on it — see "What this version does
-not do".
+<!--/gen:resolution-->. A mode stated for any other stage is
+refused by name: CAP, SURCHARGE and ADJUST compose, so a mode there could never
+choose anything, and a field that cannot change an answer is a decision the owner
+made and the software ignored.
+
+- `{"mode": "cheapest_wins"}` — the **lowest fee for the customer** wins.
+- `{"mode": "stated_order", "order": [...]}` — the plan names the rule ids and
+  the first that qualifies wins. It must name every rule at that stage **exactly
+  once**; a rule left out would take a silent position in the order.
+
+**What `cheapest_wins` compares, stated because it is a limit.** It compares what
+the competing rules themselves charge for the stay — not the final fee. A cap or
+an adjustment downstream applies to whichever rule wins and could in principle
+bring two different bases to the same number; comparing final fees would mean
+running the whole pipeline once per candidate, and would still not be "the
+customer's fee" for the rules that lost. Two rules charging the SAME amount
+cannot be separated by it and are refused, naming both.
 
 `adjust_order` is a different thing and is stated separately: a list of rule ids,
 or null, giving the sequence the ADJUST rules run in. **An order is not a
@@ -155,6 +184,16 @@ was wrong in a way that only a second rule type could expose:
 **A TERMINAL rule is not a conflict either.** It wins outright by what its type
 is, rather than by anything the plan says, so a grace period beating a weekend
 rate is settled and the beaten rule gets a line saying so.
+
+**And at a resolving stage the plan's MODE settles it**, so two windows at
+different prices are priced rather than refused. What is left is the case no mode
+can settle: two rules that qualify and charge the SAME amount under
+`cheapest_wins`. There is nothing to be cheapest about, the engine will not pick,
+and the refusal names both and says that stating an order would settle it.
+
+**Every rule that lost is still on the receipt**, naming the winner, both prices
+and the mode that chose — a breakdown that silently omitted a rate the customer
+nearly got could not answer the question an attendant is actually asked.
 
 `validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
 exit limit, each period length and stated ceiling, either side of each, across
@@ -234,7 +273,7 @@ never failed is a decoration.
 | --- | --- |
 | **F1** | The engine never guesses. A stay the plan cannot price is REFUSED, naming the gap, and no number is returned. |
 | **F10** | Plan selection is never ambiguous. Two versions in force at the same instant are REFUSED and both named, never resolved by the order of the caller's list. |
-| **F11** | Two rules qualifying at one pipeline stage are REFUSED and both named, with the plan's stated resolution mode quoted back. A1 detects; it does not resolve. |
+| **F11** | An ambiguity the PLAN cannot settle is REFUSED and both rules named, with the stated mode quoted back and the refusal saying what would settle it. Since the modes act, that means a TIE: two rules qualifying at one stage and charging the same amount, which `cheapest_wins` cannot separate. |
 | **F12** | `validate-plan` separates the findings an owner has still to look at from the ones they have recorded a decision for. Every finding is reported either way. |
 | **F12b** | A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` can cause a fee to be produced. |
 | **F13** | The fixture corpus holds a case either side of every threshold the rules branch on, read out of the plans rather than from a list -- so no guarantee is proven against a corpus that could only ever exercise one branch. |
@@ -265,6 +304,9 @@ never failed is a decoration.
 | **F33** | Two caps on one stay leave the LOWER ceiling standing, the total after CAP is the same in both application orders, and the breakdown names both. Caps COMPOSE; two of them are not a conflict. |
 | **F34** | More than one rule qualifying at one stage means three different things, and the stage's category decides which: RESOLVING is a conflict, COMPOSING order-independent is not reported at all, and COMPOSING order-dependent is refused unless the plan states the order. |
 | **F35** | Two qualifying ADJUST rules with no stated `adjust_order` are REFUSED naming both; with an order they produce that order's total, and the two orders genuinely differ -- 20% off then a fixed amount is not the same fee as the fixed amount then 20% off. |
+| **F36** | The resolution modes DECIDE. Two windows qualifying on one stay resolve to the cheaper under `cheapest_wins` and to the stated one under `stated_order`, on the SAME stay -- and the rules that lost still appear, each naming the winner, both prices and the mode that chose. |
+| **F37** | A `stated_order` must name every rule at its stage EXACTLY ONCE, and one that does not is refused at LOAD, naming what is missing. A rule left out would take a silent position, and array position deciding money is what this module refuses everywhere else. |
+| **F38** | Every identifier the published documents name in backticks is one the code actually holds -- rule types, stages, finding codes, plan and rule fields, stated values, traits and guarantee ids -- and every file path they point at exists. Derived from both documents rather than from a list of the sentences somebody remembered to check. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
@@ -281,10 +323,6 @@ never failed is a decoration.
 
 Named here so nobody adds them helpfully:
 
-- **No resolution of conflicts.** The modes are recorded and not applied. Two
-  rules qualifying at one stage is a refusal in this version — including two
-  `time_window` rules, which a plan can now express. Resolving it is not done
-  here.
 - **No occupancy-driven rule.** Not in this version.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.

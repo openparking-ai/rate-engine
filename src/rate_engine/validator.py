@@ -31,8 +31,8 @@ from datetime import date, datetime, timedelta
 from .engine import Stay, find_conflicts, find_gaps
 from .findings import Finding
 from .plan import Plan
-from .rules.time_window import DAYS_OF_WEEK
 from .stages import ACCUMULATE, QUALIFY
+from .wallclock import DAYS_OF_WEEK
 
 #: The reference entry the validator has always used: early enough that an
 #: early-bird rule CAN qualify, so the QUALIFY branch is exercised even by a plan

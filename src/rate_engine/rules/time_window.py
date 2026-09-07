@@ -98,7 +98,7 @@ from datetime import date
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import ADJUST, QUALIFY
-from ..wallclock import local_minute, parse_limit
+from ..wallclock import DAYS_OF_WEEK, local_minute, parse_limit
 from . import (
     SPEAKS_UNQUALIFIED,
     Rule,
@@ -107,11 +107,6 @@ from . import (
     increment,
     register,
 )
-
-#: Day names a plan may state, in week order. The index IS the weekday index
-#: `datetime.weekday()` returns, and validator.py reads this tuple to turn a
-#: stated day back into a probe date -- one source, so the two cannot disagree.
-DAYS_OF_WEEK: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 #: The two ways a plan may state WHEN a window applies.
 APPLIES_ON_KINDS: tuple[str, ...] = ("days_of_week", "dates")
@@ -425,7 +420,6 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
         )
 
     params = {
-        "label": label,
         "applies_on": _applies_on(raw, where),
         "enter_from": enter_from,
         "enter_by": enter_by,
@@ -434,7 +428,8 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
         "effect": effect,
     }
     return Rule(
-        id=rule_id, type="time_window", stage=stage, space_classes=space_classes, params=params
+        id=rule_id, type="time_window", stage=stage, space_classes=space_classes,
+        params=params, label=label,
     )
 
 
@@ -600,7 +595,7 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
         code=APPLIED,
         rule_id=rule.id,
         text=(
-            f"{rule.params['label']}: {measure} -- "
+            f"{rule.display_name}: {measure} -- "
             f"{format_minor(magnitude, currency)} {'off' if discount else 'added'}"
         ),
         delta_minor=-magnitude if discount else magnitude,
@@ -644,7 +639,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
                 code=NOT_APPLIED,
                 rule_id=rule.id,
                 text=(
-                    f"{rule.params['label']} NOT applied: {'; '.join(failed)}. All of "
+                    f"{rule.display_name} NOT applied: {'; '.join(failed)}. All of "
                     f"its conditions must hold, {consequence}"
                 ),
                 delta_minor=0,
@@ -660,7 +655,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
                 code=APPLIED,
                 rule_id=rule.id,
                 text=(
-                    f"{rule.params['label']} "
+                    f"{rule.display_name} "
                     f"{format_minor(effect['price_minor'], plan.currency)} "
                     f"({_window_clause(rule, entry_local)}) -- replaces the time-based charge"
                 ),
@@ -675,7 +670,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
             code=APPLIED,
             rule_id=rule.id,
             text=(
-                f"{rule.params['label']} ({_window_clause(rule, entry_local)}) -- "
+                f"{rule.display_name} ({_window_clause(rule, entry_local)}) -- "
                 "this time-based rate replaces the standard one"
             ),
             delta_minor=0,

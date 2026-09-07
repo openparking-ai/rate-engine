@@ -119,8 +119,7 @@ WEEKEND_DISCOUNT = {
     "timezone": "America/New_York", "currency": "USD",
     "space_classes": ["standard", "vip"],
     "resolution": {
-        "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-        "SURCHARGE": "stated_order", "ADJUST": "stated_order",
+        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
     },
     "adjust_order": None,
     "rules": [

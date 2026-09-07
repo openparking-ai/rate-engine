@@ -537,14 +537,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "is arithmetic that depends on the order the caps ran in -- 500 one way and "
         "1900 the other, from the same two ceilings on the same stay",
     ),
+    # Re-anchored in W4: `if stage in RESOLVING:` stopped being unique in
+    # engine.py the moment `quote` grew a resolving branch of its own, and
+    # plant.py refused the ambiguity -- correctly. This anchors on the COMPOSING
+    # branch instead, which is what the guarantee is actually about, and plants
+    # the shipped defect there directly rather than inverting the test above it.
     "F34": (
         "tests/test_f34_composing_stages_do_not_conflict.py",
         "engine.py",
-        "    if stage in RESOLVING:",
-        "    if True:  # PLANTED: every stage resolves, as it used to",
-        "every stage is treated as resolving again, so a plan carrying a daily AND a "
-        "weekly cap refuses every stay in the garage -- the defect that was latent "
-        "until a second CAP rule type existed",
+        "    # COMPOSING and order-independent: both apply, the total is the same either\n"
+        "    # way, and there is nothing for an owner to decide.\n"
+        "    return None",
+        "    return Finding(  # PLANTED: composing rules reported as a conflict again\n"
+        "        code=CONFLICT_MULTIPLE_RULES_AT_STAGE,\n"
+        '        text=f"{len(qualifying)} rules qualify at {stage}",\n'
+        "        rule_ids=ids,\n"
+        "    )",
+        "two rules that COMPOSE are reported as a conflict again, so a plan carrying "
+        "a daily AND a weekly cap refuses every stay in the garage -- the defect that "
+        "was latent until a second CAP rule type existed",
     ),
     "F35": (
         "tests/test_f35_the_adjust_order_is_stated.py",
@@ -554,6 +565,36 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the order an owner wrote is discarded and the adjustments run in rule-id "
         "order instead, so a plan that says 'voucher first' quietly charges the "
         "percentage first -- a wrong fee behind a document that reads correctly",
+    ),
+    # W4 and W5. The first two are the field that spent a whole round being
+    # required, validated, published -- and read by nothing.
+    "F36": (
+        "tests/test_f36_the_resolution_modes_decide.py",
+        "engine.py",
+        "    settings = plan.resolution[stage]",
+        '    settings = {"mode": "cheapest_wins"}  # PLANTED: the plan\'s mode is ignored',
+        "the plan's stated mode stops being read and every stage resolves by price, "
+        "so a garage that wrote 'the weekend rate wins' quietly gets the cheaper "
+        "rule instead -- a wrong fee behind a document that reads correctly",
+    ),
+    "F37": (
+        "tests/test_f37_a_stated_order_names_every_rule.py",
+        "plan.py",
+        "        if missing or extra:",
+        "        if False:  # PLANTED: an incomplete order loads again",
+        "an order naming two of three rules loads, so the third takes whatever "
+        "position the implementation happens to give it -- array position deciding "
+        "money, which is the defect `select_plan` exists to refuse",
+    ),
+    "F38": (
+        "tests/test_f38_the_documents_name_only_real_things.py",
+        "findings.py",
+        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"',
+        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_TIED_ON_PRICE"'
+        "  # PLANTED: the published code is renamed",
+        "a finding code is renamed in the code and not in the prose that names it, "
+        "so docs/CONTRACT.md keeps publishing an identifier nothing answers with -- "
+        "the true-sounding published sentence over correct code",
     ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",

@@ -28,10 +28,7 @@ import pytest
 from rate_engine.contract import run_quote
 from rate_engine.findings import CONFLICT_UNORDERED_ADJUSTMENTS
 
-RESOLUTION = {
-    "QUALIFY": "cheapest_wins", "ACCUMULATE": "stated_order", "CAP": "stated_order",
-    "SURCHARGE": "stated_order", "ADJUST": "stated_order",
-}
+RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
 EVERY_DAY = {"kind": "days_of_week",
              "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
 
