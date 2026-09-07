@@ -30,6 +30,7 @@ from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_MULTIPLE_RULES_AT_STAGE,
+    FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_STAY_EXCEEDS_MAX_DURATION,
@@ -353,6 +354,15 @@ def _lines_of(rule, returned: object) -> list[Line]:
     the same promise as "it is refused, and the message says which rule type is
     wrong", and only the second is any use to somebody writing a rule type.
 
+    **It raised a `TypeError`, and that was still not a refusal.** `run_quote`
+    catches `Refused`; a `TypeError` went straight past it and out of the quote
+    contract, so the promise in docs/CONTRACT.md -- "REFUSED by name, not left to
+    crash inside the ledger" -- was false at the boundary that matters, and a test
+    asserting `pytest.raises(TypeError)` blessed it. It is now a `Refused`
+    carrying its own code, so it reaches a caller the way every other refusal
+    does. See findings.FAULT_RULE_RETURNED_NOT_LINES for why that code is a third
+    KIND rather than a conflict.
+
     Note what is deliberately NOT checked: a Line whose delta is zero. Those are
     required by the design -- every "Early bird NOT applied" line is one -- so a
     ledger entry with no monetary effect is correct behaviour here, not a defect.
@@ -360,19 +370,36 @@ def _lines_of(rule, returned: object) -> list[Line]:
     inventing a check that appears to decide it would be worse than saying so.
     """
     if not isinstance(returned, list):
-        raise TypeError(
-            f"rule type {rule.type!r} (rule {rule.id!r}) returned "
-            f"{type(returned).__name__}, not a list of Line. A rule's only way to "
-            "change the fee is to return Lines; there is no other channel, and "
-            "there is not going to be one."
+        raise Refused(
+            [
+                Finding(
+                    code=FAULT_RULE_RETURNED_NOT_LINES,
+                    text=(
+                        f"rule type {rule.type!r} (rule {rule.id!r}) returned "
+                        f"{type(returned).__name__}, not a list of Line. A rule's only way "
+                        "to change the fee is to return Lines; there is no other channel, "
+                        "and there is not going to be one."
+                    ),
+                    rule_ids=(rule.id,),
+                )
+            ]
         )
     for item in returned:
         if not isinstance(item, Line):
-            raise TypeError(
-                f"rule type {rule.type!r} (rule {rule.id!r}) returned a "
-                f"{type(item).__name__} where a Line was required. Every entry in "
-                "the breakdown carries its own signed delta, and the fee is their "
-                "running total -- an entry that is not a Line has no delta to add."
+            raise Refused(
+                [
+                    Finding(
+                        code=FAULT_RULE_RETURNED_NOT_LINES,
+                        text=(
+                            f"rule type {rule.type!r} (rule {rule.id!r}) returned a "
+                            f"{type(item).__name__} where a Line was required. Every entry "
+                            "in the breakdown carries its own signed delta, and the fee is "
+                            "their running total -- an entry that is not a Line has no "
+                            "delta to add."
+                        ),
+                        rule_ids=(rule.id,),
+                    )
+                ]
             )
     return returned
 

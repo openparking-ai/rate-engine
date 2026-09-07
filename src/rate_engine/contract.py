@@ -21,6 +21,7 @@ from typing import Any
 from .breakdown import Ledger
 from .engine import Quote, Stay, make_stay, quote
 from .findings import Refused
+from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
 from .validator import undecided, validate_plan
 
@@ -142,10 +143,21 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
 
     Returns an HTTP-ish status alongside the body so both surfaces agree on what
     a refusal is, rather than each deciding for itself.
+
+    **`NotMinorUnits` is named explicitly, and `TypeError` is NOT.** It subclasses
+    `TypeError` rather than `ValueError`, so `except (InvalidPlan, ValueError)`
+    did not catch it: a plain JSON float in a plan -- `8.0`, ordinary operator
+    data -- escaped this function entirely, and `/v1/quote` dropped the connection
+    without answering. Widening the clause to `TypeError` would have fixed that
+    and broken something worse: every genuine programming error in this module is
+    a `TypeError` too, and each one would come back to an operator as "your plan
+    is invalid", which is a confident wrong answer in a module whose standing
+    acceptance is that it is never wrong silently. The refusal is named; the bug
+    is still allowed to crash.
     """
     try:
         plans, stay = parse_quote_request(document)
-    except (InvalidPlan, ValueError) as exc:
+    except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
     try:
         return 200, quote_response(quote(plans, stay))
@@ -158,7 +170,7 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
 def run_validate(document: object) -> tuple[int, dict[str, Any]]:
     try:
         plan = parse_validate_request(document)
-    except (InvalidPlan, ValueError) as exc:
+    except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
     return 200, validate_response(plan)
 

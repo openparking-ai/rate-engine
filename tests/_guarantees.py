@@ -98,6 +98,12 @@ GUARANTEES: dict[str, str] = {
         "including when its module fails to import; and a test module that plants a "
         "defect but registers no guarantee is refused."
     ),
+    "F16": (
+        "Every refusal reaches the caller AS a refusal. A malformed number anywhere "
+        "in a plan comes back as a named 400 naming the field, and a malformed rule "
+        "return as a named 422 -- never as an exception escaping the quote contract, "
+        "and never as a dropped connection."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

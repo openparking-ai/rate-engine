@@ -220,6 +220,19 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "merely ACKNOWLEDGED starts coming back as a number -- the module inventing "
         "money from prose, which is the failure it exists to prevent",
     ),
+    # X1. The plant restores the exact escape the L3 measured: NotMinorUnits is a
+    # TypeError, so dropping it from the clause sends a plan float straight past
+    # run_quote again and the HTTP route dies without answering.
+    "F16": (
+        "tests/test_f16_refusals_reach_the_caller.py",
+        "contract.py",
+        "        plans, stay = parse_quote_request(document)\n"
+        "    except (InvalidPlan, NotMinorUnits, ValueError) as exc:",
+        "        plans, stay = parse_quote_request(document)\n"
+        "    except (InvalidPlan, ValueError) as exc:  # PLANTED: NotMinorUnits escapes again",
+        "a plain JSON float in a plan escapes run_quote instead of becoming a named "
+        "400, and the HTTP route drops the connection with no response at all",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

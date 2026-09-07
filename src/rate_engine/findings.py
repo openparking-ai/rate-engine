@@ -49,6 +49,18 @@ CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"
 #: and the answer is the same as everywhere else here: refuse, and name both.
 CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 
+# --- fault codes -----------------------------------------------------------
+#: A registered rule type returned something that is not a list of Lines.
+#:
+#: This is a THIRD kind, and it is deliberately not filed under the other two.
+#: A gap is a stay the plan cannot price and a conflict is two rules the plan
+#: does not order -- both are questions for the OWNER, and both are things
+#: `validate-plan` reports. This is neither: it is a defect in a rule type's
+#: implementation, which no owner can decide and no plan can fix. Filing it as a
+#: conflict would have been the same mistake the negative-fee refusal makes --
+#: a refusal whose code names something that did not happen.
+FAULT_RULE_RETURNED_NOT_LINES = "FAULT_RULE_RETURNED_NOT_LINES"
+
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
     GAP_NO_ACCUMULATE_RULE,
@@ -61,7 +73,11 @@ CONFLICT_CODES: tuple[str, ...] = (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
 )
 
-ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES
+#: Faults are never produced by the validator: it probes a plan against stays and
+#: never runs an applier, so a fault can only arise while actually pricing.
+FAULT_CODES: tuple[str, ...] = (FAULT_RULE_RETURNED_NOT_LINES,)
+
+ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES + FAULT_CODES
 
 
 @dataclass(frozen=True)
@@ -87,10 +103,28 @@ class Finding:
     def is_gap(self) -> bool:
         return self.code in GAP_CODES
 
+    @property
+    def kind(self) -> str:
+        """Which of the three this is, decided by membership rather than by an else.
+
+        It used to be ``"gap" if self.is_gap else "conflict"``, which was true
+        while there were exactly two kinds and would have quietly labelled the
+        third one a conflict the day it was added. A two-way branch over a
+        three-way registry is a wrong answer with no way to notice it.
+        """
+        for codes, name in (
+            (GAP_CODES, "gap"),
+            (CONFLICT_CODES, "conflict"),
+            (FAULT_CODES, "fault"),
+        ):
+            if self.code in codes:
+                return name
+        raise AssertionError(f"{self.code!r} is registered but belongs to no kind.")
+
     def to_json(self) -> dict[str, object]:
         return {
             "code": self.code,
-            "kind": "gap" if self.is_gap else "conflict",
+            "kind": self.kind,
             "text": self.text,
             "rule_ids": list(self.rule_ids),
         }
