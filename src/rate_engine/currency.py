@@ -23,15 +23,13 @@ load is the same disposition as everywhere else in this module: say what is
 missing rather than guess a value. That makes the loader's existing diagnostic
 TRUE instead of retiring it.
 
-Deliberately excluded, each for a reason rather than by oversight:
-
-* **`XXX`** -- "no currency". A rate plan denominated in "no currency" is not a
-  thing to price in.
-* **`XTS`** -- reserved for testing. A test code reaching a real plan is a defect,
-  and accepting it here would make that defect silent.
-* **The metals (`XAU`, `XAG`, `XPT`, `XPD`) and the fund codes (`XDR`, `XBA`-`XBD`,
-  `XSU`, `XUA`)** -- ISO 4217 gives them no minor unit at all, so they cannot be
-  expressed in minor units, which is the only money type this module has.
+**EXCLUSIONS ARE STATED AND CHECKED, NEVER LEFT AS ABSENCE.** They used to be a
+paragraph of prose plus a code simply not appearing in the table -- which is an
+OMISSION wearing a decision's clothes: nothing distinguished "we decided not to
+price in this" from "we forgot it", and a prose range like "`XBA`-`XBD`" is not an
+enumeration, so `XBB` and `XBC` were named by nobody. The sets below are the
+decision, `REFUSED_BY_DECISION` is asserted disjoint from the table, and
+`excluded_reason` puts the reason in the operator's refusal.
 
 **THIS TABLE IS TRANSCRIBED, NOT DERIVED, AND IT IS THE ONLY ONE IN THE REPO.**
 There is no dependency to read the register from and CI has no network, so it is
@@ -83,6 +81,75 @@ _TWO_DECIMAL: frozenset[str] = frozenset(
 )
 
 
+#: ISO 4217 gives these NO minor unit at all, so they cannot be expressed in the
+#: only money type this module has. Enumerated one by one rather than written as
+#: the range "XBA-XBD": a range in prose is not an enumeration, and XBB and XBC
+#: were excluded by nobody's decision until they were written down here.
+NO_MINOR_UNIT: frozenset[str] = frozenset(
+    {
+        "XAU", "XAG", "XPD", "XPT",                        # the precious metals
+        "XDR", "XSU", "XUA", "XBA", "XBB", "XBC", "XBD",   # fund and bond-market codes
+    }
+)
+
+#: Real ISO codes that are not money to price a garage in.
+NOT_MONEY_TO_PRICE_IN: frozenset[str] = frozenset(
+    {
+        "XXX",  # "no currency". A rate plan denominated in no currency is not a thing.
+        "XTS",  # reserved for testing. A test code reaching a real plan is a defect,
+                # and accepting it here would make that defect silent.
+    }
+)
+
+#: An INDEX UNIT, not a circulating currency -- and the reason it needs naming is
+#: that it is zero-decimal, so it would otherwise look like an oversight in
+#: ZERO_DECIMAL rather than a decision. Uruguay's Unidad Indexada is a unit of
+#: account that tracks inflation; a garage does not take it at the barrier.
+#:
+#: NOTE for whoever extends this: ISO 4217 carries several more national
+#: fund/index units in the same shape -- BOV, CHE, CHW, COU, MXV, USN. They are
+#: absent from the table today and their absence is NOT yet a stated decision.
+#: That is a known gap, recorded rather than silently widened.
+NOT_A_CIRCULATING_CURRENCY: frozenset[str] = frozenset({"UYI"})
+
+#: Every code this module refuses ON PURPOSE. Asserted disjoint from the table
+#: below, so a code can never be both priced and declared unpriceable.
+REFUSED_BY_DECISION: frozenset[str] = (
+    NO_MINOR_UNIT | NOT_MONEY_TO_PRICE_IN | NOT_A_CIRCULATING_CURRENCY
+)
+
+_WHY: tuple[tuple[frozenset[str], str], ...] = (
+    (
+        NO_MINOR_UNIT,
+        "ISO 4217 gives it no minor unit at all, so no amount in it can be expressed "
+        "in the integer minor units that are this module's only money type",
+    ),
+    (
+        NOT_MONEY_TO_PRICE_IN,
+        "it is an ISO placeholder rather than a currency -- XXX means 'no currency' "
+        "and XTS is reserved for testing",
+    ),
+    (
+        NOT_A_CIRCULATING_CURRENCY,
+        "it is a unit of account rather than a circulating currency, so it is not "
+        "something a garage is paid in",
+    ),
+)
+
+
+def excluded_reason(code: object) -> str | None:
+    """Why this module refuses `code`, or None if it was never a stated exclusion.
+
+    An unknown code that is not on any list gets the generic refusal: it might be
+    a real currency this table is missing, and claiming a reason we do not have
+    would be a confident wrong answer about somebody's money.
+    """
+    for codes, reason in _WHY:
+        if isinstance(code, str) and code in codes:
+            return reason
+    return None
+
+
 def _build() -> dict[str, int]:
     table = {code: 2 for code in _TWO_DECIMAL}
     for codes, digits in ((ZERO_DECIMAL, 0), (THREE_DECIMAL, 3), (FOUR_DECIMAL, 4)):
@@ -93,6 +160,17 @@ def _build() -> dict[str, int]:
 
 #: code -> how many decimal places its minor unit has.
 MINOR_UNIT_DIGITS: dict[str, int] = _build()
+
+# A code cannot be both priced and declared unpriceable. Checked at import rather
+# than only in a test, because the two lists are edited by different hands at
+# different times and the failure is silent: a metal quietly gaining an exponent
+# renders an amount in a thing nobody is paid in.
+_both = REFUSED_BY_DECISION & frozenset(MINOR_UNIT_DIGITS)
+if _both:  # pragma: no cover - a construction error, not a runtime path
+    raise AssertionError(
+        f"{sorted(_both)} are both priced and refused by decision. One of the two "
+        "lists is wrong, and which one is not guessable from here."
+    )
 
 
 def is_known(code: object) -> bool:

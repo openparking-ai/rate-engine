@@ -30,6 +30,10 @@ from rate_engine.contract import run_quote
 from rate_engine.currency import (
     FOUR_DECIMAL,
     MINOR_UNIT_DIGITS,
+    NO_MINOR_UNIT,
+    NOT_A_CIRCULATING_CURRENCY,
+    NOT_MONEY_TO_PRICE_IN,
+    REFUSED_BY_DECISION,
     THREE_DECIMAL,
     ZERO_DECIMAL,
     minor_unit_digits,
@@ -155,9 +159,12 @@ def test_the_table_is_structurally_sound():
         for code in codes:
             assert MINOR_UNIT_DIGITS[code] == digits, code
 
-    for excluded in ("XXX", "XTS", "XAU", "XAG", "XPT", "XPD", "XDR", "XBA", "XSU", "XUA"):
+    # DERIVED from the exclusion sets, never a second list. The previous version of
+    # this assertion WAS a written list, and it silently omitted XBB and XBC --
+    # the same defect one level up, in the test meant to catch it.
+    for excluded in sorted(REFUSED_BY_DECISION):
         assert excluded not in MINOR_UNIT_DIGITS, (
-            f"{excluded} has no minor unit in ISO 4217 and cannot be rendered"
+            f"{excluded} is refused by decision and also carries an exponent"
         )
 
 
@@ -177,3 +184,60 @@ def test_the_json_payload_carries_the_currency_so_a_client_can_render_it_itself(
     assert body["currency"] == "JPY"
     assert isinstance(body["fee_minor"], int)
     json.dumps(body)
+
+
+@pytest.mark.guarantee("F17b")
+@pytest.mark.parametrize("code", sorted(REFUSED_BY_DECISION))
+def test_every_code_refused_BY_DECISION_is_actually_refused_and_says_why(code):
+    """Derived from the sets, so a code added to one is tested the day it is added.
+
+    The exclusions used to be prose plus absence: nothing separated "we decided
+    not to price this" from "we forgot it", and the prose range "XBA-XBD" left
+    XBB and XBC named by nobody. This walks the decision itself.
+    """
+    document = copy.deepcopy(DOWNTOWN_V2)
+    document["currency"] = code
+    status, body = run_quote(
+        {
+            "plans": [document],
+            "entry_at": "2026-03-03T09:14:00-05:00",
+            "exit_at": "2026-03-03T09:50:00-05:00",
+            "space_class": "standard",
+            "currency": code,
+        }
+    )
+    assert status == 400, f"{code} is refused by decision but was accepted"
+    assert code in body["error"]
+    assert "refused because" in body["error"], (
+        f"{code} was refused without naming the decision that refuses it"
+    )
+
+
+def test_the_three_exclusion_reasons_are_disjoint():
+    """A code with two reasons would report whichever tuple came first."""
+    groups = (NO_MINOR_UNIT, NOT_MONEY_TO_PRICE_IN, NOT_A_CIRCULATING_CURRENCY)
+    for i, first in enumerate(groups):
+        for second in groups[i + 1:]:
+            assert not (first & second), sorted(first & second)
+
+
+def test_an_UNKNOWN_code_is_refused_WITHOUT_a_fabricated_reason():
+    """The control on the item above.
+
+    `ZZZ` is not a stated exclusion -- it is simply not a currency. The refusal
+    must not claim a reason we do not have, because a code absent from a
+    transcribed table might be a real currency the table is missing.
+    """
+    document = copy.deepcopy(DOWNTOWN_V2)
+    document["currency"] = "ZZZ"
+    _status, body = run_quote(
+        {
+            "plans": [document],
+            "entry_at": "2026-03-03T09:14:00-05:00",
+            "exit_at": "2026-03-03T09:50:00-05:00",
+            "space_class": "standard",
+            "currency": "ZZZ",
+        }
+    )
+    assert "refused because" not in body["error"]
+    assert "table is missing it" in body["error"]
