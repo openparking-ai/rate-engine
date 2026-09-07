@@ -70,11 +70,43 @@ jobs:
       - name: The CLI works with nothing installed but this package
         # The definition of done, as a check: someone with no parking system
         # points this at a plan and gets a priced stay back.
+        #
+        # BOTH exit codes are asserted, and the second is the one that matters.
+        # This step first read only the happy path and went red on its own
+        # example plan -- correctly: that plan states a 24-hour ceiling, so it
+        # HAS a gap, and `validate-plan` exits non-zero when it finds one. A
+        # check that only ever runs the clean case cannot tell a working
+        # validator from one that reports nothing.
         run: |
+          set -o pipefail
           rate-engine quote --plan tests/plans/downtown_v2.json \
             --entry 2026-03-03T09:14:00-05:00 --exit 2026-03-03T18:40:00-05:00 \
             --space-class standard --currency USD
-          rate-engine validate-plan --plan tests/plans/downtown_v2.json
+
+          # A plan with nothing missing: exit 0.
+          rate-engine validate-plan --plan tests/plans/simple_no_gaps.json
+
+          # A plan with a gap: exit 1, and it must name the gap rather than
+          # merely failing. This is the positive control for the line above --
+          # without it, a validator that found nothing in ANY plan would pass.
+          if rate-engine validate-plan --plan tests/plans/lot_c_with_gaps.json \
+               | tee "$RUNNER_TEMP/gaps.txt"; then
+            echo "a plan with two known gaps was reported clean"; exit 1
+          fi
+          grep -q "GAP_NO_ACCUMULATE_RULE" "$RUNNER_TEMP/gaps.txt" || {
+            echo "it exited non-zero, but not because of the gap this asserts:"
+            cat "$RUNNER_TEMP/gaps.txt"; exit 1; }
+          echo "reported the gap, and refused for the right reason"
+
+          # And the refusal reaches the quote path, naming the same code.
+          if rate-engine quote --plan tests/plans/lot_c_with_gaps.json \
+               --entry 2026-03-03T09:00:00-05:00 --exit 2026-03-03T10:05:00-05:00 \
+               --space-class reserved --currency USD | tee "$RUNNER_TEMP/q.txt"; then
+            echo "a stay nothing prices came back with a number"; exit 1
+          fi
+          grep -q "GAP_NO_ACCUMULATE_RULE" "$RUNNER_TEMP/q.txt" || {
+            echo "the quote failed for some other reason:"; cat "$RUNNER_TEMP/q.txt"; exit 1; }
+          echo "the engine refused and named what was missing, as required"
 
   controls:
     name: controls

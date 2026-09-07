@@ -97,3 +97,29 @@ def test_the_axes_control_can_fail():
     assert not [d for d in durations if d >= threshold], (
         "the control corpus was supposed to sit entirely below the threshold"
     )
+
+
+def test_the_plan_corpus_contains_a_clean_plan_and_a_plan_with_gaps():
+    """Both sides of the validator's own axis.
+
+    A directory of plans that all validate clean would let a validator reporting
+    nothing at all pass every check in this suite -- and a directory where all of
+    them have gaps would do the same for one that reports a gap in everything.
+    Derived by validating every plan on disk, not from a list here.
+    """
+    import json
+
+    from fixtures import PLANS_DIR
+    from rate_engine.plan import load_plan
+    from rate_engine.validator import validate_plan
+
+    results = {
+        path.name: validate_plan(load_plan(json.loads(path.read_text())))
+        for path in sorted(PLANS_DIR.glob("*.json"))
+    }
+    clean = [name for name, findings in results.items() if not findings]
+    with_gaps = [name for name, findings in results.items() if findings]
+
+    counts = {name: len(findings) for name, findings in results.items()}
+    assert clean, f"no plan on disk validates clean; findings per plan: {counts}"
+    assert with_gaps, "no plan on disk has a gap, so a validator finding nothing would pass"
