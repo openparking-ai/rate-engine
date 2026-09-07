@@ -1,0 +1,116 @@
+"""ISO 4217, only as far as this module needs it: which codes are money, and how
+many minor units each has in a major one.
+
+**Why this file exists.** `format_minor` did `divmod(abs(minor), 100)` for every
+currency, so a fee of 800 minor units in a zero-decimal currency was returned
+correctly as 800 and RENDERED as "8.00" -- the number right, the sentence a
+hundred times wrong, in the breakdown that is the whole product. And the plan
+loader's own diagnostic said "a three-letter uppercase ISO 4217 code" while it
+checked only shape, so `ZZZ` loaded happily.
+
+Those were one defect, and this is one fix: the exponent is a property of the
+currency, so the module has to know the currency to render the money.
+
+**Why the plan does not declare its own exponent.** It was the cheaper option and
+it is wrong: the number of minor units in a yen is a fact the world already
+fixed, and putting it on the plan invites an operator to state it incorrectly --
+a wrong exponent silently multiplies every rendered amount by a hundred. A fact
+nobody may vary does not belong in a document somebody writes.
+
+**What is REFUSED, and why refusal is the right answer.** A code this table does
+not carry cannot be rendered, because rendering needs the exponent. Refusing at
+load is the same disposition as everywhere else in this module: say what is
+missing rather than guess a value. That makes the loader's existing diagnostic
+TRUE instead of retiring it.
+
+Deliberately excluded, each for a reason rather than by oversight:
+
+* **`XXX`** -- "no currency". A rate plan denominated in "no currency" is not a
+  thing to price in.
+* **`XTS`** -- reserved for testing. A test code reaching a real plan is a defect,
+  and accepting it here would make that defect silent.
+* **The metals (`XAU`, `XAG`, `XPT`, `XPD`) and the fund codes (`XDR`, `XBA`-`XBD`,
+  `XSU`, `XUA`)** -- ISO 4217 gives them no minor unit at all, so they cannot be
+  expressed in minor units, which is the only money type this module has.
+
+**THIS TABLE IS TRANSCRIBED, NOT DERIVED, AND IT IS THE ONLY ONE IN THE REPO.**
+There is no dependency to read the register from and CI has no network, so it is
+typed -- which this project's rules otherwise forbid. Two consequences, both
+deliberate: `tests/test_f17_currency_is_rendered_by_its_exponent.py` asserts the
+STRUCTURE (every value is a real ISO exponent, every key is well-formed, the
+non-two groups are exactly the sets below), and an omission fails LOUDLY at load
+rather than rendering wrongly -- so the failure mode of an incomplete table is a
+refused plan somebody reports, never a wrong amount somebody pays.
+"""
+
+from __future__ import annotations
+
+#: Codes whose minor unit is 1/1 of the major -- no decimal places at all.
+#: These are the ones `divmod(minor, 100)` rendered a hundred times too small.
+ZERO_DECIMAL: frozenset[str] = frozenset(
+    {
+        "BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW",
+        "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+    }
+)
+
+#: Codes with three decimal places -- 1000 minor units to the major.
+THREE_DECIMAL: frozenset[str] = frozenset(
+    {"BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"}
+)
+
+#: Codes with four decimal places.
+FOUR_DECIMAL: frozenset[str] = frozenset({"CLF", "UYW"})
+
+#: Every code this module will price in. Two decimals unless named above.
+_TWO_DECIMAL: frozenset[str] = frozenset(
+    {
+        "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN",
+        "BAM", "BBD", "BDT", "BGN", "BMD", "BND", "BOB", "BRL", "BSD", "BTN",
+        "BWP", "BYN", "BZD", "CAD", "CDF", "CHF", "CNY", "COP", "CRC", "CUP",
+        "CVE", "CZK", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "EUR", "FJD",
+        "FKP", "GBP", "GEL", "GHS", "GIP", "GMD", "GTQ", "GYD", "HKD", "HNL",
+        "HTG", "HUF", "IDR", "ILS", "INR", "IRR", "JMD", "KES", "KGS", "KHR",
+        "KPW", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "MAD", "MDL",
+        "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN",
+        "MYR", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "PAB", "PEN",
+        "PGK", "PHP", "PKR", "PLN", "QAR", "RON", "RSD", "RUB", "SAR", "SBD",
+        "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SOS", "SRD", "SSP", "STN",
+        "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TOP", "TRY", "TTD", "TWD",
+        "TZS", "UAH", "USD", "UYU", "UZS", "VED", "VES", "WST", "XCD", "XCG",
+        "YER", "ZAR", "ZMW", "ZWG",
+    }
+)
+
+
+def _build() -> dict[str, int]:
+    table = {code: 2 for code in _TWO_DECIMAL}
+    for codes, digits in ((ZERO_DECIMAL, 0), (THREE_DECIMAL, 3), (FOUR_DECIMAL, 4)):
+        for code in codes:
+            table[code] = digits
+    return table
+
+
+#: code -> how many decimal places its minor unit has.
+MINOR_UNIT_DIGITS: dict[str, int] = _build()
+
+
+def is_known(code: object) -> bool:
+    return isinstance(code, str) and code in MINOR_UNIT_DIGITS
+
+
+def minor_unit_digits(code: str) -> int:
+    """How many decimal places `code` has. Raises if it is not one this module prices.
+
+    Never returns a default. A guessed exponent is a rendered amount wrong by a
+    factor of ten or a hundred, which is exactly the defect this file closes.
+    """
+    try:
+        return MINOR_UNIT_DIGITS[code]
+    except KeyError:
+        raise KeyError(
+            f"{code!r} is not an ISO 4217 currency this module prices in, so the "
+            "number of minor units in a major one is unknown and no amount can be "
+            "rendered. Currencies are refused at load rather than rendered on a "
+            "guessed exponent."
+        ) from None

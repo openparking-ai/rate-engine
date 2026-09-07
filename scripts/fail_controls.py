@@ -233,6 +233,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a plain JSON float in a plan escapes run_quote instead of becoming a named "
         "400, and the HTTP route drops the connection with no response at all",
     ),
+    # X3, two arms, because the item was two defects sharing a cause: the
+    # rendering assumed an exponent, and the loader assumed anything shaped like a
+    # code was one. Breaking either must go red on its own.
+    "F17": (
+        "tests/test_f17_currency_is_rendered_by_its_exponent.py",
+        "money.py",
+        "    digits = minor_unit_digits(currency)",
+        "    digits = 2  # PLANTED: every currency is assumed to have two decimals again",
+        "a zero-decimal currency renders a hundred times too small -- 800 yen shown "
+        "as 8.00 JPY -- while the numeric fee stays correct",
+    ),
+    "F17b": (
+        "tests/test_f17_currency_is_rendered_by_its_exponent.py",
+        "plan.py",
+        "    if not is_known(currency):",
+        "    if False:  # PLANTED: an unrenderable currency code loads again",
+        "a code with no known exponent -- ZZZ, or XXX which means 'no currency' -- "
+        "is accepted at load and reaches the renderer",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

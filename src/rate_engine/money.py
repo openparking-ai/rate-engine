@@ -33,6 +33,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from .currency import minor_unit_digits
+
 
 class NotMinorUnits(TypeError):
     """A value that was supposed to be money is not an integer of minor units."""
@@ -133,7 +135,24 @@ def refuse_non_integer_money(node: Any, path: str = "plan") -> None:
 
 
 def format_minor(minor: int, currency: str) -> str:
-    """For a breakdown line's text. Never feed the result back into arithmetic."""
+    """For a breakdown line's text. Never feed the result back into arithmetic.
+
+    **The divisor comes from the CURRENCY, not from the number 100.** This used to
+    be `divmod(abs(minor), 100)` for everything, so a fee of 800 minor units in a
+    zero-decimal currency was returned correctly as 800 and rendered "8.00" -- a
+    correct number with an explanation a hundred times wrong, in the breakdown
+    this module exists to make trustworthy. A zero-decimal currency now renders
+    "800 JPY" with no decimal point at all, because a yen has no minor unit to
+    show; a three-decimal one renders three places.
+
+    Currencies are validated at load, so an unknown code cannot reach here from a
+    plan. If one does, `minor_unit_digits` raises rather than falling back to 2 --
+    a guessed exponent is the defect, not the mitigation.
+    """
+    digits = minor_unit_digits(currency)
     sign = "-" if minor < 0 else ""
-    whole, part = divmod(abs(minor), 100)
-    return f"{sign}{whole}.{part:02d} {currency}"
+    if digits == 0:
+        return f"{sign}{abs(minor)} {currency}"
+    divisor = 10**digits
+    whole, part = divmod(abs(minor), divisor)
+    return f"{sign}{whole}.{part:0{digits}d} {currency}"
