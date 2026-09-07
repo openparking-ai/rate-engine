@@ -343,6 +343,19 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the exact shape of the defect that shipped, print() appending a newline, "
         "and the one the old decoded comparison could not see",
     ),
+    # X9. The plant makes every stage behave the way the framework contract used
+    # to CLAIM they all did -- non-qualifying rules everywhere emitting zero lines.
+    "F22": (
+        "tests/test_f22_the_silence_rule_is_per_stage.py",
+        "engine.py",
+        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n                continue",
+        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n"
+        "                ledger.add(Line(code=f'{rule.type}.not_applied', rule_id=rule.id,\n"
+        "                                text='PLANTED', delta_minor=0))\n"
+        "                continue",
+        "every non-qualifying rule at every stage emits an explanatory zero line, so "
+        "a standard-space receipt lists VIP tiers that were never about that space",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

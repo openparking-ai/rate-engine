@@ -176,9 +176,10 @@ never failed is a decoration.
 | **F18** | A wall-clock limit is compared at the granularity it is written and rendered in: the stay is truncated to the minute, so no breakdown line can say a time is after itself. |
 | **F18b** | And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; anything finer is rejected at load, because rounding it would silently discard a pricing decision the operator wrote. |
 | **F19** | `validate-plan` probes every boundary the plan DECLARES -- entry limits and exit limits as well as durations, each side of each -- so a conflict the engine would refuse is one the owner was shown before the plan went live. |
-| **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
+| **F2** | A special rate is all-conditions-or-nothing: miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so the property is proven of it rather than of a populated stage. |
 | **F20** | There are TWO time roundings and both are declared: a part-minute is a whole minute (assumed, module-wide) and minutes into periods is stated per rule. Every comparison against a duration reads the same rounded value. |
 | **F21** | A refusal's CODE names the cause that actually occurred. A negative total is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed. |
+| **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
