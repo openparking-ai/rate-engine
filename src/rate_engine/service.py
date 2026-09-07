@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .contract import SCHEMA_VERSION, run_quote, run_validate
+from .contract import SCHEMA_VERSION, encode, run_quote, run_validate
 from .rules import RULE_TYPES
 
 #: Refuse a body larger than this rather than reading it into memory. A plan is
@@ -37,7 +37,10 @@ class Handler(BaseHTTPRequestHandler):
     sys_version = ""
 
     def _send(self, status: int, body: dict) -> None:
-        payload = json.dumps(body, indent=2, sort_keys=False).encode()
+        # contract.encode is THE encoder. This used to call json.dumps itself,
+        # one of three sites with two argument lists, which is how the published
+        # byte-equality claim became false without anything going red.
+        payload = encode(body)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))

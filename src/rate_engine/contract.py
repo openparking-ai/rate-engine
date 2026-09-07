@@ -15,6 +15,7 @@ operator believes is live ends up pricing something else.
 
 from __future__ import annotations
 
+import json
 import textwrap
 from typing import Any
 
@@ -88,6 +89,24 @@ def parse_validate_request(document: object):
 
 
 # --- the one serializer ----------------------------------------------------
+#
+# It builds the BODY and it encodes the BYTES. Building it here while each
+# surface called `json.dumps` for itself is what made "the CLI returns the same
+# bytes as /v1/quote" false: there were three encode sites with two different
+# argument lists, and `print()` added a newline the route does not. F6 asserted
+# byte-equality and could not see any of it, because the test decoded both sides
+# before comparing.
+
+
+def encode(body: dict[str, Any]) -> bytes:
+    """THE response bytes. Every surface writes exactly what this returns.
+
+    No trailing newline: the route writes these bytes with a Content-Length, so a
+    newline here would be part of the payload. The CLI writes them to stdout
+    unchanged and adds the newline separately, outside the payload, so a terminal
+    still behaves -- see cli.py.
+    """
+    return json.dumps(body, indent=2, sort_keys=False).encode()
 
 
 def quote_response(result: Quote) -> dict[str, Any]:

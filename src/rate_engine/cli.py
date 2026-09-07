@@ -3,10 +3,23 @@ not need an HTTP client.
 
 **This is not a simulation mode.** `rate-engine quote` builds the same request
 object `/v1/quote` builds and hands it to the same function, `contract.run_quote`.
-The bytes it prints in `--json` mode are the bytes the route returns. That is
-F6, and F6 is the control that matters most here: a test function that answers
-differently from the production path is a tool that tells an operator their
-garage will charge something it will not.
+The bytes it writes in `--json` mode are the bytes the route returns, from
+`contract.encode` -- **the one encoder**, which both surfaces call and neither
+re-implements. A trailing newline is written after the payload and outside it, so
+piping `--json` into `cmp` against the route's body succeeds and a terminal still
+gets its line break.
+
+That is F6, and F6 is the control that matters most here: a test function that
+answers differently from the production path is a tool that tells an operator
+their garage will charge something it will not.
+
+**It was false, by one byte, for the whole of A1.** `print(json.dumps(body,
+indent=2))` appended a newline the route does not send -- 1152 against 1151 --
+and there were three `json.dumps` call sites with two different argument lists
+while the contract claimed "one code path and one serializer". F6 asserted
+byte-equality and could not see any of it, because it decoded both sides with
+`json.loads` before comparing: re-serializing with `indent=4, sort_keys=True`
+left the test green. The guarantee is now measured on BYTES.
 """
 
 from __future__ import annotations
@@ -16,8 +29,27 @@ import json
 import sys
 from pathlib import Path
 
-from .contract import SCHEMA_VERSION, breakdown_text, run_quote, run_validate
+from .contract import SCHEMA_VERSION, breakdown_text, encode, run_quote, run_validate
 from .money import format_minor
+
+
+def _write_exact(payload: bytes) -> None:
+    """Write the route's bytes to stdout, unchanged, and nothing else into them.
+
+    `print(json.dumps(...))` used to do this, and it appended a newline the route
+    does not send -- 1152 bytes against 1151, measured. The newline is written
+    AFTER the payload and outside it, so `rate-engine quote --json | cmp` against
+    the route's body succeeds while a terminal still gets its line break.
+    """
+    stream = getattr(sys.stdout, "buffer", None)
+    if stream is None:  # pytest's capsys replaces stdout with a text stream
+        sys.stdout.write(payload.decode())
+        sys.stdout.write("\n")
+        return
+    stream.write(payload)
+    stream.flush()
+    sys.stdout.write("\n")
+    sys.stdout.flush()
 
 
 def _load(path: str) -> object:
@@ -37,7 +69,7 @@ def _cmd_quote(args) -> int:
     }
     status, body = run_quote(request)
     if args.json:
-        print(json.dumps(body, indent=2))
+        _write_exact(encode(body))
         return 0 if status == 200 else 1
 
     if status == 200:
@@ -61,7 +93,7 @@ def _cmd_quote(args) -> int:
 def _cmd_validate(args) -> int:
     status, body = run_validate({"plan": _load(args.plan)})
     if args.json:
-        print(json.dumps(body, indent=2))
+        _write_exact(encode(body))
         return 0 if status == 200 else 1
     if status != 200:
         print(f"\n  the plan could not be read: {body['error']}\n")
