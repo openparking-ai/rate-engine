@@ -158,6 +158,11 @@ GUARANTEES: dict[str, str] = {
         "guarded: deleting it, no-opping it or unwiring it from the pricing path "
         "turns the suite red."
     ),
+    "F24": (
+        "A zero-length stay pays the first period -- a decision, published in the "
+        "contract with the divergence it was disclosed with, not left for an "
+        "integrator to discover as an anomaly."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

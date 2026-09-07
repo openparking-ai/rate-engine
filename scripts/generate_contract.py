@@ -270,6 +270,29 @@ Named here so nobody adds them helpfully:
   inventing a pricing decision nobody made. An operator who wants the first
   fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
   in the plan.
+
+## A stay of zero length pays the first period
+
+**Entry and exit at the same instant is priced, not free, and not refused.** The
+first period covers `[0, first_period_minutes]`, so a car that enters and leaves
+without stopping pays `first_period_minor` -- the same as a car that stayed one
+minute or fifty-nine.
+
+It is a DECISION, and it is published here because an integrator cannot otherwise
+learn it: the number is correct under the rule as written, and it is the kind of
+edge a garage owner will be asked about at the counter.
+
+**It diverges from the platform's own older fee code, which returns zero for the
+same stay.** That divergence is known and is a later round's to reconcile; it is
+recorded rather than left for whoever notices the two answering differently.
+
+A negative stay -- exit before entry -- is a different thing and is REFUSED as a
+caller bug rather than priced at zero, because pricing it would hide it.
+
+**What would change this, and has not yet:** a grace period. A garage that
+declares one would make a zero-length stay free by the grace rule, and this
+paragraph would then describe only a plan that declares no grace. Grace is not in
+this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
 ## The occupancy multiplier, and why money stays an integer
