@@ -26,6 +26,16 @@ decision somebody has to make rather than a parameter with an obvious value:
 
 NOTE what this rule does NOT do: it does not look at the clock, at the day of the
 week, or at the plan's other rules. It converts a duration into lines.
+
+**TWO CALLABLE CORES, AND THEY ARE WHY THERE IS STILL ONE PERIOD CALCULATION.**
+`build_params` validates the six fields and `lines_for` turns a duration into
+the lines; `build` and `apply` are thin wrappers that add the rule identity.
+`time_window`'s `rate` effect -- "a completely different time-based rate for the
+weekend" -- CALLS both. It does not reimplement them, and it must not: two period
+calculations in one module drift, and when they drift the difference is money on
+somebody's receipt. G-D is the guarantee that the reuse is real rather than a
+copy that agrees today, and its control plants a change in the counting here and
+requires the window's line to move with it.
 """
 
 from __future__ import annotations
@@ -82,10 +92,23 @@ def _positive_int(raw: dict, key: str, where: str) -> int:
     return value
 
 
-def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
+def build_params(raw: dict, where: str) -> dict:
+    """The six period fields, validated. THE builder for a time-based rate.
+
+    Takes a plain object rather than a whole rule, so a rule type that carries a
+    time-based rate INSIDE it -- `time_window`'s `rate` effect -- validates it
+    through exactly this code rather than through a second copy that agrees until
+    one of them is edited.
+    """
     from ..plan import InvalidPlan
 
-    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
+    missing = sorted(EXTRA - set(raw))
+    if missing:
+        raise InvalidPlan(
+            f"{where} is missing required field(s): {', '.join(missing)}. "
+            "This module has no defaults; a field it cannot read is a pricing "
+            "decision nobody made."
+        )
 
     rounding = raw["rounding"]
     if rounding not in ROUNDING_MODES:
@@ -104,7 +127,7 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
                 "thirty-day stay, and that is a decision, not an absence."
             )
 
-    params = {
+    return {
         "first_period_minutes": _positive_int(raw, "first_period_minutes", where),
         "first_period_minor": as_non_negative_minor(
             raw["first_period_minor"], f"{where}.first_period_minor"
@@ -116,9 +139,13 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
         "rounding": rounding,
         "max_duration_minutes": max_duration,
     }
+
+
+def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
+    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
     return Rule(
         id=rule_id, type="increment", stage=ACCUMULATE, space_classes=space_classes,
-        params=params,
+        params=build_params(raw, where),
     )
 
 
@@ -137,11 +164,19 @@ def qualifies(rule: Rule, stay) -> bool:
 
 
 def apply(rule: Rule, stay, plan) -> list[Line]:
-    from ..plan import InvalidPlan
+    return lines_for(rule.params, rule.id, stay.duration_minutes, plan.currency)
 
-    p = rule.params
-    minutes = stay.duration_minutes
-    currency = plan.currency
+
+def lines_for(p: dict, rule_id: str, minutes: int, currency: str) -> list[Line]:
+    """A duration and a set of period parameters, as lines. THE applier for a
+    time-based rate.
+
+    Called by `apply` for an ordinary `increment` rule and by `time_window` for a
+    `rate` effect, with the same parameters producing the same lines for the same
+    duration -- identical code, identical text, identical delta. See this file's
+    header for why that is a guarantee rather than a convenience.
+    """
+    from ..plan import InvalidPlan
 
     # THE FIELD IS CONSULTED, NOT ASSUMED. Unreachable through `load_plan` today
     # -- the loader accepts only `ceil` and `ceil` is implemented -- and that is
@@ -154,7 +189,7 @@ def apply(rule: Rule, stay, plan) -> list[Line]:
     count_periods = PERIOD_COUNTERS.get(rounding)
     if count_periods is None:
         raise InvalidPlan(
-            f"rule {rule.id!r} states rounding {rounding!r}, which this version "
+            f"rule {rule_id!r} states rounding {rounding!r}, which this version "
             f"does not implement (it implements: {', '.join(sorted(PERIOD_COUNTERS))}). "
             "Refused rather than priced under a different rule: the fee would have "
             "been right for `ceil` and wrong for the plan, on a document that reads "
@@ -187,7 +222,7 @@ def apply(rule: Rule, stay, plan) -> list[Line]:
     lines = [
         Line(
             code="increment.first_period",
-            rule_id=rule.id,
+            rule_id=rule_id,
             text=(
                 f"Time-based: first {_period(first_len)} "
                 f"{format_minor(p['first_period_minor'], currency)}"
@@ -199,7 +234,7 @@ def apply(rule: Rule, stay, plan) -> list[Line]:
         lines.append(
             Line(
                 code="increment.repeat_periods",
-                rule_id=rule.id,
+                rule_id=rule_id,
                 text=(
                     f"Time-based: {repeats} additional "
                     f"{_period(repeat_len, plural=repeats != 1)} at "

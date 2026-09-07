@@ -53,8 +53,8 @@ def test_exit_one_minute_past_the_limit_prices_as_a_full_time_based_stay():
     # daily max takes it to 3000.
     assert over.fee_minor == 3000
     codes = [line.code for line in over.breakdown.lines]
-    assert "early_bird.applied" not in codes
-    assert "early_bird.not_applied" in codes
+    assert "time_window.applied" not in codes
+    assert "time_window.not_applied" in codes
     assert "increment.first_period" in codes
 
 
@@ -62,7 +62,7 @@ def test_exit_one_minute_past_the_limit_prices_as_a_full_time_based_stay():
 def test_the_breakdown_says_which_condition_failed_and_by_how_much():
     """The line an operator most wants: why they are NOT getting the cheap rate."""
     result = quote([loaded()], stay(EARLY, 511))
-    line = next(x for x in result.breakdown.lines if x.code == "early_bird.not_applied")
+    line = next(x for x in result.breakdown.lines if x.code == "time_window.not_applied")
     assert "17:01" in line.text
     assert "17:00" in line.text
     assert line.delta_minor == 0, "a rule that did not apply must not move the fee"
@@ -72,7 +72,7 @@ def test_the_breakdown_says_which_condition_failed_and_by_how_much():
 def test_missing_the_entry_condition_alone_is_enough():
     """Both conditions are load-bearing, so both are exercised separately."""
     result = quote([loaded()], stay(LATE, 60))  # exits 10:14, well inside exit_by
-    line = next(x for x in result.breakdown.lines if x.code == "early_bird.not_applied")
+    line = next(x for x in result.breakdown.lines if x.code == "time_window.not_applied")
     assert "09:14 is after the 09:00 entry limit" in line.text
     assert result.fee_minor == 800, "priced on increments, not on the early-bird rate"
 

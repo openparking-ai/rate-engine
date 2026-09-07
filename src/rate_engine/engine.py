@@ -42,18 +42,29 @@ from .findings import (
 from .plan import InvalidPlan, Plan
 from .rules import RULE_APPLIERS
 from .rules import daily_max as daily_max_rule
-from .rules import early_bird as early_bird_rule
 from .rules import increment as increment_rule
 from .rules import space_surcharge as space_surcharge_rule
+from .rules import time_window as time_window_rule
 from .stages import ACCUMULATE, ADJUST, CAP, QUALIFY, STAGES
 
 #: Which predicate decides whether a rule of each type qualifies for a stay.
 #: Registered beside the appliers rather than inferred, so a rule type that
 #: forgets to declare one is a KeyError at quote time instead of a rule that
 #: silently qualifies for everything.
+#: Stages whose rules are DEFINED in terms of the fee so far, and are therefore
+#: handed it. A cap is a ceiling on the running total; an adjustment is a
+#: percentage or an amount ON it. Neither can SET the total -- both return a Line
+#: like every other rule, and the engine adds it. The read is one-way.
+#:
+#: ADJUST joined this list in A2, when `time_window`'s `adjust` effect became the
+#: first rule type to run there. It is the LAST stage on purpose: an adjustment
+#: applied before the cap and the surcharge would take a percentage of a number
+#: the customer is not being charged.
+STAGES_GIVEN_THE_RUNNING_TOTAL: frozenset[str] = frozenset({CAP, ADJUST})
+
 QUALIFIERS = {
     "increment": lambda rule, stay, plan: increment_rule.qualifies(rule, stay),
-    "early_bird": early_bird_rule.qualifies,
+    "time_window": time_window_rule.qualifies,
     "daily_max": daily_max_rule.qualifies,
     "space_surcharge": space_surcharge_rule.qualifies,
 }
@@ -311,8 +322,6 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     qualified_at_qualify = _qualifying(plan, stay, QUALIFY)
 
     for stage in STAGES:
-        if stage == ADJUST:
-            continue  # no rule type ships at ADJUST in A1
         if stage == ACCUMULATE and qualified_at_qualify:
             # A special that qualified IS the base. Not a discount on the
             # time-based charge and not the cheaper of the two -- it replaces it.
@@ -327,7 +336,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
                 continue
             if not QUALIFIERS[rule.type](rule, stay, plan):
                 continue
-            if stage == CAP:
+            if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor)
             else:
                 lines = applier(rule, stay, plan)

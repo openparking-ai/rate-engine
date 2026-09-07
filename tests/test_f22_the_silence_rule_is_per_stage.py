@@ -44,7 +44,7 @@ def _codes(document: dict, space_class: str = "standard") -> list[str]:
 def test_a_QUALIFY_rule_that_did_not_qualify_STILL_SPEAKS():
     """The half that was always true, and the reason the distinction exists."""
     codes = _codes(copy.deepcopy(DOWNTOWN_V2))
-    assert "early_bird.not_applied" in codes, (
+    assert "time_window.not_applied" in codes, (
         "the special that did not apply said nothing, so the breakdown cannot answer "
         "'why didn't I get the early bird rate'"
     )
@@ -82,8 +82,15 @@ def test_the_silence_rule_holds_at_EVERY_non_qualify_stage_that_ships():
     # rule outside QUALIFY covers it, so none of them may appear.
     non_qualify_ids = set()
     for rule in document["rules"]:
-        stage, _builder = RULE_TYPES[rule["type"]]
-        if stage != QUALIFY:
+        # The rule's OWN stage, not the type's. A type may now run at more than
+        # one stage -- `time_window` is a base at QUALIFY and an adjustment at
+        # ADJUST -- so the registry answers "where may this type run" and the
+        # rule answers "where does this one run". The loader makes the document's
+        # claim and the code's derivation agree, so reading it here is still a
+        # derivation rather than a list somebody types.
+        stages, _builder = RULE_TYPES[rule["type"]]
+        assert rule["stage"] in stages, f"{rule['id']} states a stage its type cannot run at"
+        if rule["stage"] != QUALIFY:
             rule["space_classes"] = ["vip"]
             non_qualify_ids.add(rule["type"])
     assert non_qualify_ids, "no non-QUALIFY rule type ships, so this proves nothing"

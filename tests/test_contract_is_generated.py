@@ -81,25 +81,43 @@ def test_the_rule_type_table_is_derived_from_the_registry():
     )
 
 
+#: The plant for the note beside the table, and it is the MIRROR of the one
+#: above: it takes ADJUST away rather than adding to it.
+#:
+#: **The plant this replaces is dead and was replaced rather than argued with.**
+#: It registered an extra rule type AT ADJUST and required the note to stop
+#: saying ADJUST was empty. That worked while ADJUST shipped nothing. A2 put
+#: `time_window`'s `adjust` effect there, so both renderings now say "every
+#: stage", the sentence cannot move, and the control could only ever pass --
+#: which is worse than no control. Narrowing the type's registered stages empties
+#: ADJUST again while leaving every existing plan valid, because the example
+#: plan's window is a base and runs at QUALIFY either way.
+NARROW_A_RULE_TYPE = (
+    "rules/time_window.py",
+    'register("time_window", STAGES_RUN_AT, build, apply)',
+    'register("time_window", (QUALIFY,), build, apply)  # PLANTED: ADJUST undeclared',
+)
+
+
 @pytest.mark.guarantee("F9")
 def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
-    """The same plant, on the sentence beside the table.
+    """The same idea, on the sentence beside the table.
 
     A true sentence sitting next to a checked table, borrowing its credit, is one
-    of the named failures in this project's process notes. ADJUST ships no rule
-    type and the document says so because it COUNTED -- so the moment a stage
-    stops being empty, the sentence has to stop saying it.
+    of the named failures in this project's process notes. Every stage now
+    carries a rule type and the document says so because it COUNTED -- so the
+    moment a stage goes back to being empty, the sentence has to stop saying it.
     """
     baseline = _render()
-    assert "Stages with no rule type in this version: ADJUST." in baseline
+    assert "Every stage has at least one rule type in this version." in baseline
 
-    with planted(*ADD_A_RULE_TYPE):
+    with planted(*NARROW_A_RULE_TYPE):
         planted_render = _render()
 
-    assert "Stages with no rule type in this version: ADJUST." not in planted_render, (
-        "the note about empty stages did not change when ADJUST stopped being empty"
+    assert "Every stage has at least one rule type in this version." not in planted_render, (
+        "the note about empty stages did not change when ADJUST went back to empty"
     )
-    assert "Every stage has at least one rule type in this version." in planted_render
+    assert "Stages with no rule type in this version: ADJUST." in planted_render
 
 
 @pytest.mark.guarantee("F9")

@@ -15,7 +15,7 @@ garage pricing weekends wrong and a document saying it does not. So a key this
 version does not know is a refusal that names the key.
 
 **TIME. The plan states its timezone and every stay is an aware instant.**
-This is not incidental. `early_bird` speaks of "enter by 09:00"; `daily_max`
+This is not incidental. `time_window` speaks of "enter by 09:00"; `daily_max`
 speaks of a day. Both are wall-clock ideas and neither means anything without a
 zone -- and a day is 23 or 25 hours across a DST transition, so "24 hours" and
 "a calendar day" are genuinely different rules rather than two spellings of one.
