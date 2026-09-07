@@ -71,13 +71,34 @@ def _cmd_validate(args) -> int:
         return 0
     print(
         f"\n  plan {body['plan_version']}: {body['gaps']} gap(s), "
-        f"{body['conflicts']} conflict(s)"
+        f"{body['conflicts']} conflict(s) -- "
+        f"{body['outstanding']} outstanding, {body['settled']} settled"
     )
-    print("  Each one is a decision for the owner. The engine will refuse a stay that")
-    print("  hits an undecided gap rather than invent a fee for it.\n")
-    for finding in body["findings"]:
-        print(f"    [{finding['kind']}] {finding['code']}")
-        print(f"      {finding['text']}\n")
+    # THE CORRECTED SENTENCE. What stood here said the engine "will refuse a stay
+    # that hits an UNDECIDED gap", which is false in the direction that matters:
+    # it refuses a stay that hits ANY of these, decided or not. That is the
+    # correct behaviour -- `decisions[]` carries a code and a free-text note, and
+    # a note cannot price a stay -- but it is not what the sentence promised, and
+    # an owner who read it would think working down the list made stays priceable.
+    print("  Each one is a decision for the owner. Recording a decision ACKNOWLEDGES")
+    print("  a finding; it does not price it. The engine refuses a stay that hits any")
+    print("  of these -- settled ones included -- rather than invent a fee for it. To")
+    print("  make one priceable, add a RULE that covers it: that is a plan change,")
+    print("  and it is visible.\n")
+
+    for heading, decided in (("OUTSTANDING", False), ("SETTLED", True)):
+        listed = [f for f in body["findings"] if f["decided"] is decided]
+        if not listed:
+            continue
+        print(f"  {heading} ({len(listed)})")
+        for finding in listed:
+            print(f"    [{finding['kind']}] {finding['code']}")
+            print(f"      {finding['text']}\n")
+
+    # Non-zero while ANY finding stands, settled ones included. Exiting 0 once an
+    # owner had acknowledged everything would say the plan was clear when stays
+    # hitting those gaps are still refused -- the same false promise the sentence
+    # above used to make, moved into the exit code where a script would read it.
     return 1
 
 

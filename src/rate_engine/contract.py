@@ -22,7 +22,7 @@ from .breakdown import Ledger
 from .engine import Quote, Stay, make_stay, quote
 from .findings import Refused
 from .plan import InvalidPlan, load_plan, parse_instant
-from .validator import validate_plan
+from .validator import undecided, validate_plan
 
 SCHEMA_VERSION = 1
 
@@ -102,13 +102,38 @@ def invalid_response(error: Exception) -> dict[str, Any]:
 
 
 def validate_response(plan) -> dict[str, Any]:
+    """Every finding, split into the ones the owner still has to look at and the
+    ones they have already acknowledged.
+
+    **A DECISION IS AN ACKNOWLEDGEMENT, NOT A PRICE.** `decisions[]` carries a
+    `code` and a free-text `note`, and a note cannot price a stay. So `settled`
+    does NOT mean "the engine will now answer this" -- a stay hitting a SETTLED
+    gap is refused exactly as one hitting an outstanding gap is, and
+    `tests/test_f1_never_guesses.py::test_a_stay_hitting_a_DECIDED_gap_is_still_refused`
+    is the line that holds it there. The split exists because an owner working
+    through a list needs to know what is left, not because deciding changes an
+    answer. The way to make a gap price is to add a RULE, which is a visible plan
+    change -- that is how §8 says an owner resolves a gap.
+
+    `decided` is stamped here rather than on the Finding, because decidedness is
+    a property of (finding, plan) and a Finding does not know which plan it came
+    from. The membership test itself is NOT re-implemented here: `undecided()`
+    owns the rule that a decision matches on CODE, and a second copy of that rule
+    at a second site is exactly the drift findings.py exists to prevent.
+    """
     findings = validate_plan(plan)
+    outstanding_codes = {f.code for f in undecided(plan)}
+    serialized = [
+        {**f.to_json(), "decided": f.code not in outstanding_codes} for f in findings
+    ]
     return {
         "schema_version": SCHEMA_VERSION,
         "plan_version": plan.plan_version,
-        "findings": [f.to_json() for f in findings],
+        "findings": serialized,
         "gaps": sum(1 for f in findings if f.is_gap),
         "conflicts": sum(1 for f in findings if not f.is_gap),
+        "outstanding": sum(1 for f in serialized if not f["decided"]),
+        "settled": sum(1 for f in serialized if f["decided"]),
     }
 
 
