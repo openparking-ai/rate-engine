@@ -23,40 +23,20 @@ required and why a naive timestamp is refused.
 
 from __future__ import annotations
 
-from datetime import time
-
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import QUALIFY
+from ..wallclock import local_minute, parse_limit
 from . import Rule, common_fields, register
 
 EXTRA = {"enter_by", "exit_by", "price_minor"}
 
 
-def _local_time(raw: dict, key: str, where: str) -> time:
-    from ..plan import InvalidPlan
-
-    value = raw[key]
-    if not isinstance(value, str):
-        raise InvalidPlan(f"{where}.{key} must be a 'HH:MM' local time string.")
-    try:
-        parsed = time.fromisoformat(value)
-    except ValueError as exc:
-        raise InvalidPlan(f"{where}.{key} is not a 'HH:MM' time: {value!r} ({exc}).") from exc
-    if parsed.tzinfo is not None:
-        raise InvalidPlan(
-            f"{where}.{key} must not carry an offset. It is a wall-clock time read in "
-            "the plan's own timezone; an offset here would fight the plan's zone across "
-            "a DST transition."
-        )
-    return parsed
-
-
 def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
     rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
     params = {
-        "enter_by": _local_time(raw, "enter_by", where),
-        "exit_by": _local_time(raw, "exit_by", where),
+        "enter_by": parse_limit(raw, "enter_by", where),
+        "exit_by": parse_limit(raw, "exit_by", where),
         "price_minor": as_non_negative_minor(raw["price_minor"], f"{where}.price_minor"),
     }
     return Rule(
@@ -67,8 +47,12 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
 
 def _failures(rule: Rule, stay, plan) -> list[str]:
     """Every condition this stay fails, in plain English. Empty means it qualifies."""
-    entry_local = stay.entry_at.astimezone(plan.timezone)
-    exit_local = stay.exit_at.astimezone(plan.timezone)
+    # TRUNCATED TO THE MINUTE, and the limit is refused if it is finer -- see
+    # wallclock.py. Compared at full precision, an entry at 09:00:00.001 failed a
+    # 09:00 limit and the line below rendered "entry 09:00 is after the 09:00
+    # entry limit": a sentence contradicting itself, deciding $18 on a microsecond.
+    entry_local = local_minute(stay.entry_at, plan.timezone)
+    exit_local = local_minute(stay.exit_at, plan.timezone)
     failed: list[str] = []
     if entry_local.time() > rule.params["enter_by"]:
         failed.append(
