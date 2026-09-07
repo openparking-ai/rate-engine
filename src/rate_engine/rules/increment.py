@@ -35,8 +35,33 @@ from ..money import as_non_negative_minor, format_minor
 from ..stages import ACCUMULATE
 from . import Rule, common_fields, register
 
+#: What a PLAN may state. The loader checks against this.
 #: A1 implements exactly one. The field is still required -- see the docstring.
 ROUNDING_MODES: tuple[str, ...] = ("ceil",)
+
+
+def _ceil_periods(remainder: int, period_minutes: int) -> int:
+    """Any part of a period is the whole of it. Integer arithmetic only."""
+    return -(-remainder // period_minutes)
+
+
+#: What `apply()` IMPLEMENTS, mode -> the function that counts repeat periods.
+#:
+#: **This is deliberately a SECOND list, and checking against `ROUNDING_MODES`
+#: instead would rebuild the defect it exists to stop.** `apply()` used to
+#: hardcode ceil and never read the field at all: setting `rounding` to anything
+#: -- `floor`, `nearest`, `banana`, `null` -- produced the identical fee, which
+#: nothing noticed because the loader only ever let `ceil` through.
+#:
+#: That is harmless today and is a wrong fee tomorrow. A2 adds `floor` to
+#: `ROUNDING_MODES`; if the applier validated against that same list it would
+#: accept `floor` and go on pricing as ceil, silently, on a plan whose document
+#: says floor and whose owner believes it. An operator cannot catch that by
+#: reading their plan, because their plan is right.
+#:
+#: So the applier asks what it can actually DO. A mode the loader accepts and
+#: this table does not implement is refused, loudly, instead of mispriced.
+PERIOD_COUNTERS = {"ceil": _ceil_periods}
 
 EXTRA = {
     "first_period_minutes",
@@ -112,21 +137,41 @@ def qualifies(rule: Rule, stay) -> bool:
 
 
 def apply(rule: Rule, stay, plan) -> list[Line]:
+    from ..plan import InvalidPlan
+
     p = rule.params
     minutes = stay.duration_minutes
     currency = plan.currency
 
+    # THE FIELD IS CONSULTED, NOT ASSUMED. Unreachable through `load_plan` today
+    # -- the loader accepts only `ceil` and `ceil` is implemented -- and that is
+    # the point: it is the guard on the round that changes one of those two
+    # without the other. It fails loudly rather than returning a fee, because a
+    # plan priced under a rule it did not ask for is the failure this module
+    # exists to prevent, and a plan that cannot be priced is a refusal here as
+    # it is everywhere else.
+    rounding = p["rounding"]
+    count_periods = PERIOD_COUNTERS.get(rounding)
+    if count_periods is None:
+        raise InvalidPlan(
+            f"rule {rule.id!r} states rounding {rounding!r}, which this version "
+            f"does not implement (it implements: {', '.join(sorted(PERIOD_COUNTERS))}). "
+            "Refused rather than priced under a different rule: the fee would have "
+            "been right for `ceil` and wrong for the plan, on a document that reads "
+            "correctly to whoever wrote it."
+        )
+
     first_len = p["first_period_minutes"]
     repeat_len = p["repeat_period_minutes"]
 
-    # `ceil` on the first period too: any part of it is the whole of it. A stay
-    # shorter than one first period is one first period, which is why a zero
-    # first_period_minor is the only way to express a free interval.
+    # The rounding mode governs the REPEAT periods. The first period is not a
+    # rounding decision: a stay shorter than one first period is one first
+    # period under every mode, which is why a zero `first_period_minor` is the
+    # only way to express a free interval.
     if minutes <= first_len:
         repeats = 0
     else:
-        remainder = minutes - first_len
-        repeats = -(-remainder // repeat_len)  # ceil, integer only
+        repeats = count_periods(minutes - first_len, repeat_len)
 
     lines = [
         Line(

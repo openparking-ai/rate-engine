@@ -271,7 +271,11 @@ state the rounding direction explicitly, with no default.
 
 **That rounding is not the rounding this version already has.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
-stay is two hours. A multiplier's rounding direction decides fractions of a
+stay is two hours. **The applier reads that field and refuses a mode it does not
+implement** — so A2 adding `floor` to the modes a plan may state is a real
+change, not a plan that quietly keeps pricing as `ceil` (F15).
+
+A multiplier's rounding direction decides fractions of a
 **cent**. The two share a word and nothing else, and **this module does not round
 money anywhere today** — `money.py` says so in as many words, and the arithmetic
 matches it: every A1 rule is an integer add or an integer replace. A2 introduces

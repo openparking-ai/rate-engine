@@ -180,6 +180,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "which is the exact way another repo lost eight wiring guarantees while "
         "its build stayed green",
     ),
+    # P4. "make apply() ignore the field and require red" -- the plant restores
+    # exactly the shipped behaviour: the counter is chosen without ever looking
+    # at what the plan asked for.
+    "F15": (
+        "tests/test_f15_rounding_is_consulted.py",
+        "rules/increment.py",
+        "    count_periods = PERIOD_COUNTERS.get(rounding)",
+        "    count_periods = _ceil_periods  # PLANTED: the field is ignored again",
+        "the applier stops reading `rounding` and always rounds up, so a plan "
+        "stating a mode this version does not implement is priced as ceil instead "
+        "of refused -- a wrong fee behind a plan that reads correctly",
+    ),
     # P1's two arms. F12 is the split an owner reads; F12b is the line that stops
     # the split from turning into "settled means priced" the first time somebody
     # tidies it. The F12b plant is the whole defect in three lines -- a decision
