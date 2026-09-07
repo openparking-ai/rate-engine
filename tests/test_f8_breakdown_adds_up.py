@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from fixtures import CORPUS, loaded
+from fixtures import CORPUS, DOWNTOWN_V2, loaded
 from rate_engine.breakdown import Ledger, Line
 from rate_engine.engine import quote
 from rate_engine.findings import Refused
@@ -106,3 +106,123 @@ def test_the_sum_check_can_tell_a_wrong_total_from_a_right_one():
     ledger.add(Line(code="b", rule_id=None, text="b", delta_minor=-300))
     assert ledger.total_minor == 500
     assert ledger.total_minor != 501
+
+
+# --- K3: the amended property, established by probing rather than assumed -----
+#
+# The amendment asked that "a rule producing an effect with no ledger entry, or a
+# ledger entry with no effect, is REFUSED AT REGISTRATION". Probing the branch
+# split that into three, and only one of them was a real hole:
+#
+#   effect with no entry  -- IMPOSSIBLE by construction. The applier is handed
+#                            (rule, stay, plan); there is no ledger to reach and
+#                            no return channel but Lines. Proven below.
+#   entry with no effect  -- NOT A DEFECT. Zero-delta lines are required by the
+#                            design; every "NOT applied" line is one.
+#   a malformed return    -- THE REAL HOLE. It used to reach Ledger.add and die
+#                            with an AttributeError naming neither rule nor type.
+
+
+def _stay_and_plan(applier, name: str):
+    """Register a test-only rule type and build a plan whose only rule is it."""
+    import copy
+
+    from rate_engine.engine import QUALIFIERS
+    from rate_engine.plan import load_plan
+    from rate_engine.rules import Rule, common_fields, register
+    from rate_engine.stages import ACCUMULATE
+
+    def build(raw, plan_space_classes, where):
+        rule_id, classes = common_fields(raw, plan_space_classes, where, {"amount"})
+        return Rule(
+            id=rule_id, type=name, stage=ACCUMULATE, space_classes=classes,
+            params={"amount": raw["amount"]},
+        )
+
+    register(name, ACCUMULATE, build, applier)
+    QUALIFIERS[name] = lambda rule, stay, plan: rule.covers(stay.space_class)
+
+    document = copy.deepcopy(DOWNTOWN_V2)
+    document["rules"] = [
+        r for r in document["rules"] if r["id"] not in ("hourly", "eb-weekday")
+    ] + [
+        {
+            "id": f"{name}-1", "type": name, "stage": "ACCUMULATE",
+            "space_classes": ["standard", "vip"], "amount": 500,
+        }
+    ]
+    return load_plan(document)
+
+
+def _unregister(name: str) -> None:
+    from rate_engine.engine import QUALIFIERS
+    from rate_engine.rules import RULE_APPLIERS, RULE_TYPES
+
+    RULE_TYPES.pop(name, None)
+    RULE_APPLIERS.pop(name, None)
+    QUALIFIERS.pop(name, None)
+
+
+@pytest.mark.guarantee("F8")
+def test_a_rule_cannot_produce_an_effect_without_a_ledger_entry():
+    """Not asserted -- demonstrated. The rule tries, and has nothing to try with."""
+    plan = _stay_and_plan(lambda rule, stay, plan: [], "k3_effect_no_entry")
+    try:
+        result = quote([plan], CORPUS["worked_example"])
+        assert result.fee_minor == 0, (
+            "a rule returning no lines moved the fee, so a channel exists that the "
+            "ledger cannot see -- which is the whole defect F8 guards"
+        )
+        assert result.fee_minor == sum(x.delta_minor for x in result.breakdown.lines)
+    finally:
+        _unregister("k3_effect_no_entry")
+
+
+@pytest.mark.guarantee("F8b")
+def test_a_rule_returning_something_that_is_not_a_line_is_refused_by_name():
+    """It used to be an AttributeError from inside Ledger.add, two files away."""
+    plan = _stay_and_plan(
+        lambda rule, stay, plan: [{"code": "x", "delta_minor": 500}], "k3_not_a_line"
+    )
+    try:
+        with pytest.raises(TypeError) as caught:
+            quote([plan], CORPUS["worked_example"])
+        message = str(caught.value)
+        assert "k3_not_a_line" in message, "the refusal must name the rule TYPE"
+        assert "k3_not_a_line-1" in message, "and the offending rule"
+        assert "dict" in message
+    finally:
+        _unregister("k3_not_a_line")
+
+
+@pytest.mark.guarantee("F8b")
+def test_a_rule_returning_a_bare_value_instead_of_a_list_is_refused_by_name():
+    plan = _stay_and_plan(lambda rule, stay, plan: 500, "k3_bare_value")
+    try:
+        with pytest.raises(TypeError) as caught:
+            quote([plan], CORPUS["worked_example"])
+        assert "k3_bare_value" in str(caught.value)
+        assert "int" in str(caught.value)
+    finally:
+        _unregister("k3_bare_value")
+
+
+def test_a_zero_delta_line_is_correct_and_stays_accepted():
+    """The control on the item above: the fix must not have banned a legitimate shape.
+
+    A rule reporting that it did NOT apply returns a line with delta zero. If the
+    return-channel check had rejected those, every "Early bird NOT applied" line
+    would have died with it.
+    """
+    plan = _stay_and_plan(
+        lambda rule, stay, plan: [
+            Line(code="k3.zero", rule_id=rule.id, text="considered, no charge", delta_minor=0)
+        ],
+        "k3_zero_delta",
+    )
+    try:
+        result = quote([plan], CORPUS["worked_example"])
+        assert result.fee_minor == 0
+        assert any(x.code == "k3.zero" for x in result.breakdown.lines)
+    finally:
+        _unregister("k3_zero_delta")

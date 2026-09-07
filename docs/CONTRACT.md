@@ -153,6 +153,7 @@ never failed is a decoration.
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI return the same bytes for the same request, from one code path and one serializer. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
+| **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 <!--/gen:guarantees-->
 
 ## What this version does not do

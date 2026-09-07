@@ -305,7 +305,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
             if stage == QUALIFY:
                 # Emits its line either way: a special that did not apply is the
                 # line an operator most wants to read.
-                for line in applier(rule, stay, plan):
+                for line in _lines_of(rule, applier(rule, stay, plan)):
                     ledger.add(line)
                 continue
             if not QUALIFIERS[rule.type](rule, stay, plan):
@@ -314,7 +314,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
                 lines = applier(rule, stay, plan, ledger.total_minor)
             else:
                 lines = applier(rule, stay, plan)
-            for line in lines:
+            for line in _lines_of(rule, lines):
                 ledger.add(line)
 
     fee = ledger.total_minor
@@ -334,6 +334,47 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     return Quote(
         fee_minor=fee, currency=plan.currency, plan_version=plan.plan_version, breakdown=ledger
     )
+
+
+def _lines_of(rule, returned: object) -> list[Line]:
+    """A rule's ONLY channel to the fee is a list of Lines, and this enforces it.
+
+    Established by probing the branch rather than assumed: a rule CANNOT produce
+    an effect with no ledger entry, because the applier is handed
+    ``(rule, stay, plan)`` and nothing else -- there is no ledger to reach, no
+    running total to mutate, and no return channel but this one. That half of the
+    guarantee holds by construction and needs no check.
+
+    What was NOT handled is a malformed return. A rule returning dicts used to
+    reach `Ledger.add` and die there with
+    ``AttributeError: 'dict' object has no attribute 'delta_minor'`` -- a
+    stack trace from two files away that names neither the rule nor the rule
+    type. It failed, so nothing was mispriced; but "it crashes eventually" is not
+    the same promise as "it is refused, and the message says which rule type is
+    wrong", and only the second is any use to somebody writing a rule type.
+
+    Note what is deliberately NOT checked: a Line whose delta is zero. Those are
+    required by the design -- every "Early bird NOT applied" line is one -- so a
+    ledger entry with no monetary effect is correct behaviour here, not a defect.
+    Whether a line's ENGLISH matches its delta is not mechanically decidable, and
+    inventing a check that appears to decide it would be worse than saying so.
+    """
+    if not isinstance(returned, list):
+        raise TypeError(
+            f"rule type {rule.type!r} (rule {rule.id!r}) returned "
+            f"{type(returned).__name__}, not a list of Line. A rule's only way to "
+            "change the fee is to return Lines; there is no other channel, and "
+            "there is not going to be one."
+        )
+    for item in returned:
+        if not isinstance(item, Line):
+            raise TypeError(
+                f"rule type {rule.type!r} (rule {rule.id!r}) returned a "
+                f"{type(item).__name__} where a Line was required. Every entry in "
+                "the breakdown carries its own signed delta, and the fee is their "
+                "running total -- an entry that is not a Line has no delta to add."
+            )
+    return returned
 
 
 def _assert_ledger_is_the_fee(fee: int, ledger: Ledger) -> None:
