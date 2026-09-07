@@ -123,6 +123,11 @@ GUARANTEES: dict[str, str] = {
         "anything finer is rejected at load, because rounding it would silently "
         "discard a pricing decision the operator wrote."
     ),
+    "F19": (
+        "`validate-plan` probes every boundary the plan DECLARES -- entry limits and "
+        "exit limits as well as durations, each side of each -- so a conflict the "
+        "engine would refuse is one the owner was shown before the plan went live."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

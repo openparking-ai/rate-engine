@@ -84,8 +84,15 @@ not do".
 
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
-places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time a gap is a **refusal that names what is missing**.
+places it is needed: `validate-plan` reports them so an owner can decide, and at
+quote time a gap is a **refusal that names what is missing**.
+
+`validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
+exit limit, each period length and stated ceiling, either side of each, across
+every space class -- rather than a written list of scenarios or a search over all
+stays. That is exhaustive over what a rule can express today and is not a claim
+about every possible stay; the probe axes are derived from the rules, so a rule
+type qualifying on something new brings its own axis.
 
 **Deciding a finding does not resolve it.** `decisions[]` records that an owner
 has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
@@ -167,6 +174,7 @@ never failed is a decoration.
 | **F17b** | That refusal is at LOAD, so an unrenderable currency never reaches the renderer at all -- the membership check and the exponent read one table. |
 | **F18** | A wall-clock limit is compared at the granularity it is written and rendered in: the stay is truncated to the minute, so no breakdown line can say a time is after itself. |
 | **F18b** | And the LIMIT is refused rather than truncated. A plan may state 'HH:MM'; anything finer is rejected at load, because rounding it would silently discard a pricing decision the operator wrote. |
+| **F19** | `validate-plan` probes every boundary the plan DECLARES -- entry limits and exit limits as well as durations, each side of each -- so a conflict the engine would refuse is one the owner was shown before the plan went live. |
 | **F2** | A special rate is all-conditions-or-nothing. Miss one condition by a minute and it does not apply at all -- no pro-rating and no partial credit. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |

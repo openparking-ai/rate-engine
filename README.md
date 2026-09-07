@@ -45,10 +45,23 @@ missing**, never a number somebody would have had to invent:
       that class and no special rate qualified
 ```
 
-`rate-engine validate-plan` reports every such gap, and every conflict between
-rules, **before** a plan goes live — so the owner decides, not the software.
+`rate-engine validate-plan` probes **every boundary the plan itself declares** —
+every entry limit, every exit limit, every period length and stated ceiling, each
+side of each, across every space class — and reports the gaps and conflicts it
+finds **before** a plan goes live, so the owner decides rather than the software.
 That is the same mechanism in both places, not two implementations that agree
-today.
+today: a gap the validator reports and a gap a quote refuses on are the same
+object with the same identifier.
+
+**What it does not claim.** It is not a search over all possible stays, and no
+bounded probe set could be. Those boundaries are where a rule starts or stops
+qualifying, so a conflict a rule can currently express is one this finds — but a
+future rule type that qualifies on something it does not DECLARE as a time or a
+duration would need its own probe axis, and adding one is part of adding the rule
+type. **This sentence used to say it reported every conflict, full stop, and that
+was false:** every probe entered at 07:00, so two rules that both qualified only
+for an early entry never overlapped in any probe, and a plan reported clean would
+then refuse a real stay.
 
 ## Install and run
 

@@ -216,8 +216,15 @@ not do".
 
 A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
 at one stage whose resolution the plan does not settle. One mechanism serves both
-places it is needed: `validate-plan` reports them all so an owner can decide, and
-at quote time a gap is a **refusal that names what is missing**.
+places it is needed: `validate-plan` reports them so an owner can decide, and at
+quote time a gap is a **refusal that names what is missing**.
+
+`validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
+exit limit, each period length and stated ceiling, either side of each, across
+every space class -- rather than a written list of scenarios or a search over all
+stays. That is exhaustive over what a rule can express today and is not a claim
+about every possible stay; the probe axes are derived from the rules, so a rule
+type qualifying on something new brings its own axis.
 
 **Deciding a finding does not resolve it.** `decisions[]` records that an owner
 has seen a gap — `validate-plan` reports it as SETTLED rather than OUTSTANDING,
