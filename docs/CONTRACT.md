@@ -181,6 +181,7 @@ never failed is a decoration.
 | **F21** | A refusal's CODE names the cause that actually occurred. A negative total is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed. |
 | **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
+| **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
@@ -211,6 +212,29 @@ Named here so nobody adds them helpfully:
   inventing a pricing decision nobody made. An operator who wants the first
   fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
   in the plan.
+
+## A stay of zero length pays the first period
+
+**Entry and exit at the same instant is priced, not free, and not refused.** The
+first period covers `[0, first_period_minutes]`, so a car that enters and leaves
+without stopping pays `first_period_minor` -- the same as a car that stayed one
+minute or fifty-nine.
+
+It is a DECISION, and it is published here because an integrator cannot otherwise
+learn it: the number is correct under the rule as written, and it is the kind of
+edge a garage owner will be asked about at the counter.
+
+**It diverges from the platform's own older fee code, which returns zero for the
+same stay.** That divergence is known and is a later round's to reconcile; it is
+recorded rather than left for whoever notices the two answering differently.
+
+A negative stay -- exit before entry -- is a different thing and is REFUSED as a
+caller bug rather than priced at zero, because pricing it would hide it.
+
+**What would change this, and has not yet:** a grace period. A garage that
+declares one would make a zero-length stay free by the grace rule, and this
+paragraph would then describe only a plan that declares no grace. Grace is not in
+this version -- see the item above.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
 ## The occupancy multiplier, and why money stays an integer

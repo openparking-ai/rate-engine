@@ -368,6 +368,20 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "stops reacting at all -- the exact deletion that left all 97 tests green "
         "when the outside pass measured it",
     ),
+    # X11. The plant makes a zero-length stay free -- the behaviour Grok proposed
+    # and Gokhan has not overruled. The control exists so the DECISION cannot be
+    # changed by accident; changing it on purpose is a brief.
+    "F24": (
+        "tests/test_f24_a_zero_length_stay_is_priced.py",
+        "rules/increment.py",
+        "    if minutes <= first_len:",
+        "    if minutes == 0:  # PLANTED: a zero-length stay silently becomes free\n"
+        "        return []\n"
+        "    if minutes <= first_len:",
+        "a stay of zero minutes stops paying the first period, which is a pricing "
+        "decision being changed with nothing said -- and it is the exact behaviour "
+        "an outside reviewer asked for and the owner has not agreed to",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
