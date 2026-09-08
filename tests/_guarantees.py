@@ -173,7 +173,11 @@ GUARANTEES: dict[str, str] = {
     ),
     "F25": (
         "Whether a time window may run past midnight is stated by the PLAN, in "
-        "`day_span`, with no default -- the engine holds no day condition of its own."
+        "`day_span`, with no default -- the engine holds no day condition of its own. "
+        "`day_span` also says WHERE the exit limit falls: under a bounded span it is "
+        "`exit_by` on the entry date plus the span, so a limit past midnight is a "
+        "moment rather than a clock reading. `any_span` names no last day and keeps "
+        "the clock reading."
     ),
     "F26": (
         "A window applies on the days the PLAN states -- weekday names, or the "
@@ -251,6 +255,14 @@ GUARANTEES: dict[str, str] = {
         "that does not is refused at LOAD, naming what is missing. A rule left out "
         "would take a silent position, and array position deciding money is what "
         "this module refuses everywhere else."
+    ),
+    "F39": (
+        "A window's exit limit runs to the day its `day_span` allows. Under a "
+        "bounded span the limit is `exit_by` on the entry date plus the span, so "
+        "an evening window with an after-midnight limit applies to the car that "
+        "leaves the SAME evening as well as the one that leaves after midnight. "
+        "A limit that would have to WRAP to be reached is refused at load under "
+        "`same_day` and `any_span`, neither of which can say what day it falls on."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

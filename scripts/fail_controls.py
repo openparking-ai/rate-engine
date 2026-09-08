@@ -64,8 +64,10 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F2": (
         "tests/test_f2_all_conditions.py",
         "rules/time_window.py",
-        '    elif exit_local.time() > rule.params["exit_by"]:',
-        "    elif False:  # PLANTED: the exit condition can no longer fail",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
+        "    if exit_side is not None:",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
+        "    if False:  # PLANTED: the exit condition can no longer fail",
         "the window's exit condition is relaxed, so a stay that left after the "
         "limit is given the cheap rate anyway -- partial credit, which §8 forbids",
     ),
@@ -451,6 +453,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "`enter_from` becomes a field the loader validates, the plan states and "
         "the applier ignores -- the `increment.rounding` shape, which shipped in "
         "this module once -- so an evening rate catches the seven-a.m. car",
+    ),
+    "F39": (
+        "tests/test_f39_the_exit_limit_runs_to_the_day_the_span_allows.py",
+        "rules/time_window.py",
+        "    limit_local = _exit_limit(entry_local, rule.params[\"exit_by\"], span_limit)\n"
+        "    if (exit_local.date(), exit_local.time()) > (limit_local.date(), limit_local.time()):",
+        "    limit_local = _exit_limit(entry_local, rule.params[\"exit_by\"], span_limit)\n"
+        "    if exit_local.time() > rule.params[\"exit_by\"]:  # PLANTED: back to a bare clock",
+        "the exit limit goes back to being a clock reading with no day on it, so an "
+        "evening window with an after-midnight limit again refuses the car that "
+        "leaves the same evening -- 23:45 read as 'after 02:00' -- and prices it on "
+        "the plan's ordinary rate instead",
     ),
     "F28": (
         "tests/test_f28_next_day_is_a_bounded_span.py",

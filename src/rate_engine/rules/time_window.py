@@ -93,7 +93,7 @@ here, in docs/CONTRACT.md, and in the round's receipt instead.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
@@ -213,6 +213,54 @@ def _dates(value: dict, where: str) -> tuple[date, ...]:
     if len(set(parsed)) != len(parsed):
         raise InvalidPlan(f"{where}.dates contains a duplicate.")
     return tuple(parsed)
+
+
+def _refuse_a_limit_that_cannot_be_meant(exit_by, enter_from, day_span: str, where: str) -> None:
+    """Refuse the two spans for which an exit limit BEFORE `enter_from` says nothing.
+
+    `exit_by` is read against a known last day: the limit is `exit_by` on the
+    entry date plus `DAY_SPAN_LIMITS[day_span]` days. Two spans cannot carry a
+    limit that would have to wrap past midnight to be reached:
+
+    * `same_day` -- the limit falls on the entry date itself, so an `exit_by`
+      before `enter_from` demands an exit BEFORE the entry. No stay can satisfy
+      it. Today such a window loads, validates clean and never fires, which is
+      the same class of defect as the one this round fixes: silence where the
+      plan's plain reading promises a rate.
+    * `any_span` -- there is no last day at all, so the limit has no date to
+      fall on. The wall-clock reading and "the first `exit_by` after entry" are
+      both available and they disagree, and the second would bind `any_span`
+      almost exactly like `next_day` and empty the mode. Neither is assumed.
+
+    `next_day` with an `exit_by` before `enter_from` is the ordinary evening
+    window and is untouched -- in at 18:00, out by 02:00 is the whole point.
+    """
+    from ..plan import InvalidPlan
+
+    if exit_by >= enter_from:
+        return
+
+    span_limit = DAY_SPAN_LIMITS[day_span]
+    if span_limit == 0:
+        raise InvalidPlan(
+            f"{where}.exit_by is {exit_by:%H:%M}, which is before "
+            f"{where}.enter_from ({enter_from:%H:%M}), and this rule states "
+            "day_span 'same_day', so the limit falls on the entry date and no "
+            "stay could ever leave before it arrived. State day_span 'next_day' "
+            "if the window runs past midnight, or move the limit later."
+        )
+    if span_limit is None:
+        raise InvalidPlan(
+            f"{where}.exit_by is {exit_by:%H:%M}, which is before "
+            f"{where}.enter_from ({enter_from:%H:%M}), and this rule states "
+            "day_span 'any_span', which names no last day for the limit to fall "
+            "on. That is refused rather than assumed: state a bounded day_span "
+            "so the limit has a date, or write it as TWO rules. Reading it as "
+            "the first exit_by after entry was considered and rejected -- it "
+            "would bind 'any_span' almost exactly like 'next_day' and empty the "
+            "span of meaning, which is a pricing decision this engine cannot "
+            "make for you."
+        )
 
 
 def _applies_on(raw: dict, where: str) -> dict:
@@ -419,11 +467,14 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
             "cannot make for you."
         )
 
+    exit_by = parse_limit(raw, "exit_by", where)
+    _refuse_a_limit_that_cannot_be_meant(exit_by, enter_from, day_span, where)
+
     params = {
         "applies_on": _applies_on(raw, where),
         "enter_from": enter_from,
         "enter_by": enter_by,
-        "exit_by": parse_limit(raw, "exit_by", where),
+        "exit_by": exit_by,
         "day_span": day_span,
         "effect": effect,
     }
@@ -454,6 +505,18 @@ def _day_failure(applies_on: dict, entry_local) -> str:
     return f"{entry_local.date().isoformat()} is not one of {stated}"
 
 
+def _exit_limit(entry_local, exit_by, span_limit: int) -> datetime:
+    """Where a BOUNDED window's exit limit falls: `exit_by`, `span_limit` days on.
+
+    Naive by construction. The comparison it feeds is (date, time) against
+    (date, time) -- both local readings of a wall clock, which is what the plan
+    states. Building an aware instant instead would put a UTC offset in the
+    middle of it, and an `exit_by` of 02:00 on the night the clocks change is
+    exactly where that goes wrong.
+    """
+    return datetime.combine(entry_local.date() + timedelta(days=span_limit), exit_by)
+
+
 def _span_failure(day_span: str, limit: int, entry_local, exit_local) -> str:
     # A row per BOUNDED span, so a span added to DAY_SPAN_LIMITS with no sentence
     # to explain it dies here loudly rather than printing a blank.
@@ -465,6 +528,52 @@ def _span_failure(day_span: str, limit: int, entry_local, exit_local) -> str:
         f"exit {exit_local:%H:%M} on {exit_local:%a %d %b} {relation} "
         f"({entry_local:%a %d %b}), and this rule states day_span {day_span!r}"
     )
+
+
+def _exit_failure(rule: Rule, entry_local, exit_local) -> str | None:
+    """The exit side of the test: the day span OR the limit, never both.
+
+    One line comes back, or none. A `same_day` stay that crossed midnight reports
+    the span alone even when it also left after `exit_by` -- the span is the
+    bigger fact and reporting both would read as two problems where there is one.
+
+    Split out of `_failures` so the one-directional sweep in F39 can compare this
+    predicate against the pre-fix one exactly, rather than against every
+    condition a rule has.
+    """
+    days_after = (exit_local.date() - entry_local.date()).days
+    span_limit = DAY_SPAN_LIMITS[rule.params["day_span"]]
+    if span_limit is not None and days_after > span_limit:
+        return _span_failure(rule.params["day_span"], span_limit, entry_local, exit_local)
+    if span_limit is None:
+        # 'any_span' names no last day, so the limit has no date to fall on and
+        # the wall-clock reading is the whole exit test. A window whose limit
+        # would have to WRAP to be reached is refused at load, so what reaches
+        # here always has `exit_by` at or after `enter_from` and means what it
+        # reads: out by this time, on whatever day the stay ends.
+        if exit_local.time() > rule.params["exit_by"]:
+            return (
+                f"exit {exit_local:%H:%M} is after the "
+                f"{rule.params['exit_by']:%H:%M} limit, and this rule states "
+                "day_span 'any_span', which names no last day"
+            )
+        return None
+
+    # A BOUNDED span gives the limit a date: `exit_by` on the entry date plus
+    # the span. Compared as (date, time) against the exit's own local reading
+    # -- two wall-clock readings, never two instants, so a window whose limit
+    # sits on a DST change is not decided by an offset.
+    #
+    # This is the fix. `exit_local.time() > exit_by` read 23:45 as "after
+    # 02:00" and refused every stay that left the same evening, which is
+    # every evening, overnight and weekend-night window in the estate.
+    limit_local = _exit_limit(entry_local, rule.params["exit_by"], span_limit)
+    if (exit_local.date(), exit_local.time()) > (limit_local.date(), limit_local.time()):
+        return (
+            f"exit {exit_local:%H:%M} on {exit_local:%a %d %b} is after the "
+            f"{limit_local:%H:%M} limit on {limit_local:%a %d %b}"
+        )
+    return None
 
 
 def _failures(rule: Rule, stay, plan) -> list[str]:
@@ -506,17 +615,9 @@ def _failures(rule: Rule, stay, plan) -> list[str]:
             f"{rule.params['enter_by']:%H:%M} entry limit"
         )
 
-    days_after = (exit_local.date() - entry_local.date()).days
-    span_limit = DAY_SPAN_LIMITS[rule.params["day_span"]]
-    if span_limit is not None and days_after > span_limit:
-        failed.append(_span_failure(rule.params["day_span"], span_limit, entry_local, exit_local))
-    elif exit_local.time() > rule.params["exit_by"]:
-        # Under 'any_span' the wall-clock limit is the whole exit test, so an
-        # overnight stay leaving before the limit qualifies. Under a bounded span
-        # a stay that ran past it has already failed above and never reaches here.
-        failed.append(
-            f"exit {exit_local:%H:%M} is after the {rule.params['exit_by']:%H:%M} limit"
-        )
+    exit_side = _exit_failure(rule, entry_local, exit_local)
+    if exit_side is not None:
+        failed.append(exit_side)
 
     # A `rate` effect carries its own ceiling, and it is a condition like any
     # other: a stay past it is not priced at the ceiling and not pro-rated -- the

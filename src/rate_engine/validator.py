@@ -31,6 +31,7 @@ from datetime import date, datetime, timedelta
 from .engine import Stay, find_conflicts, find_gaps
 from .findings import Finding
 from .plan import Plan
+from .rules.time_window import DAY_SPAN_LIMITS
 from .stages import ACCUMULATE, QUALIFY
 from .wallclock import DAYS_OF_WEEK
 
@@ -128,10 +129,23 @@ def _duration_marks(plan: Plan, entry_minute: int) -> set[int]:
 
     for rule in plan.rules_for_stage(QUALIFY):
         exit_by = rule.params.get("exit_by")
-        if exit_by is not None:
-            limit = (exit_by.hour * 60 + exit_by.minute) - entry_minute
-            if limit > 0:
-                marks.update({limit - 1, limit, limit + 1})
+        if exit_by is None:
+            continue
+        # Derived from the SAME corrected limit the rule now applies: `exit_by`
+        # on the entry date plus the span. The old line read the limit as a bare
+        # wall-clock time, so for an after-midnight `exit_by` -- 02:00 against a
+        # 20:00 entry -- it computed a NEGATIVE length, `limit > 0` dropped it,
+        # and the exit boundary of exactly those windows was never probed. That
+        # is why a plan carrying the defect this round fixes validated clean.
+        exit_minute = exit_by.hour * 60 + exit_by.minute
+        day_span = rule.params.get("day_span")
+        span_limit = DAY_SPAN_LIMITS[day_span] if day_span is not None else None
+        if span_limit is None:
+            limit = exit_minute - entry_minute
+        else:
+            limit = span_limit * 24 * 60 + exit_minute - entry_minute
+        if limit > 0:
+            marks.update({limit - 1, limit, limit + 1})
 
     # Always probe across a local midnight and across more than one day, because
     # a day-boundary branch that no probe reaches is a branch the validator

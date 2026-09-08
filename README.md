@@ -99,7 +99,16 @@ drifts.
   event and early bird differ in *which days* they apply on and *what hours* are
   typed into them, so they are one `time_window` rule with two fields rather than
   seven rule types. The window says WHEN — the days, both ends of the entry
-  range, the exit limit, and how far past midnight it may run. **The engine never
+  range, the exit limit, and how far past midnight it may run. `day_span` decides
+  where that limit FALLS: under `same_day` it is `exit_by` on the entry date, under
+  `next_day` it is `exit_by` the day after, so an evening window with a 02:00 limit
+  covers the car that leaves at 23:45 as well as the one that leaves at 00:30.
+  `any_span` names no last day, so its limit has no date to fall on and stays a
+  clock reading; a limit that would have to wrap past midnight is refused at load
+  under `any_span` and `same_day`, neither of which can say what day it means. What
+  this does NOT close: a window that can fire for *some* entries and never for
+  others — `same_day`, `enter_by` 23:00, `exit_by` 20:00 — still loads, and only the
+  totally unsatisfiable one is refused. **The engine never
   stores the word "weekend"**: it means Friday-to-Monday in one country and
   Saturday-to-Sunday in another, so a plan states the actual days. A holiday or
   an event states its own dates; there is no built-in calendar, because one would

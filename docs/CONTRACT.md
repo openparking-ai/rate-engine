@@ -249,8 +249,8 @@ POST /v1/quote
   Entered 09:14 Tue 03 Mar, 566 minutes, space class 'standard', plan
       downtown-2026-02                                                                       --
   Early bird NOT applied: entry 09:14 is after the 09:00 entry limit; exit 18:40
-      is after the 17:00 limit. All of its conditions must hold, so the stay
-      prices on the time-based rate                                                          --
+      on Tue 03 Mar is after the 17:00 limit on Tue 03 Mar. All of its
+      conditions must hold, so the stay prices on the time-based rate                        --
   Time-based: first hour 8.00 USD                                                      8.00 USD
   Time-based: 9 additional hours at 4.00 USD = 36.00 USD                              36.00 USD
   Daily max 30.00 USD (calendar_day) applied over the day: 44.00 USD reduced to
@@ -292,7 +292,7 @@ never failed is a decoration.
 | **F22b** | And the stage is not the whole answer. A rule TYPE may declare that it speaks when it did not qualify, so a weekend discount declining because it is a Tuesday says so on the receipt -- while a rule that was never about this space stays silent whatever it declared. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
 | **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
-| **F25** | Whether a time window may run past midnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. |
+| **F25** | Whether a time window may run past midnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. `day_span` also says WHERE the exit limit falls: under a bounded span it is `exit_by` on the entry date plus the span, so a limit past midnight is a moment rather than a clock reading. `any_span` names no last day and keeps the clock reading. |
 | **F26** | A window applies on the days the PLAN states -- weekday names, or the garage's own dates for a holiday or an event -- matched against the ENTRY's local date, and a window that did not match names the day that failed and the days it wanted. There is no built-in calendar and no preset: 'weekend' means different days in different countries. |
 | **F27** | `enter_from` is CONSULTED, not merely validated and stored. A window states BOTH ends of its entry range, which is what makes an evening rate expressible, and a stay arriving one minute before it opens does not qualify. |
 | **F28** | `day_span` `next_day` is BOUNDED: an exit on the following local day qualifies and one the day after that does not, where `any_span` accepts both. Proven on one stay, so the three spans are an axis rather than three unrelated scenarios. |
@@ -307,6 +307,7 @@ never failed is a decoration.
 | **F36** | The resolution modes DECIDE. Two windows qualifying on one stay resolve to the cheaper under `cheapest_wins` and to the stated one under `stated_order`, on the SAME stay -- and the rules that lost still appear, each naming the winner, both prices and the mode that chose. |
 | **F37** | A `stated_order` must name every rule at its stage EXACTLY ONCE, and one that does not is refused at LOAD, naming what is missing. A rule left out would take a silent position, and array position deciding money is what this module refuses everywhere else. |
 | **F38** | Every identifier the published documents name in backticks is one the code actually holds -- rule types, stages, finding codes, plan and rule fields, stated values, traits and guarantee ids -- and every file path they point at exists. Derived from both documents rather than from a list of the sentences somebody remembered to check. |
+| **F39** | A window's exit limit runs to the day its `day_span` allows. Under a bounded span the limit is `exit_by` on the entry date plus the span, so an evening window with an after-midnight limit applies to the car that leaves the SAME evening as well as the one that leaves after midnight. A limit that would have to WRAP to be reached is refused at load under `same_day` and `any_span`, neither of which can say what day it falls on. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
