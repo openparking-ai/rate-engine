@@ -3,20 +3,27 @@
   "effective_from": "2026-03-01T00:00:00-05:00",
   "timezone": "America/New_York",
   "currency": "USD",
-  "space_classes": ["standard", "reserved"],
+  "space_classes": [
+    "standard",
+    "reserved"
+  ],
   "resolution": {
-    "QUALIFY": "cheapest_wins",
-    "ACCUMULATE": "stated_order",
-    "CAP": "stated_order",
-    "SURCHARGE": "stated_order",
-    "ADJUST": "stated_order"
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
   },
+  "adjust_order": null,
   "rules": [
     {
       "id": "twenty-min",
       "type": "increment",
       "stage": "ACCUMULATE",
-      "space_classes": ["standard"],
+      "space_classes": [
+        "standard"
+      ],
       "first_period_minutes": 20,
       "first_period_minor": 200,
       "repeat_period_minutes": 20,
@@ -28,7 +35,9 @@
       "id": "reserved-surcharge",
       "type": "space_surcharge",
       "stage": "SURCHARGE",
-      "space_classes": ["reserved"],
+      "space_classes": [
+        "reserved"
+      ],
       "surcharge_minor": 1000
     }
   ],

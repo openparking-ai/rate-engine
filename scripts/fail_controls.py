@@ -63,10 +63,10 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     "F2": (
         "tests/test_f2_all_conditions.py",
-        "rules/early_bird.py",
+        "rules/time_window.py",
         '    elif exit_local.time() > rule.params["exit_by"]:',
         "    elif False:  # PLANTED: the exit condition can no longer fail",
-        "the early-bird exit condition is relaxed, so a stay that left after the "
+        "the window's exit condition is relaxed, so a stay that left after the "
         "limit is given the cheap rate anyway -- partial credit, which §8 forbids",
     ),
     "F3": (
@@ -100,11 +100,11 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     "F5": (
         "tests/test_f5_determinism.py",
-        "rules/early_bird.py",
-        # Re-anchored when X5 moved the comparison onto wallclock.local_minute.
-        # The PLANTED DEFECT IS UNCHANGED -- the plan's zone is swapped for the
-        # server's -- because re-pointing an anchor must not quietly weaken what
-        # the control proves.
+        "rules/time_window.py",
+        # Re-anchored when X5 moved the comparison onto wallclock.local_minute,
+        # and again when `early_bird` became `time_window`. The PLANTED DEFECT IS
+        # UNCHANGED -- the plan's zone is swapped for the server's -- because
+        # re-pointing an anchor must not quietly weaken what the control proves.
         "    entry_local = local_minute(stay.entry_at, plan.timezone)\n"
         "    exit_local = local_minute(stay.exit_at, plan.timezone)",
         "    entry_local = local_minute(stay.entry_at, None)  # PLANTED: the SERVER's zone\n"
@@ -176,8 +176,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 1",
-        "SCHEMA_VERSION = 2  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 2",
+        "SCHEMA_VERSION = 3  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -273,11 +273,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # X5, two arms. The first restores the raw comparison the L3 measured; the
     # second restores the truncation-of-the-limit that the brief's first draft
     # called for and amendment A3 reversed -- so the reversal itself has a control.
+    # The anchor is the two-line PAIR rather than the entry line alone: `apply`
+    # computes the same local minute for the applied line's wording, so the
+    # single line now appears twice and a one-line anchor would be refused by
+    # plant.py as ambiguous -- correctly. The planted defect is unchanged.
     "F18": (
         "tests/test_f18_wall_clock_is_minute_granular.py",
-        "rules/early_bird.py",
-        "    entry_local = local_minute(stay.entry_at, plan.timezone)",
-        "    entry_local = stay.entry_at.astimezone(plan.timezone)  # PLANTED: raw precision",
+        "rules/time_window.py",
+        "    entry_local = local_minute(stay.entry_at, plan.timezone)\n"
+        "    exit_local = local_minute(stay.exit_at, plan.timezone)",
+        "    entry_local = stay.entry_at.astimezone(plan.timezone)  # PLANTED: raw precision\n"
+        "    exit_local = local_minute(stay.exit_at, plan.timezone)",
         "an entry one microsecond past the limit fails again, and the breakdown "
         "renders 'entry 09:00 is after the 09:00 entry limit'",
     ),
@@ -375,18 +381,19 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the exact shape of the defect that shipped, print() appending a newline, "
         "and the one the old decoded comparison could not see",
     ),
-    # X9. The plant makes every stage behave the way the framework contract used
-    # to CLAIM they all did -- non-qualifying rules everywhere emitting zero lines.
+    # X9, re-anchored in A2 when the silence rule stopped being keyed on the stage
+    # alone. The PLANTED DEFECT IS THE SAME ONE -- the framework contract's old
+    # blanket claim, that every non-qualifying rule everywhere speaks -- expressed
+    # against the mechanism that decides it now.
     "F22": (
         "tests/test_f22_the_silence_rule_is_per_stage.py",
         "engine.py",
-        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n                continue",
-        "            if not QUALIFIERS[rule.type](rule, stay, plan):\n"
-        "                ledger.add(Line(code=f'{rule.type}.not_applied', rule_id=rule.id,\n"
-        "                                text='PLANTED', delta_minor=0))\n"
-        "                continue",
-        "every non-qualifying rule at every stage emits an explanatory zero line, so "
-        "a standard-space receipt lists VIP tiers that were never about that space",
+        "    return SPEAKS_UNQUALIFIED in RULE_TRAITS[rule.type] "
+        "and rule.covers(stay.space_class)",
+        "    return True  # PLANTED: every rule speaks, whatever it declared",
+        "every non-qualifying rule at every stage is asked for lines whatever it "
+        "declared and whatever space it covers, so a standard-space receipt carries "
+        "VIP tiers that were never about that space -- and carries their money",
     ),
     # X10. The plant is the L3's own probe: no-op the production invariant. Before
     # this control existed the WHOLE SUITE stayed green under it -- 97 passed.
@@ -418,12 +425,176 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # engine deciding the day span for every plan, whatever the plan says.
     "F25": (
         "tests/test_f25_day_span_is_declared_by_the_plan.py",
-        "rules/early_bird.py",
-        '    if rule.params["day_span"] == "same_day" and crosses_a_day:',
-        "    if crosses_a_day:  # PLANTED: the engine decides the day span again",
+        "rules/time_window.py",
+        "    if span_limit is not None and days_after > span_limit:",
+        "    if days_after > 0:  # PLANTED: the engine decides the day span again",
         "the engine imposes a same-local-day condition the plan cannot state or "
         "remove, so an overnight stay meeting both declared wall-clock limits is "
         "charged the time-based rate -- 60.00 where the early bird is 12.00",
+    ),
+    # A2's six, one per new guarantee. Each one alone must go red: a plant that
+    # took several of these files down together would prove that something broke,
+    # not that each guarantee measures its own subject.
+    "F26": (
+        "tests/test_f26_the_days_are_stated_by_the_plan.py",
+        "rules/time_window.py",
+        '    if not _applies_on_the_entry_date(rule.params["applies_on"], entry_local):',
+        "    if False:  # PLANTED: the days the plan states are no longer checked",
+        "a window applies on every day whatever the plan says, so a Tuesday is "
+        "given the weekend rate and the breakdown says nothing about it",
+    ),
+    "F27": (
+        "tests/test_f27_the_entry_window_has_a_lower_bound.py",
+        "rules/time_window.py",
+        '    if entry_local.time() < rule.params["enter_from"]:',
+        "    if False:  # PLANTED: enter_from is stored and never read",
+        "`enter_from` becomes a field the loader validates, the plan states and "
+        "the applier ignores -- the `increment.rounding` shape, which shipped in "
+        "this module once -- so an evening rate catches the seven-a.m. car",
+    ),
+    "F28": (
+        "tests/test_f28_next_day_is_a_bounded_span.py",
+        "rules/time_window.py",
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, '
+        '"any_span": None}',
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": None, '
+        '"any_span": None}  # PLANTED: next_day is unbounded',
+        "`next_day` stops being bounded and becomes a spelling of `any_span`, so a "
+        "car that left three days later at 05:00 is charged one night's overnight "
+        "rate -- the hole day_span itself was created to close",
+    ),
+    "F29": (
+        "tests/test_f29_a_rate_effect_reuses_increment.py",
+        "rules/time_window.py",
+        "        return [header] + increment.lines_for(\n"
+        '            effect["rate"], rule.id, stay.duration_minutes, plan.currency\n'
+        "        )",
+        '        _p = effect["rate"]  # PLANTED: a second period calculation\n'
+        '        _extra = max(0, stay.duration_minutes - _p["first_period_minutes"])\n'
+        '        _n = -(-_extra // _p["repeat_period_minutes"])\n'
+        "        return [\n"
+        "            header,\n"
+        '            Line(code="increment.first_period", rule_id=rule.id, text="PLANTED",\n'
+        '                 delta_minor=_p["first_period_minor"]\n'
+        '                 + _n * _p["repeat_period_minor"]),\n'
+        "        ]",
+        "a window's `rate` effect prices through its own copy of the period "
+        "calculation instead of calling `increment`, which is the arrangement that "
+        "lets a weekend rate and a weekday rate drift apart in money",
+    ),
+    "F30": (
+        "tests/test_f30_an_adjust_runs_after_cap_and_surcharge.py",
+        "stages.py",
+        "STAGES: tuple[str, ...] = (QUALIFY, ACCUMULATE, CAP, SURCHARGE, ADJUST)",
+        "STAGES: tuple[str, ...] = (QUALIFY, ACCUMULATE, ADJUST, CAP, SURCHARGE)"
+        "  # PLANTED: the adjustment runs first",
+        "an adjustment is taken before the cap and the surcharge, so the customer "
+        "is given a percentage of a number they are not being charged",
+    ),
+    "F31": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "rules/time_window.py",
+        '    if effect["rounding"] == "down":',
+        "    if True:  # PLANTED: the stated rounding is ignored",
+        "the direction a fractional minor unit goes stops being the plan's "
+        "decision -- every percentage rounds one way whatever the document says, "
+        "on a plan that reads correctly to whoever wrote it",
+    ),
+    # A2's second build group. W2 brings terminality and the trait that finally
+    # gives an ADJUST window its line; W3 brings the second cap type and the
+    # three stage categories the first one detonated.
+    #
+    # The two arms below share an ANCHOR and plant opposite defects, which is the
+    # only honest way to control a boolean: `return True` collapses the silence
+    # rule into "everything speaks", `return False` into "nothing does", and a
+    # single arm would go red for whichever it happened to pick.
+    "F22b": (
+        "tests/test_f22_the_silence_rule_is_per_stage.py::"
+        "test_a_rule_that_COULD_have_applied_and_did_not_SPEAKS_at_any_stage",
+        "engine.py",
+        "    return SPEAKS_UNQUALIFIED in RULE_TRAITS[rule.type] "
+        "and rule.covers(stay.space_class)",
+        "    return False  # PLANTED: no type may declare that it speaks",
+        "the declaration stops being read, so a weekend discount that declined "
+        "because it is a Tuesday says nothing at all and the receipt cannot answer "
+        "the question it was asked",
+    ),
+    "F32": (
+        "tests/test_f32_grace_is_terminal_and_free.py",
+        "engine.py",
+        "        if TERMINAL in RULE_TRAITS[rule.type]:",
+        "        if False:  # PLANTED: a terminal rule no longer stops the pipeline",
+        "a graced stay goes on through CAP, SURCHARGE and ADJUST, so a free stay in "
+        "a VIP space is charged the surcharge -- 'if customer decides to laeve "
+        "within that period it is free' with a five-dollar line under it",
+    ),
+    "F33": (
+        "tests/test_f33_two_caps_compose.py",
+        "rules/weekly_max.py",
+        "            delta_minor=ceiling - running_total_minor,",
+        "            delta_minor=-rule.params[\"max_minor\"],  # PLANTED: a cap that SUBTRACTS",
+        "a cap subtracts its own maximum instead of reducing the total to it, which "
+        "is arithmetic that depends on the order the caps ran in -- 500 one way and "
+        "1900 the other, from the same two ceilings on the same stay",
+    ),
+    # Re-anchored in W4: `if stage in RESOLVING:` stopped being unique in
+    # engine.py the moment `quote` grew a resolving branch of its own, and
+    # plant.py refused the ambiguity -- correctly. This anchors on the COMPOSING
+    # branch instead, which is what the guarantee is actually about, and plants
+    # the shipped defect there directly rather than inverting the test above it.
+    "F34": (
+        "tests/test_f34_composing_stages_do_not_conflict.py",
+        "engine.py",
+        "    # COMPOSING and order-independent: both apply, the total is the same either\n"
+        "    # way, and there is nothing for an owner to decide.\n"
+        "    return None",
+        "    return Finding(  # PLANTED: composing rules reported as a conflict again\n"
+        "        code=CONFLICT_MULTIPLE_RULES_AT_STAGE,\n"
+        '        text=f"{len(qualifying)} rules qualify at {stage}",\n'
+        "        rule_ids=ids,\n"
+        "    )",
+        "two rules that COMPOSE are reported as a conflict again, so a plan carrying "
+        "a daily AND a weekly cap refuses every stay in the garage -- the defect that "
+        "was latent until a second CAP rule type existed",
+    ),
+    "F35": (
+        "tests/test_f35_the_adjust_order_is_stated.py",
+        "engine.py",
+        "    if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is not None:",
+        "    if False:  # PLANTED: the stated order is ignored",
+        "the order an owner wrote is discarded and the adjustments run in rule-id "
+        "order instead, so a plan that says 'voucher first' quietly charges the "
+        "percentage first -- a wrong fee behind a document that reads correctly",
+    ),
+    # W4 and W5. The first two are the field that spent a whole round being
+    # required, validated, published -- and read by nothing.
+    "F36": (
+        "tests/test_f36_the_resolution_modes_decide.py",
+        "engine.py",
+        "    settings = plan.resolution[stage]",
+        '    settings = {"mode": "cheapest_wins"}  # PLANTED: the plan\'s mode is ignored',
+        "the plan's stated mode stops being read and every stage resolves by price, "
+        "so a garage that wrote 'the weekend rate wins' quietly gets the cheaper "
+        "rule instead -- a wrong fee behind a document that reads correctly",
+    ),
+    "F37": (
+        "tests/test_f37_a_stated_order_names_every_rule.py",
+        "plan.py",
+        "        if missing or extra:",
+        "        if False:  # PLANTED: an incomplete order loads again",
+        "an order naming two of three rules loads, so the third takes whatever "
+        "position the implementation happens to give it -- array position deciding "
+        "money, which is the defect `select_plan` exists to refuse",
+    ),
+    "F38": (
+        "tests/test_f38_the_documents_name_only_real_things.py",
+        "findings.py",
+        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"',
+        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_TIED_ON_PRICE"'
+        "  # PLANTED: the published code is renamed",
+        "a finding code is renamed in the code and not in the prose that names it, "
+        "so docs/CONTRACT.md keeps publishing an identifier nothing answers with -- "
+        "the true-sounding published sentence over correct code",
     ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",

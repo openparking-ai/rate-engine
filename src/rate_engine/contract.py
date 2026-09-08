@@ -26,7 +26,12 @@ from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
 from .validator import undecided, validate_plan
 
-SCHEMA_VERSION = 1
+#: **2 in A2, and the bump is not decoration.** A plan written for version 1 does
+#: not load on this version: the `early_bird` rule type is gone, and an unknown
+#: rule type is REJECTED rather than skipped. §2 versions this contract on the
+#: assumption it will gain fields, and that assumption is only safe while removals
+#: are announced -- so a removal moves the number.
+SCHEMA_VERSION = 2
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})

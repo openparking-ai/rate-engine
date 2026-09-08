@@ -32,6 +32,37 @@ by returning a Line.
    you and did not" is information; "a tier that was never about your space
    exists" is not -- but it is a rule about STAGES, not a blanket one.
    `tests/test_f22_the_silence_rule_is_per_stage.py` holds both halves.
+
+   **AND THE STAGE IS NOT THE WHOLE ANSWER EITHER, which A2 had to find out.**
+   The reasoning above is about the two KINDS of silence, and it used the stage as
+   the proxy for them because in A1 the stage was a perfect proxy: the only rule
+   type outside QUALIFY that could fail to apply failed by not covering the space.
+   `time_window` broke that. A window with an `adjust` effect runs at ADJUST and
+   can decline for a reason that has nothing to do with the space -- it is a
+   Tuesday and the rule says weekends -- which is squarely the FIRST kind, the
+   informative one, at a stage the old rule called silent. "Why didn't I get the
+   weekend discount?" had no answer in the breakdown.
+
+   So a type DECLARES it, with the `SPEAKS_UNQUALIFIED` trait, and the engine
+   calls such a rule's applier even when it did not qualify -- **provided the rule
+   COVERS the stay**, which is the half that was always right. A tier that was
+   never about this space is still silent, whatever it declares.
+
+5. It declares the STAGE OR STAGES it may run at, and a type that may run at
+   more than one DERIVES each rule's stage from that rule's own shape. This
+   exists because `time_window` is one condition with three effects and two of
+   them are bases while the third modifies the total: a window with a `flat` or
+   `rate` effect replaces the time-based charge and runs at QUALIFY, and one with
+   an `adjust` effect is a percentage or an amount ON the whole fee and therefore
+   runs at ADJUST, after the caps and the surcharges. Splitting that into two
+   rule types would have split one operator decision -- "the weekend is
+   different" -- across two documents, and the day-and-hours condition is
+   identical in both.
+
+   The plan still STATES each rule's stage, so the document is readable on its
+   own, and `check_stated_stage` makes the statement and the derivation agree.
+   Registering with a single stage is still the ordinary case and still works
+   unchanged: `register("daily_max", CAP, ...)` takes a bare string.
 """
 
 from __future__ import annotations
@@ -51,22 +82,103 @@ class Rule:
     space_classes: tuple[str, ...]
     #: Type-specific, already validated by the builder that produced it.
     params: dict[str, Any]
+    #: What the OPERATOR calls this rule, where its type lets them say. None for a
+    #: type that has no such field, and every type that does not set it behaves
+    #: exactly as it did.
+    #:
+    #: **It is a framework field rather than a `params` entry because the ENGINE
+    #: needs it.** A rule beaten by a terminal one gets a line saying so, and no
+    #: rule can write that line -- the rule that lost does not know it lost. The
+    #: engine had only the id to name it by, so a receipt read "'eb-weekday' also
+    #: qualified", which is a database key on a document a customer is handed.
+    label: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        """What to call this rule in a sentence a customer reads.
+
+        The operator's own label where there is one, and otherwise their own rule
+        id -- which they also wrote, so it is never a name this module invented.
+        """
+        return self.label or self.id
 
     def covers(self, space_class: str) -> bool:
         return space_class in self.space_classes
 
 
-#: type name -> (stage, builder). The builder validates and returns a Rule; the
-#: applier lives beside it and is looked up by type at pipeline time.
-RULE_TYPES: dict[str, tuple[str, Callable[..., Rule]]] = {}
+# --- traits ----------------------------------------------------------------
+#
+# What a rule type declares about ITSELF at registration, rather than what the
+# engine hardcodes about it by name. There has been exactly one rule in this
+# module that needed the pipeline to behave differently, and the tempting fix was
+# `if rule.type == "grace"` in engine.py -- which is the engine holding a pricing
+# decision no plan can see or change, the defect `day_span` was created to undo.
+
+#: When a rule of this type QUALIFIES, the pipeline stops after QUALIFY: nothing
+#: at CAP, SURCHARGE or ADJUST is applied, and this rule prices the stay alone.
+#: `grace` is the first one. Free means free -- a graced stay in a VIP space must
+#: not pick up the surcharge, and must not pick up anything at CAP.
+TERMINAL = "terminal"
+
+#: A rule of this type is asked for lines even when it did NOT qualify, at any
+#: stage, provided it covers the stay's space class. See item 4 above: the stage
+#: was a proxy for "could this have applied to you", and it stopped being one.
+SPEAKS_UNQUALIFIED = "speaks_unqualified"
+
+TRAITS: tuple[str, ...] = (TERMINAL, SPEAKS_UNQUALIFIED)
+
+#: type name -> the traits it declared. Every registered type has an entry, so a
+#: lookup is never a `.get` with a default that quietly means "no".
+RULE_TRAITS: dict[str, frozenset[str]] = {}
+
+#: type name -> (the stages it may run at, builder). The builder validates and
+#: returns a Rule; the applier lives beside it and is looked up by type at
+#: pipeline time.
+#:
+#: The stages are a TUPLE even when there is one of them, because the answer to
+#: "where does this type run" stopped being a single value the moment one type
+#: could be a base or an adjustment depending on its effect. A single registered
+#: stage is still the ordinary case -- see `register`.
+RULE_TYPES: dict[str, tuple[tuple[str, ...], Callable[..., Rule]]] = {}
 RULE_APPLIERS: dict[str, Callable[..., Any]] = {}
 
 
 def register(
-    rule_type: str, stage: str, builder: Callable[..., Rule], applier: Callable[..., Any]
+    rule_type: str,
+    stage: str | tuple[str, ...],
+    builder: Callable[..., Rule],
+    applier: Callable[..., Any],
+    traits: tuple[str, ...] = (),
 ):
-    if stage not in STAGES:
-        raise ValueError(f"{rule_type} declares stage {stage!r}, which is not a pipeline stage.")
+    """Register a rule type at the stage, or the stages, it may run at.
+
+    `stage` is a bare string for the ordinary case -- a type that runs in exactly
+    one place -- and a tuple for a type whose stage depends on the rule. Both
+    spellings are accepted rather than the tuple alone because `register` is this
+    module's published extension point: a rule type written against the earlier
+    signature must keep working, which is F7 applied to the framework itself.
+
+    `traits` is how a type tells the ENGINE that the pipeline must treat it
+    differently, rather than the engine knowing its name. It defaults to none, so
+    a type registered against the earlier signature declares nothing and behaves
+    exactly as it did.
+    """
+    stages = (stage,) if isinstance(stage, str) else tuple(stage)
+    if not stages:
+        raise ValueError(f"{rule_type} declares no stage at all.")
+    declared = frozenset(traits)
+    unknown_traits = sorted(declared - set(TRAITS))
+    if unknown_traits:
+        raise ValueError(
+            f"{rule_type} declares trait(s) {', '.join(map(repr, unknown_traits))}, "
+            f"which this version does not know. Registered traits: {', '.join(TRAITS)}."
+        )
+    unknown = [s for s in stages if s not in STAGES]
+    if unknown:
+        raise ValueError(
+            f"{rule_type} declares stage(s) {', '.join(map(repr, unknown))}, "
+            "which are not pipeline stages."
+        )
     if rule_type in RULE_TYPES:
         # A module RELOAD re-runs its register() call, and the fail-controls
         # reload rule modules to plant defects in them. Re-registration from the
@@ -79,8 +191,9 @@ def register(
                 f"rule type {rule_type!r} is registered by {incumbent} and "
                 f"{builder.__module__} is trying to claim it."
             )
-    RULE_TYPES[rule_type] = (stage, builder)
+    RULE_TYPES[rule_type] = (stages, builder)
     RULE_APPLIERS[rule_type] = applier
+    RULE_TRAITS[rule_type] = declared
 
 
 def build_rule(raw: object, plan_space_classes: tuple[str, ...], where: str) -> Rule:
@@ -98,8 +211,28 @@ def build_rule(raw: object, plan_space_classes: tuple[str, ...], where: str) -> 
             "rejected rather than skipped -- a skipped rule is a rate an operator "
             "believes is live and that nothing applies."
         )
-    _stage, builder = RULE_TYPES[rule_type]
+    _stages, builder = RULE_TYPES[rule_type]
     return builder(raw, plan_space_classes, where)
+
+
+def check_stated_stage(raw: dict, where: str, stage: str) -> None:
+    """The plan STATES a rule's stage; the code DERIVES it. This is where they meet.
+
+    Both exist on purpose. The statement is what makes a plan document readable
+    without this package in front of you; the derivation is what stops a document
+    from claiming a rule runs somewhere it does not. Neither is redundant, and a
+    disagreement between them is refused rather than resolved in favour of one.
+    """
+    from ..plan import InvalidPlan
+
+    if raw["stage"] != stage:
+        raise InvalidPlan(
+            f"{where}.stage is {raw['stage']!r} but rule type {raw['type']!r} runs at "
+            f"{stage}. The stage is stated in the plan so the document is "
+            "readable on its own, and checked here so the two cannot disagree. A "
+            "type that may run at more than one stage derives it from the rule's own "
+            "shape, so this is not a list to look up -- it is what this rule does."
+        )
 
 
 def common_fields(raw: dict, plan_space_classes: tuple[str, ...], where: str, extra: set[str]):
@@ -122,13 +255,13 @@ def common_fields(raw: dict, plan_space_classes: tuple[str, ...], where: str, ex
     if not isinstance(rule_id, str) or not rule_id.strip():
         raise InvalidPlan(f"{where}.id must be a non-empty string.")
 
-    declared_stage, _builder = RULE_TYPES[raw["type"]]
-    if raw["stage"] != declared_stage:
-        raise InvalidPlan(
-            f"{where}.stage is {raw['stage']!r} but rule type {raw['type']!r} runs at "
-            f"{declared_stage}. The stage is stated in the plan so the document is "
-            "readable on its own, and checked here so the two cannot disagree."
-        )
+    stages, _builder = RULE_TYPES[raw["type"]]
+    if len(stages) == 1:
+        # A type with one stage needs nothing from the rule to know which. One
+        # that may run at several derives it from the rule's own shape and calls
+        # check_stated_stage itself, because the derivation is the rule type's
+        # business and not the framework's -- see rules/time_window.py.
+        check_stated_stage(raw, where, stages[0])
 
     space_classes = raw["space_classes"]
     if (

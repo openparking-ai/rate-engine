@@ -15,7 +15,7 @@ garage pricing weekends wrong and a document saying it does not. So a key this
 version does not know is a refusal that names the key.
 
 **TIME. The plan states its timezone and every stay is an aware instant.**
-This is not incidental. `early_bird` speaks of "enter by 09:00"; `daily_max`
+This is not incidental. `time_window` speaks of "enter by 09:00"; `daily_max`
 speaks of a day. Both are wall-clock ideas and neither means anything without a
 zone -- and a day is 23 or 25 hours across a DST transition, so "24 hours" and
 "a calendar day" are genuinely different rules rather than two spellings of one.
@@ -33,20 +33,42 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .currency import excluded_reason, is_known
 from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
-from .stages import STAGES
+from .stages import ADJUST, RESOLVING
 
 
 class InvalidPlan(ValueError):
     """The plan document cannot be loaded. The message names the field."""
 
 
-#: Resolution modes a plan may state for a stage. A1 VALIDATES this field and
-#: does not act on it: with one rule type per stage the only way two rules
-#: qualify at once is two rules of the same type, and A1 refuses that as a
-#: conflict rather than resolving it. The field is required now so that A2 can
-#: add the resolution behaviour without changing the shape of a plan that
-#: already exists -- see F7, which is the guarantee that makes that safe.
+#: Resolution modes a plan may state, and A2 is where they finally DECIDE
+#: something. A1 validated this field, required it on every plan, published it in
+#: the contract -- and acted on it nowhere. `find_conflicts` said so in its own
+#: docstring. A required field that changes no answer is a decision the owner
+#: made and the software ignored, which this module has shipped once before.
+#:
+#: * `cheapest_wins` -- the LOWEST FEE FOR THE CUSTOMER wins. Compared on what
+#:   the competing rules themselves charge for this stay, which is the only
+#:   comparison available before the rest of the pipeline has run. Two rules at
+#:   the SAME price cannot be separated by it and are REFUSED, naming both, the
+#:   way two plan versions sharing an effective date already are.
+#: * `stated_order` -- the plan names the rule ids, in order, and the first one
+#:   that qualifies wins. It must name every rule at that stage exactly once: a
+#:   rule left out would take a silent position, and array position deciding
+#:   money is the disease `select_plan` exists to refuse.
 RESOLUTION_MODES: tuple[str, ...] = ("cheapest_wins", "stated_order")
+
+#: `adjust_order` is a LIST OF RULE IDS, or null, and the null has to be typed.
+#:
+#: **It is deliberately not part of `resolution`, and that is not tidiness.**
+#: A resolution mode answers "which of these is the price" -- an either/or, at a
+#: stage where only one rule can win. Two adjustments are not an either/or: BOTH
+#: apply, and the only open question is the sequence, because 20% off then 5.00
+#: off is not 5.00 off then 20% off. An order is not a choice, so it does not
+#: live in the field that records choices.
+#:
+#: Required-and-nullable, like `max_duration_minutes` and `week_starts_on`: a
+#: field that may simply be absent is a field somebody forgets while believing
+#: they set it. A plan with fewer than two adjustments writes null.
 
 PLAN_KEYS: frozenset[str] = frozenset(
     {
@@ -56,6 +78,7 @@ PLAN_KEYS: frozenset[str] = frozenset(
         "currency",
         "space_classes",
         "resolution",
+        "adjust_order",
         "rules",
         "decisions",
     }
@@ -79,6 +102,92 @@ def _require_keys(document: dict, keys: frozenset[str], where: str) -> None:
             "ignored key is how a plan an operator believes is live prices "
             "something else. Upgrade the engine, or remove the key."
         )
+
+
+def _resolution(document: dict, where: str) -> dict[str, dict]:
+    """How this plan settles two rules qualifying at one stage.
+
+    **Keyed by the RESOLVING stages and by nothing else.** It used to require an
+    entry for all five, and the three it could never act on were decisions that
+    did nothing -- a mode stated for CAP cannot choose between two caps, because
+    both of them apply. A key for a stage that cannot resolve is refused by name,
+    the way every unknown key here is.
+
+    ADJUST is the one that looks like an exception and is not: two adjustments do
+    need an order, but an order is not a choice, so it is stated separately in
+    `adjust_order`.
+    """
+    resolution = document["resolution"]
+    if not isinstance(resolution, dict):
+        raise InvalidPlan(f"{where}.resolution must be an object keyed by stage.")
+    _require_keys(resolution, frozenset(RESOLVING), f"{where}.resolution")
+
+    parsed: dict[str, dict] = {}
+    for stage in sorted(RESOLVING):
+        settings = resolution[stage]
+        at = f"{where}.resolution.{stage}"
+        if not isinstance(settings, dict) or "mode" not in settings:
+            raise InvalidPlan(
+                f"{at} must be an object carrying a `mode` of "
+                f"{', '.join(RESOLUTION_MODES)}."
+            )
+        mode = settings["mode"]
+        if mode not in RESOLUTION_MODES:
+            raise InvalidPlan(
+                f"{at}.mode is {mode!r}; expected one of {', '.join(RESOLUTION_MODES)}. "
+                "There is no default: which rule wins differs by state, so the engine "
+                "will not choose one for you."
+            )
+        allowed = {"mode", "order"} if mode == "stated_order" else {"mode"}
+        unknown = sorted(set(settings) - allowed)
+        if unknown:
+            raise InvalidPlan(
+                f"{at} carries key(s) this version does not understand: "
+                f"{', '.join(unknown)}. Rejected, not ignored."
+                + (" `order` belongs to `stated_order` and means nothing to "
+                   "`cheapest_wins`." if "order" in unknown else "")
+            )
+        if mode == "cheapest_wins":
+            parsed[stage] = {"mode": mode}
+            continue
+        if "order" not in settings:
+            raise InvalidPlan(
+                f"{at} is missing required field(s): order. `stated_order` is an "
+                "order, and it has to be stated."
+            )
+        order = settings["order"]
+        if not isinstance(order, list) or not all(isinstance(item, str) for item in order):
+            raise InvalidPlan(f"{at}.order must be a list of rule ids.")
+        if len(set(order)) != len(order):
+            raise InvalidPlan(f"{at}.order names a rule more than once.")
+        parsed[stage] = {"mode": mode, "order": tuple(order)}
+    return parsed
+
+
+def _check_stated_orders(resolution: dict[str, dict], rules, where: str) -> None:
+    """A stated order names every rule at its stage EXACTLY ONCE, or it is refused.
+
+    Checked here rather than in `_resolution` because it needs the rules, and
+    checked at LOAD rather than at quote time because it is a property of the
+    plan: an owner should meet it when they write the document, not when a
+    particular car leaves.
+    """
+    for stage, settings in resolution.items():
+        if settings["mode"] != "stated_order":
+            continue
+        at_stage = sorted(rule.id for rule in rules if rule.stage == stage)
+        missing = sorted(set(at_stage) - set(settings["order"]))
+        extra = sorted(set(settings["order"]) - set(at_stage))
+        if missing or extra:
+            raise InvalidPlan(
+                f"{where}.resolution.{stage}.order must name every rule at {stage} "
+                "exactly once. "
+                + (f"Missing: {', '.join(missing)}. " if missing else "")
+                + (f"Not a {stage} rule in this plan: {', '.join(extra)}. " if extra else "")
+                + "A rule left out of the order would take a silent position in it, "
+                "and array position deciding money is what this module refuses "
+                "everywhere else."
+            )
 
 
 def parse_instant(value: object, label: str) -> datetime:
@@ -106,7 +215,8 @@ class Plan:
     timezone_name: str
     currency: str
     space_classes: tuple[str, ...]
-    resolution: dict[str, str]
+    resolution: dict[str, dict]
+    adjust_order: tuple[str, ...] | None
     rules: tuple[Rule, ...]
     decisions: tuple[dict, ...]
 
@@ -185,17 +295,7 @@ def load_plan(document: object, where: str = "plan") -> Plan:
     if len(set(space_classes)) != len(space_classes):
         raise InvalidPlan(f"{where}.space_classes contains a duplicate.")
 
-    resolution = document["resolution"]
-    if not isinstance(resolution, dict):
-        raise InvalidPlan(f"{where}.resolution must be an object keyed by stage.")
-    _require_keys(resolution, frozenset(STAGES), f"{where}.resolution")
-    for stage, mode in resolution.items():
-        if mode not in RESOLUTION_MODES:
-            raise InvalidPlan(
-                f"{where}.resolution.{stage} is {mode!r}; expected one of "
-                f"{', '.join(RESOLUTION_MODES)}. There is no default: which rule wins "
-                "differs by state, so the engine will not choose one for you."
-            )
+    resolution = _resolution(document, where)
 
     raw_rules = document["rules"]
     if not isinstance(raw_rules, list) or not raw_rules:
@@ -209,6 +309,35 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         if rule.id in seen:
             raise InvalidPlan(f"{where}.rules contains two rules with id {rule.id!r}.")
         seen.add(rule.id)
+
+    _check_stated_orders(resolution, rules, where)
+
+    adjust_order = document["adjust_order"]
+    if adjust_order is not None:
+        adjustments = sorted(r.id for r in rules if r.stage == ADJUST)
+        if (
+            not isinstance(adjust_order, list)
+            or not all(isinstance(item, str) for item in adjust_order)
+        ):
+            raise InvalidPlan(
+                f"{where}.adjust_order must be a list of rule ids, or null. It is the "
+                "sequence the ADJUST rules are applied in, and an order is not a "
+                "choice -- see resolution, which records choices."
+            )
+        if len(set(adjust_order)) != len(adjust_order):
+            raise InvalidPlan(f"{where}.adjust_order names a rule more than once.")
+        if sorted(adjust_order) != adjustments:
+            # Named explicitly and exhaustively, never by position. A rule missing
+            # from the order would otherwise take a silent place in it, which is
+            # the array-order disease this module refuses at `select_plan`.
+            missing = sorted(set(adjustments) - set(adjust_order))
+            extra = sorted(set(adjust_order) - set(adjustments))
+            raise InvalidPlan(
+                f"{where}.adjust_order must name every ADJUST rule exactly once. "
+                + (f"Missing: {', '.join(missing)}. " if missing else "")
+                + (f"Not an ADJUST rule in this plan: {', '.join(extra)}. " if extra else "")
+                + "A rule left out of the order would take a silent position in it."
+            )
 
     decisions = document["decisions"]
     if not isinstance(decisions, list):
@@ -232,7 +361,8 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         timezone_name=timezone_name,
         currency=currency,
         space_classes=tuple(space_classes),
-        resolution=dict(resolution),
+        resolution=resolution,
+        adjust_order=tuple(adjust_order) if adjust_order is not None else None,
         rules=rules,
         decisions=tuple(decisions),
     )

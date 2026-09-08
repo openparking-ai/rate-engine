@@ -1,10 +1,11 @@
 """Wall-clock limits and the granularity they are compared at. ONE place.
 
-**The defect this closes.** `early_bird` compared `entry_local.time()` against an
-`enter_by` of `09:00` at full `datetime.time` precision, so an entry at
-`09:00:00.001` failed -- and the breakdown, which renders both sides with `%H:%M`,
-said *"entry 09:00 is after the 09:00 entry limit"*. A sentence that contradicts
-itself on its face, deciding an $18 difference on a microsecond nobody can see.
+**The defect this closes.** `time_window` -- then called `early_bird` -- compared
+`entry_local.time()` against an `enter_by` of `09:00` at full `datetime.time`
+precision, so an entry at `09:00:00.001` failed -- and the breakdown, which
+renders both sides with `%H:%M`, said *"entry 09:00 is after the 09:00 entry
+limit"*. A sentence that contradicts itself on its face, deciding an $18
+difference on a microsecond nobody can see.
 §8's first requirement is that this module is EXTREMELY CLEAR; that line is the
 worst available failure of it.
 
@@ -26,13 +27,25 @@ module cannot honour.
 `select_plan` compares `plan.effective_from <= stay.entry_at`: two absolute
 INSTANTS, not times of day. Truncating there would change which plan version is in
 force at a boundary -- a different rate card, not a rounder sentence. The date
-comparisons in `early_bird` and `daily_max.days_covered` are likewise unaffected:
+comparisons in `time_window` and `daily_max.days_covered` are likewise unaffected:
 truncating seconds cannot move a calendar date.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, time
+
+#: Day names a plan may state, in week order. **The index IS the weekday index
+#: `datetime.weekday()` returns**, which is what lets a stated day become a real
+#: date and back again without a second table.
+#:
+#: It lives here rather than on a rule type because three unrelated things read
+#: it -- `time_window` matches a stay's day against it, `weekly_max` turns a
+#: stated first-day-of-the-week into an offset, and `validator` turns a stated
+#: day back into a probe date. It began on `time_window` and `weekly_max` had to
+#: import it from there, which coupled a CAP rule to a QUALIFY rule's module for
+#: no reason except where the constant happened to be typed first.
+DAYS_OF_WEEK: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
 def parse_limit(raw: dict, key: str, where: str) -> time:

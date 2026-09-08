@@ -42,23 +42,40 @@ def test_the_corpus_straddles_every_duration_threshold(label, threshold):
 
 
 @pytest.mark.guarantee("F13")
-def test_the_corpus_straddles_the_early_bird_limits():
-    """Both conditions, each missed and each met -- F2 is only worth running if so."""
+def test_the_corpus_straddles_EVERY_time_window_condition():
+    """Every condition met and every condition missed, derived from the rule.
+
+    Read out of the reference plan's own window rather than from a list here, so
+    a condition ADDED to the rule type shows up as an unmeasured axis instead of
+    passing unnoticed -- which is exactly what happened when `enter_from` and
+    `applies_on` arrived. Each row below must have a fixture on both sides or F2,
+    F26 and F27 would pass against a corpus that could only ever reach one branch.
+    """
+    from rate_engine.wallclock import DAYS_OF_WEEK
+
     plan = loaded()
-    outcomes = set()
+    window = plan.rules[0].params
+    conditions: dict[str, set[bool]] = {
+        "applies_on": set(), "enter_from": set(), "enter_by": set(), "exit_by": set(),
+    }
     for s in CORPUS.values():
         if s.space_class != "standard":
             continue
         entry_local = s.entry_at.astimezone(plan.timezone)
         exit_local = s.exit_at.astimezone(plan.timezone)
-        outcomes.add(entry_local.time() <= plan.rules[0].params["enter_by"])
-        outcomes.add(
-            exit_local.date() == entry_local.date()
-            and exit_local.time() <= plan.rules[0].params["exit_by"]
+        conditions["applies_on"].add(
+            DAYS_OF_WEEK[entry_local.weekday()] in window["applies_on"]["days"]
         )
-    assert outcomes == {True, False}, (
-        "every fixture falls on the same side of an early-bird condition, so F2 would "
-        "pass without exercising the rule"
+        conditions["enter_from"].add(entry_local.time() >= window["enter_from"])
+        conditions["enter_by"].add(entry_local.time() <= window["enter_by"])
+        conditions["exit_by"].add(
+            exit_local.date() == entry_local.date()
+            and exit_local.time() <= window["exit_by"]
+        )
+    unmeasured = sorted(name for name, sides in conditions.items() if sides != {True, False})
+    assert not unmeasured, (
+        f"every fixture falls on the same side of: {', '.join(unmeasured)} -- those "
+        f"conditions are unmeasured, so a rule ignoring them would pass"
     )
 
 

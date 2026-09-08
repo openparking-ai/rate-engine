@@ -44,7 +44,7 @@ def _codes(document: dict, space_class: str = "standard") -> list[str]:
 def test_a_QUALIFY_rule_that_did_not_qualify_STILL_SPEAKS():
     """The half that was always true, and the reason the distinction exists."""
     codes = _codes(copy.deepcopy(DOWNTOWN_V2))
-    assert "early_bird.not_applied" in codes, (
+    assert "time_window.not_applied" in codes, (
         "the special that did not apply said nothing, so the breakdown cannot answer "
         "'why didn't I get the early bird rate'"
     )
@@ -82,8 +82,15 @@ def test_the_silence_rule_holds_at_EVERY_non_qualify_stage_that_ships():
     # rule outside QUALIFY covers it, so none of them may appear.
     non_qualify_ids = set()
     for rule in document["rules"]:
-        stage, _builder = RULE_TYPES[rule["type"]]
-        if stage != QUALIFY:
+        # The rule's OWN stage, not the type's. A type may now run at more than
+        # one stage -- `time_window` is a base at QUALIFY and an adjustment at
+        # ADJUST -- so the registry answers "where may this type run" and the
+        # rule answers "where does this one run". The loader makes the document's
+        # claim and the code's derivation agree, so reading it here is still a
+        # derivation rather than a list somebody types.
+        stages, _builder = RULE_TYPES[rule["type"]]
+        assert rule["stage"] in stages, f"{rule['id']} states a stage its type cannot run at"
+        if rule["stage"] != QUALIFY:
             rule["space_classes"] = ["vip"]
             non_qualify_ids.add(rule["type"])
     assert non_qualify_ids, "no non-QUALIFY rule type ships, so this proves nothing"
@@ -103,6 +110,100 @@ def test_the_silence_rule_holds_at_EVERY_non_qualify_stage_that_ships():
     assert body["findings"][0]["code"] == "GAP_NO_ACCUMULATE_RULE"
 
 
+#: A plan whose ONLY adjustment applies at the weekend, priced on a Tuesday. The
+#: window covers the space and declines for a reason that has nothing to do with
+#: the space -- which is the case the stage-keyed silence rule got wrong.
+WEEKEND_DISCOUNT = {
+    "plan_version": "speaks-2026-03",
+    "effective_from": "2026-01-01T00:00:00-05:00",
+    "timezone": "America/New_York", "currency": "USD",
+    "space_classes": ["standard", "vip"],
+    "resolution": {
+        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
+    },
+    "adjust_order": None,
+    "rules": [
+        {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
+         "space_classes": ["standard", "vip"], "first_period_minutes": 60,
+         "first_period_minor": 800, "repeat_period_minutes": 60,
+         "repeat_period_minor": 400, "rounding": "ceil", "max_duration_minutes": None},
+        {"id": "weekend-off", "type": "time_window", "stage": "ADJUST",
+         "space_classes": ["standard"], "label": "Weekend discount",
+         "applies_on": {"kind": "days_of_week", "days": ["sat", "sun"]},
+         "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+         "day_span": "any_span",
+         "effect": {"kind": "adjust", "direction": "discount",
+                    "amount": {"kind": "percent", "percent_bp": 2000},
+                    "rounding": "down"}},
+    ],
+    "decisions": [],
+}
+
+
+def _lines(document: dict, space_class: str = "standard") -> list[dict]:
+    status, body = run_quote(
+        {
+            "plans": [copy.deepcopy(document)], "entry_at": "2026-03-03T09:14:00-05:00",
+            "exit_at": "2026-03-03T10:40:00-05:00", "space_class": space_class,
+            "currency": "USD",
+        }
+    )
+    assert status == 200, body
+    return body["breakdown"]
+
+
+@pytest.mark.guarantee("F22b")
+def test_a_rule_that_COULD_have_applied_and_did_not_SPEAKS_at_any_stage():
+    """The hole the stage-keyed rule left, and the question it could not answer.
+
+    A weekend discount on a Tuesday is not "a tier that was never about your
+    space" -- it is a rate the customer nearly got, declining for a reason they
+    can act on next time. It runs at ADJUST, which the old rule called silent.
+    """
+    lines = _lines(WEEKEND_DISCOUNT)
+    declined = [ln for ln in lines if ln["code"] == "time_window.not_applied"]
+    assert declined, (
+        "the weekend discount declined and said nothing, so the breakdown cannot "
+        "answer 'why didn't I get the weekend discount?'"
+    )
+    assert declined[0]["delta_minor"] == 0, "a rule that did not apply moved the fee"
+    assert "Tuesday is not one of sat, sun" in declined[0]["text"]
+
+
+@pytest.mark.guarantee("F22b")
+def test_and_it_says_the_RIGHT_CONSEQUENCE_for_an_adjustment():
+    """An adjustment that did not apply does not change the basis of the stay.
+    Saying "the stay prices on the time-based rate" -- true of a base -- would
+    tell a customer their whole rate had changed, which is not what happened."""
+    declined = [ln for ln in _lines(WEEKEND_DISCOUNT)
+                if ln["code"] == "time_window.not_applied"][0]
+    assert "so the fee is not adjusted" in declined["text"], declined["text"]
+
+
+@pytest.mark.guarantee("F22b")
+def test_but_COVERAGE_still_governs_and_a_rule_about_another_space_is_SILENT():
+    """The half that was always right, and the control on the widening: a type
+    that declares it speaks must not start speaking about stays it was never
+    about."""
+    lines = _lines(WEEKEND_DISCOUNT, space_class="vip")
+    assert not [ln for ln in lines if ln["code"].startswith("time_window.")], (
+        "a discount scoped to standard spaces appeared on a VIP receipt"
+    )
+
+
+@pytest.mark.guarantee("F22b")
+def test_the_declaration_is_the_TYPES_and_a_type_that_declares_nothing_is_SILENT():
+    """The structural half: this is a property of the registry, not of a stage.
+
+    `space_surcharge` declares nothing and must stay silent -- which is what the
+    stage-keyed rule got right and this widening must not undo.
+    """
+    from rate_engine.rules import RULE_TRAITS, SPEAKS_UNQUALIFIED
+
+    assert SPEAKS_UNQUALIFIED in RULE_TRAITS["time_window"]
+    assert SPEAKS_UNQUALIFIED not in RULE_TRAITS["space_surcharge"]
+
+
 def test_the_framework_contract_no_longer_states_the_blanket_claim():
     """The control on the DOCUMENTATION half.
 
@@ -118,3 +219,7 @@ def test_the_framework_contract_no_longer_states_the_blanket_claim():
     )
     assert "A rule that did NOT qualify still returns a line, with delta zero, saying" \
         not in text, "the blanket claim has come back"
+    assert "speaks_unqualified" in text.lower(), (
+        "the framework no longer documents that a TYPE can declare it speaks -- the "
+        "stage stopped being the whole answer and the contract has to say so"
+    )

@@ -32,8 +32,8 @@ GUARANTEES: dict[str, str] = {
     "F2": (
         "A special rate is all-conditions-or-nothing: miss one condition by a minute "
         "and it does not apply at all -- no pro-rating and no partial credit. "
-        "Enforced per rule type; `early_bird` is the only QUALIFY rule A1 ships, so "
-        "the property is proven of it rather than of a populated stage."
+        "Enforced per rule type; `time_window` is the only special this module "
+        "ships, so the property is proven of it rather than of a populated stage."
     ),
     "F3": (
         "The plan version in force at ENTRY prices the whole stay. A rate change "
@@ -70,8 +70,10 @@ GUARANTEES: dict[str, str] = {
         "REFUSED by name, not left to crash inside the ledger."
     ),
     "F11": (
-        "Two rules qualifying at one pipeline stage are REFUSED and both named, with "
-        "the plan's stated resolution mode quoted back. A1 detects; it does not resolve."
+        "An ambiguity the PLAN cannot settle is REFUSED and both rules named, with "
+        "the stated mode quoted back and the refusal saying what would settle it. "
+        "Since the modes act, that means a TIE: two rules qualifying at one stage "
+        "and charging the same amount, which `cheapest_wins` cannot separate."
     ),
     "F10": (
         "Plan selection is never ambiguous. Two versions in force at the same instant "
@@ -153,6 +155,12 @@ GUARANTEES: dict[str, str] = {
         "a QUALIFY rule always speaks, at delta zero; a rule at another stage that "
         "does not cover the stay is silent."
     ),
+    "F22b": (
+        "And the stage is not the whole answer. A rule TYPE may declare that it "
+        "speaks when it did not qualify, so a weekend discount declining because it "
+        "is a Tuesday says so on the receipt -- while a rule that was never about "
+        "this space stays silent whatever it declared."
+    ),
     "F23": (
         "The production invariant that the fee IS the ledger's sum is itself "
         "guarded: deleting it, no-opping it or unwiring it from the pricing path "
@@ -164,8 +172,85 @@ GUARANTEES: dict[str, str] = {
         "integrator to discover as an anomaly."
     ),
     "F25": (
-        "Whether an early bird may run overnight is stated by the PLAN, in "
+        "Whether a time window may run past midnight is stated by the PLAN, in "
         "`day_span`, with no default -- the engine holds no day condition of its own."
+    ),
+    "F26": (
+        "A window applies on the days the PLAN states -- weekday names, or the "
+        "garage's own dates for a holiday or an event -- matched against the "
+        "ENTRY's local date, and a window that did not match names the day that "
+        "failed and the days it wanted. There is no built-in calendar and no "
+        "preset: 'weekend' means different days in different countries."
+    ),
+    "F27": (
+        "`enter_from` is CONSULTED, not merely validated and stored. A window "
+        "states BOTH ends of its entry range, which is what makes an evening rate "
+        "expressible, and a stay arriving one minute before it opens does not "
+        "qualify."
+    ),
+    "F28": (
+        "`day_span` `next_day` is BOUNDED: an exit on the following local day "
+        "qualifies and one the day after that does not, where `any_span` accepts "
+        "both. Proven on one stay, so the three spans are an axis rather than "
+        "three unrelated scenarios."
+    ),
+    "F29": (
+        "A `rate` effect is priced by `increment`'s own builder and applier, not "
+        "by a copy of them: identical parameters produce identical lines on the "
+        "same stay, and a change to `increment`'s period counting moves the "
+        "window's lines with it."
+    ),
+    "F30": (
+        "An `adjust` effect applies to the fee AFTER the caps and the surcharges. "
+        "A percentage taken any earlier is a percentage of a number the customer "
+        "is not being charged."
+    ),
+    "F31": (
+        "An `adjust` percentage is integer basis points and its `rounding` is "
+        "CONSULTED: the same stay under `up` and under `down` differs by one minor "
+        "unit, and the breakdown line says which way it went."
+    ),
+    "F32": (
+        "`grace` is TERMINAL, and free means free: a stay at or under the stated "
+        "minutes costs zero and picks up no surcharge, no cap and no adjustment. "
+        "Terminality is DECLARED by the rule type at registration -- the engine "
+        "never knows its name -- and a special it beat says so on the receipt."
+    ),
+    "F33": (
+        "Two caps on one stay leave the LOWER ceiling standing, the total after CAP "
+        "is the same in both application orders, and the breakdown names both. Caps "
+        "COMPOSE; two of them are not a conflict."
+    ),
+    "F34": (
+        "More than one rule qualifying at one stage means three different things, "
+        "and the stage's category decides which: RESOLVING is a conflict, COMPOSING "
+        "order-independent is not reported at all, and COMPOSING order-dependent is "
+        "refused unless the plan states the order."
+    ),
+    "F35": (
+        "Two qualifying ADJUST rules with no stated `adjust_order` are REFUSED "
+        "naming both; with an order they produce that order's total, and the two "
+        "orders genuinely differ -- 20% off then a fixed amount is not the same fee "
+        "as the fixed amount then 20% off."
+    ),
+    "F36": (
+        "The resolution modes DECIDE. Two windows qualifying on one stay resolve to "
+        "the cheaper under `cheapest_wins` and to the stated one under "
+        "`stated_order`, on the SAME stay -- and the rules that lost still appear, "
+        "each naming the winner, both prices and the mode that chose."
+    ),
+    "F38": (
+        "Every identifier the published documents name in backticks is one the "
+        "code actually holds -- rule types, stages, finding codes, plan and rule "
+        "fields, stated values, traits and guarantee ids -- and every file path "
+        "they point at exists. Derived from both documents rather than from a "
+        "list of the sentences somebody remembered to check."
+    ),
+    "F37": (
+        "A `stated_order` must name every rule at its stage EXACTLY ONCE, and one "
+        "that does not is refused at LOAD, naming what is missing. A rule left out "
+        "would take a silent position, and array position deciding money is what "
+        "this module refuses everywhere else."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

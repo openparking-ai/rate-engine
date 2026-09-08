@@ -1,4 +1,4 @@
-"""F25 -- whether an early bird may run overnight is the PLAN's decision.
+"""F25 -- whether a time window may run past midnight is the PLAN's decision.
 
 The defect the outside pass settled as TRUE -- DEFECT: `_failures` compared the
 exit's local date to the entry's and refused any cross-midnight stay. The rule's
@@ -14,8 +14,12 @@ unknown key. That is the engine inventing a pricing decision, which is the one
 thing this module exists not to do.
 
 Gokhan, asked directly: *"I've never seen multiple day early bird but this is
-parking. People get creative."* So `day_span` is a declared field with no default,
-and all three of its cases are exercised here.
+parking. People get creative."* So `day_span` is a declared field with no default.
+
+**The rule this guarantee was written for is now `time_window`** -- `early_bird`
+was that rule with its days hardcoded to every day and its effect hardcoded to a
+flat price -- and the guarantee moved with it unchanged. The BOUNDED middle case,
+`next_day`, has its own guarantee: F28.
 """
 
 from __future__ import annotations
@@ -28,14 +32,14 @@ from fixtures import DOWNTOWN_V2
 
 MONDAY_0800 = "2026-03-02T08:00:00-05:00"
 TUESDAY_0800 = "2026-03-03T08:00:00-05:00"   # 24h later: both wall-clock limits met
-EARLY_BIRD_PRICE = 1200
+WINDOW_PRICE = 1200
 TIME_BASED = 6000
 
 
 def _plan(day_span: str | None) -> dict:
     document = copy.deepcopy(DOWNTOWN_V2)
     for rule in document["rules"]:
-        if rule["type"] == "early_bird":
+        if rule["type"] == "time_window":
             if day_span is None:
                 rule.pop("day_span", None)
             else:
@@ -69,11 +73,11 @@ def test_a_plan_stating_ANY_SPAN_lets_the_overnight_stay_QUALIFY():
     """The case that was unreachable before: both wall-clock limits are met."""
     status, body = _overnight(_plan("any_span"))
     assert status == 200
-    assert body["fee_minor"] == EARLY_BIRD_PRICE, (
+    assert body["fee_minor"] == WINDOW_PRICE, (
         f"the overnight stay met both stated limits and was charged "
-        f"{body['fee_minor']} instead of {EARLY_BIRD_PRICE}"
+        f"{body['fee_minor']} instead of {WINDOW_PRICE}"
     )
-    line = [x for x in body["breakdown"] if x["code"].startswith("early_bird")][0]
+    line = [x for x in body["breakdown"] if x["code"].startswith("time_window")][0]
     assert "NOT applied" not in line["text"], line["text"]
 
 
@@ -84,7 +88,7 @@ def test_a_plan_stating_SAME_DAY_reproduces_exactly_what_shipped():
     status, body = _overnight(_plan("same_day"))
     assert status == 200
     assert body["fee_minor"] == TIME_BASED
-    line = [x for x in body["breakdown"] if x["code"].startswith("early_bird")][0]
+    line = [x for x in body["breakdown"] if x["code"].startswith("time_window")][0]
     assert "NOT applied" in line["text"]
     assert "not the same local day" in line["text"]
     assert "day_span 'same_day'" in line["text"], (
@@ -97,7 +101,7 @@ def test_a_plan_stating_SAME_DAY_reproduces_exactly_what_shipped():
 def test_a_value_the_engine_does_not_implement_is_REFUSED_not_guessed(bad):
     document = _plan("same_day")
     for rule in document["rules"]:
-        if rule["type"] == "early_bird":
+        if rule["type"] == "time_window":
             rule["day_span"] = bad
     status, body = _overnight(document)
     assert status == 400, f"{bad!r} was accepted"
@@ -105,13 +109,13 @@ def test_a_value_the_engine_does_not_implement_is_REFUSED_not_guessed(bad):
 
 
 @pytest.mark.guarantee("F25")
-def test_day_span_does_not_disturb_a_SAME_DAY_stay_under_either_value():
+def test_day_span_does_not_disturb_a_SAME_DAY_stay_under_any_value():
     """The control. `day_span` decides one thing; a stay that never crosses
     midnight must price identically whichever value the plan states."""
     from rate_engine.contract import run_quote
 
     fees = set()
-    for value in ("same_day", "any_span"):
+    for value in ("same_day", "next_day", "any_span"):
         status, body = run_quote(
             {
                 "plans": [_plan(value)], "entry_at": "2026-03-03T08:00:00-05:00",
@@ -121,7 +125,7 @@ def test_day_span_does_not_disturb_a_SAME_DAY_stay_under_either_value():
         )
         assert status == 200
         fees.add(body["fee_minor"])
-    assert fees == {EARLY_BIRD_PRICE}, (
+    assert fees == {WINDOW_PRICE}, (
         f"day_span changed the answer for a stay that never crosses midnight: {fees}"
     )
 
@@ -133,7 +137,11 @@ def test_the_engine_no_longer_holds_an_UNDECLARED_day_condition():
     rule's declared fields and requires the day condition to be among them -- the
     defect was precisely a condition that existed in the code and in no field.
     """
-    from rate_engine.rules.early_bird import DAY_SPANS, EXTRA
+    from rate_engine.rules.time_window import DAY_SPAN_LIMITS, DAY_SPANS, EXTRA
 
     assert "day_span" in EXTRA, "the day condition is not a field a plan may state"
-    assert set(DAY_SPANS) == {"same_day", "any_span"}
+    assert set(DAY_SPANS) == {"same_day", "next_day", "any_span"}
+    assert set(DAY_SPAN_LIMITS) == set(DAY_SPANS), (
+        "a span a plan may state has no limit behind it, or a limit exists for a "
+        "span no plan can ask for"
+    )

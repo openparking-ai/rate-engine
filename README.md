@@ -46,22 +46,24 @@ missing**, never a number somebody would have had to invent:
 ```
 
 `rate-engine validate-plan` probes **every boundary the plan itself declares** —
-every entry limit, every exit limit, every period length and stated ceiling, each
-side of each, across every space class — and reports the gaps and conflicts it
-finds **before** a plan goes live, so the owner decides rather than the software.
-That is the same mechanism in both places, not two implementations that agree
-today: a gap the validator reports and a gap a quote refuses on are the same
-object with the same identifier.
+every day a rule names, every entry limit at both ends, every exit limit, every
+period length and stated ceiling, each side of each, across every space class —
+and reports the gaps and conflicts it finds **before** a plan goes live, so the
+owner decides rather than the software. That is the same mechanism in both
+places, not two implementations that agree today: a gap the validator reports and
+a gap a quote refuses on are the same object with the same identifier.
 
 **What it does not claim.** It is not a search over all possible stays, and no
 bounded probe set could be. Those boundaries are where a rule starts or stops
 qualifying, so a conflict a rule can currently express is one this finds — but a
-future rule type that qualifies on something it does not DECLARE as a time or a
-duration would need its own probe axis, and adding one is part of adding the rule
-type. **This sentence used to say it reported every conflict, full stop, and that
-was false:** every probe entered at 07:00, so two rules that both qualified only
-for an early entry never overlapped in any probe, and a plan reported clean would
-then refuse a real stay.
+future rule type that qualifies on something it does not DECLARE as a day, a time
+or a duration would need its own probe axis, and adding one is part of adding the
+rule type. **That is not a hypothetical and it has been paid twice.** The first
+time, every probe entered at 07:00, so two rules that both qualified only for an
+early entry never overlapped in any probe and a plan reported clean would then
+refuse a real stay. The second time, every probe entered on the same Tuesday: the
+day became a thing a rule could qualify on, so the day became an axis in the same
+round rather than in the outside pass after it.
 
 ## Install and run
 
@@ -93,18 +95,44 @@ drifts.
 - **Time-based increments** with a configurable first period and repeating
   period — "first 20 min, then each additional 20 min" and "first hour, then each
   additional hour" are one rule with different numbers.
-- **Early bird** is **all-conditions-or-nothing**. Miss the exit time by a minute
-  and the rate does not apply at all. That is the rule every special rate will
-  keep — it is enforced per rule type, and **early bird is the only special that
-  ships in A1**, so today the property rests on one rule rather than on a stage
-  full of them.
-- **Daily maximum**, stating whether a day means a local calendar day or a
-  rolling 24 hours — because those price a Friday-night stay differently and the
-  answer is the operator's.
+- **One special rate, not seven.** Weekday, weekend, evening, morning, holiday,
+  event and early bird differ in *which days* they apply on and *what hours* are
+  typed into them, so they are one `time_window` rule with two fields rather than
+  seven rule types. The window says WHEN — the days, both ends of the entry
+  range, the exit limit, and how far past midnight it may run. **The engine never
+  stores the word "weekend"**: it means Friday-to-Monday in one country and
+  Saturday-to-Sunday in another, so a plan states the actual days. A holiday or
+  an event states its own dates; there is no built-in calendar, because one would
+  be right for a single country and wrong for every other.
+- **And the effect says WHAT.** A window can be a flat price, *a completely
+  different time-based rate* — the weekend priced in twenty-minute periods where
+  the weekday is hourly, using the same period code so the two cannot drift — or
+  an adjustment up or down on the whole fee. An adjustment runs **last**, after
+  the caps and the surcharges, because a percentage taken any earlier is a
+  percentage of a number the customer is not being charged. Percentages are
+  integer basis points and the plan states which way a fraction of a cent goes.
+- **A window is all-conditions-or-nothing.** Miss the exit time by a minute and
+  the rate does not apply at all — no pro-rating, no partial credit, and not the
+  cheaper of the two. The breakdown still carries a line saying which condition
+  failed, because that is the question an attendant is actually asked.
+- **Daily and weekly maximums**, each stating what a day or a week means — a
+  local calendar day or a rolling 24 hours; a calendar week starting on the day
+  the plan names, or a rolling seven days. Those price a Friday-night stay
+  differently and the answer is the operator's, not ours: there is no universal
+  first day of the week. **Two caps are not a conflict** — they are two ceilings,
+  and the lower one wins whichever is applied first.
+- **A grace period, if the plan declares one.** A stay at or under the stated
+  minutes is free, and free means free: no surcharge, no cap, no adjustment. One
+  minute over and it prices from entry on the ordinary rate. There is no default
+  — "usually ten minutes" is an observation about other people's garages.
 - **Space-class surcharges.** This module prices a *space*, not a garage: a VIP
   area and a reserved spot are the same mechanism.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
+- **When two rules qualify at once, what that MEANS depends on the stage.** Two
+  specials competing to be the price is a conflict the plan settles. Two caps
+  compose and nothing is reported. Two adjustments compose but the order changes
+  the money, so the plan states the order and a plan that has not is refused.
 
 Money is an integer of minor units everywhere. No float, no bool, no `Decimal`,
 at any depth — a plan carrying one does not load, whether or not the field is one
@@ -129,7 +157,7 @@ Every guarantee has a test **proven able to fail**, by breaking the thing it
 guards and watching it go red:
 
 ```
-python scripts/fail_controls.py            # all eight, each planted and restored
+python scripts/fail_controls.py            # each one planted, run, and restored
 python scripts/fail_controls.py --anchors  # are the plants still wired? (1 second)
 ```
 

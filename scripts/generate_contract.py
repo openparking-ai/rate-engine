@@ -76,8 +76,11 @@ def gen_stages() -> str:
 
 def gen_rule_types() -> str:
     rows = ["| rule type | stage |", "| --- | --- |"]
-    rows += [f"| `{name}` | {stage} |" for name, (stage, _b) in sorted(RULE_TYPES.items())]
-    empty = sorted({s for s in STAGES} - {stage for stage, _ in RULE_TYPES.values()})
+    rows += [
+        f"| `{name}` | {' or '.join(stages)} |"
+        for name, (stages, _b) in sorted(RULE_TYPES.items())
+    ]
+    empty = sorted({s for s in STAGES} - {s for stages, _ in RULE_TYPES.values() for s in stages})
     note = (
         f"\n\nStages with no rule type in this version: {', '.join(empty)}."
         if empty
@@ -165,9 +168,61 @@ tolerate new fields appearing in a response.
 
 The rule runs the other way for requests, and it is what makes the assumption
 safe: **a key this engine does not understand is REJECTED and named, never
-ignored.** An operator who adds `weekend_rate` to a plan running on a version
-with no weekend rule would otherwise have a garage pricing weekends wrong and a
-document saying it does not.
+ignored.** An operator who adds a key to a plan running on a version that has no
+rule for it would otherwise have a garage pricing something wrong and a document
+saying it does not.
+
+### What changed in version 2
+
+**A rule type was REMOVED, and that is why the number moved.** `early_bird` is
+gone. It was a time window with its days hardcoded to every day and its effect
+hardcoded to a flat price, and it is now expressible — with the days and the
+effect stated — as a `time_window`. A plan written for version 1 does not load on
+version 2: an unknown rule type is rejected rather than skipped, which is the
+same rule that protects an unknown key.
+
+No operator plans exist in the wild today, so removing a rule type costs nothing
+now and could not be done quietly later. It is recorded here rather than left for
+somebody to discover from a refusal.
+
+**The other changes are additions.** `time_window` carries an `effect` that is a
+flat price, a completely different time-based rate, or an adjustment up or down
+on the whole fee — and the third of those brought the ADJUST stage live, so a
+rule type now runs at a stage that depends on the rule rather than only on its
+type. The stage is still stated in every plan, and the engine refuses a plan
+whose stated stage disagrees with the one the rule's own shape implies.
+
+Two rule types arrived with it: `grace`, and `weekly_max`. And two plan fields:
+every plan now states `adjust_order`, null included, and `resolution` changed
+shape.
+
+**`resolution` is keyed by the RESOLVING stages only, and its values are
+objects.** It used to require an entry for all five stages, as a bare mode
+string, and to be acted on by nothing. It now decides which of several qualifying
+rules applies — and the three stages it could never act on are refused as keys
+this version does not understand, because a mode stated for CAP cannot choose
+between two caps when both of them apply.
+
+**Two classes of plan that used to be REFUSED now price, and that is a behaviour
+change rather than a bug fix nobody notices.**
+
+More than one rule qualifying at one stage was treated as a conflict at EVERY
+stage. That is right where rules compete and wrong where they compose, and it was
+harmless only while no second rule type existed at a composing stage.
+`weekly_max` is that second type: without the fix, every plan carrying a daily
+AND a weekly cap would have refused every stay in the garage.
+
+And at a resolving stage, two rules at different prices are now settled by the
+plan's mode instead of refused. `CONFLICT_MULTIPLE_RULES_AT_STAGE` therefore
+means something narrower than it did: a TIE, which no mode can settle. The code
+is unchanged and still reachable; what changed is how much it covers.
+
+**A window that would have to wrap past midnight is REFUSED, and that is a stated
+gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
+not expressible as one rule. It is refused at load, naming the field, and the
+message says to write it as two rules: one running to 23:59 and one starting at
+00:00, each stating its own days. The engine will not split it, because which
+days each half applies on is a pricing decision.
 
 ## Money
 
@@ -184,7 +239,7 @@ Every plan names an **IANA timezone**, and entry and exit arrive as offset-aware
 ISO 8601. A naive timestamp is refused: it would be read in whatever zone the
 server happens to run in, which is a different fee on a different machine.
 
-This is not incidental. `early_bird` speaks of "enter by 09:00" and `daily_max`
+This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state whether a day means a local `calendar_day` or a `rolling_24h` window,
@@ -208,9 +263,32 @@ default anywhere**, because a default is a pricing decision made by whoever wrot
 the engine and applied to a garage whose owner never saw it. Where a plan is
 silent, the engine refuses and names the field.
 
-A plan states a resolution mode per stage, from: {resolution_inline}. This
-version validates that field and does not act on it — see "What this version does
-not do".
+A plan states a resolution mode for each stage that can RESOLVE — QUALIFY and
+ACCUMULATE — from: {resolution_inline}. A mode stated for any other stage is
+refused by name: CAP, SURCHARGE and ADJUST compose, so a mode there could never
+choose anything, and a field that cannot change an answer is a decision the owner
+made and the software ignored.
+
+- `{{"mode": "cheapest_wins"}}` — the **lowest fee for the customer** wins.
+- `{{"mode": "stated_order", "order": [...]}}` — the plan names the rule ids and
+  the first that qualifies wins. It must name every rule at that stage **exactly
+  once**; a rule left out would take a silent position in the order.
+
+**What `cheapest_wins` compares, stated because it is a limit.** It compares what
+the competing rules themselves charge for the stay — not the final fee. A cap or
+an adjustment downstream applies to whichever rule wins and could in principle
+bring two different bases to the same number; comparing final fees would mean
+running the whole pipeline once per candidate, and would still not be "the
+customer's fee" for the rules that lost. Two rules charging the SAME amount
+cannot be separated by it and are refused, naming both.
+
+`adjust_order` is a different thing and is stated separately: a list of rule ids,
+or null, giving the sequence the ADJUST rules run in. **An order is not a
+choice**, which is why it does not live in `resolution`. It is
+required-and-nullable like `max_duration_minutes` and `week_starts_on` — a field
+that may simply be absent is one somebody forgets while believing they set it —
+and when it is stated it must name every ADJUST rule exactly once, because a rule
+left out would take a silent position in the sequence.
 
 ## Gaps, conflicts, and the refusal
 
@@ -218,6 +296,37 @@ A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifyin
 at one stage whose resolution the plan does not settle. One mechanism serves both
 places it is needed: `validate-plan` reports them so an owner can decide, and at
 quote time a gap is a **refusal that names what is missing**.
+
+**More than one rule qualifying at one stage means three different things, and
+the stage decides which.** This used to be one answer for all five stages, and it
+was wrong in a way that only a second rule type could expose:
+
+- **QUALIFY and ACCUMULATE resolve.** Two rules are a genuine either/or -- only
+  one of them can be the price -- so it is a conflict and the plan settles it.
+- **CAP and SURCHARGE compose, in any order.** Two caps are not a contradiction;
+  they are two ceilings, and the lower one wins whichever ran first. Nothing is
+  reported, because there is nothing for an owner to decide. Their lines are
+  emitted in ascending rule id, never in the order the caller's array happened to
+  carry them.
+- **ADJUST composes, and the order changes the money.** Twenty per cent off then
+  five dollars off is not five dollars off then twenty per cent off, so two
+  qualifying adjustments with no stated `adjust_order` are REFUSED under their
+  own code -- a different question from "which of these is the price", and a
+  consumer routing on codes can tell them apart.
+
+**A TERMINAL rule is not a conflict either.** It wins outright by what its type
+is, rather than by anything the plan says, so a grace period beating a weekend
+rate is settled and the beaten rule gets a line saying so.
+
+**And at a resolving stage the plan's MODE settles it**, so two windows at
+different prices are priced rather than refused. What is left is the case no mode
+can settle: two rules that qualify and charge the SAME amount under
+`cheapest_wins`. There is nothing to be cheapest about, the engine will not pick,
+and the refusal names both and says that stating an order would settle it.
+
+**Every rule that lost is still on the receipt**, naming the winner, both prices
+and the mode that chose — a breakdown that silently omitted a rate the customer
+nearly got could not answer the question an attendant is actually asked.
 
 `validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
 exit limit, each period length and stated ceiling, either side of each, across
@@ -257,19 +366,35 @@ never failed is a decoration.
 
 Named here so nobody adds them helpfully:
 
-- **No resolution of conflicts.** The modes are recorded and not applied. Two
-  rules qualifying at one stage is a refusal in this version, because resolving
-  it honestly needs two rule types that can qualify at once, which is round A2.
-- **No weekend, holiday, event, weekly-max or occupancy rules.** Round A2.
+- **No occupancy-driven rule.** Not in this version.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.
 - **No forecast and no competitor comparison.** Round C.
 - **No rate import from a photograph.** Round D, and it will only ever produce a
   draft.
-- **No grace period.** Deliberately absent: inventing a free interval is
-  inventing a pricing decision nobody made. An operator who wants the first
-  fifteen minutes free writes a first period of 15 minutes priced at 0, visibly,
-  in the plan.
+
+## Grace, and what "free" means
+
+A plan may declare a grace period: `minutes`, a positive whole number, with **no
+default and no grace unless the plan states the rule.** "Usually ten minutes" is
+an observation about other people's garages, not a value to assume.
+
+**A stay at or under that many minutes costs nothing, and nothing means nothing.**
+Grace is TERMINAL: the pipeline stops after QUALIFY, so a graced stay in a VIP
+space does not pick up the surcharge, does not reach a cap, and is not adjusted.
+A receipt for a graced stay carries the grace line and nothing else. It also
+beats any other special that qualified — and that special is not dropped
+silently; it gets a line naming the rule that superseded it.
+
+**All-or-nothing.** One minute over a ten-minute grace and the stay prices from
+ENTRY on the ordinary rate, not from minute ten. That is the ordinary garage
+convention and it is the same all-conditions rule every special here keeps.
+
+**A grace of ten minutes covers 600.000 seconds and not 600.001.** Durations are
+whole minutes rounded UP, module-wide, before any rule sees a stay — so a stay of
+ten minutes and one millisecond is eleven minutes and misses a ten-minute grace.
+That is coherent with every other duration comparison here, including the stated
+ceiling on a time-based rule, and it is recorded rather than adjusted.
 
 ## A stay of zero length pays the first period
 
@@ -289,35 +414,50 @@ recorded rather than left for whoever notices the two answering differently.
 A negative stay -- exit before entry -- is a different thing and is REFUSED as a
 caller bug rather than priced at zero, because pricing it would hide it.
 
-**What would change this, and has not yet:** a grace period. A garage that
-declares one would make a zero-length stay free by the grace rule, and this
-paragraph would then describe only a plan that declares no grace. Grace is not in
-this version -- see the item above.
+**And this paragraph now describes only a plan that declares NO grace.** A garage
+that declares one makes a zero-length stay free by the grace rule, because zero
+is at or under any positive number of minutes. Both behaviours are deliberate,
+both are tested, and which one a garage gets is stated in its own plan rather
+than assumed here.
 - **No validations, no monthly parkers, no payments, no card, no tax.**
 
-## The occupancy multiplier, and why money stays an integer
+## The first money rounding, and why money stays an integer
 
-Round A2's occupancy rule is a multiplier, and a multiplier is fractional. It
-will be expressed as a **rational** — an integer numerator over an integer
-denominator, applied as `value * numerator // denominator` — and the plan will
-state the rounding direction explicitly, with no default.
+**A percentage adjustment is the first thing in this module that rounds MONEY,
+and it arrives with the version bump §2 says a commercial contract makes.** Every
+rule before it was an integer add or an integer replace, and `money.py` said in
+as many words that this module rounds no money anywhere. That sentence is now
+qualified rather than deleted: it rounds money in exactly one place, the place is
+named, and the direction is the plan's to state.
 
-**That rounding is not the rounding this version already has.**
+**A percentage is INTEGER BASIS POINTS.** 20% is `2000`; 12.5% is `1250`. Not a
+decimal, because a float anywhere in a plan is refused at load — so a percent
+field that could hold `20.5` would either be rejected or would put a float into
+the pricing path through a field nobody was watching. The arithmetic is
+`total * percent_bp // 10000` with the division rounded the way the rule says,
+and no float is constructed at any point.
+
+**`rounding` is stated per rule with no default**, because a percentage of a fee
+lands on a fraction of a minor unit and who keeps that fraction is the owner's
+decision. The breakdown line says which way it went and by how much, so a
+customer disputing a cent can be shown the answer rather than told it.
+
+**That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
 stay is two hours. **The applier reads that field and refuses a mode it does not
-implement** — so A2 adding `floor` to the modes a plan may state is a real
-change, not a plan that quietly keeps pricing as `ceil` (F15).
+implement**, so adding a mode to the ones a plan may state is a real change
+rather than a plan that quietly keeps pricing as `ceil` (F15). The two roundings
+share a word and nothing else.
 
-A multiplier's rounding direction decides fractions of a
-**cent**. The two share a word and nothing else, and **this module does not round
-money anywhere today** — `money.py` says so in as many words, and the arithmetic
-matches it: every A1 rule is an integer add or an integer replace. A2 introduces
-the first money rounding this contract has ever carried, and it arrives with a
-version bump, which is what §2 says a commercial contract does.
+**One wart, recorded rather than hidden:** `rounding` is required on every
+`adjust` effect, and a `fixed` amount has nothing to round — on that shape the
+field is stated and never read. It is written down here rather than left for a
+reader to notice.
 
-Money stays an integer of minor units at every depth. The multiplier will not
-introduce a float, and it will not change what any plan written against this
-version answers.
+Money stays an integer of minor units at every depth. Nothing here introduces a
+float, and nothing here changes what a plan written against the previous version
+answers, because such a plan no longer loads at all — see "What changed in
+version 2".
 
 ---
 
