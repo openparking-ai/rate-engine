@@ -121,6 +121,18 @@ surcharge that survives it.
 Every stage has at least one rule type in this version.
 <!--/gen:rule_types-->
 
+<!--gen:window_limits kind=2-->
+| `day_span` | where the exit limit falls | an `exit_by` BEFORE `enter_from` |
+| --- | --- | --- |
+| `same_day` | `exit_by` on the ENTRY date | **refused at load** |
+| `next_day` | `exit_by` 1 local day after the entry date | carried -- this is the ordinary evening window |
+| `any_span` | nowhere -- it names no last day, so the limit stays a bare clock reading | **refused at load** |
+
+A wrapping `exit_by` is refused at load under `same_day` and `any_span`, neither of which can say what day the limit falls on, and carried under `next_day`. Stating a bounded span gives the limit a date; writing it as two rules is the other way to say it.
+
+**The limit this does NOT close, stated because it is a limit.** Only the window that NO stay could ever satisfy is refused. One that can fire for some entries and never for others still loads, and `validate-plan` reports it clean: `same_day` with `enter_from` 06:00, `enter_by` 23:00 and `exit_by` 20:00 is dead for every entry after 20:00 and alive for every entry before it. Both halves of that sentence were priced to write it. The engine refuses what is unsatisfiable, not what is partly unsatisfiable, because the second is a shape an operator may well mean -- and a refusal there would reject a plan that works.
+<!--/gen:window_limits-->
+
 ## The plan document
 
 Data, validated on load, never code. Every field is required and **there is no
@@ -309,6 +321,7 @@ never failed is a decoration.
 | **F38** | Every identifier the published documents name in backticks is one the code actually holds -- rule types, stages, finding codes, plan and rule fields, stated values, traits and guarantee ids -- and every file path they point at exists. Derived from both documents rather than from a list of the sentences somebody remembered to check. |
 | **F39** | A window's exit limit runs to the day its `day_span` allows. Under a bounded span the limit is `exit_by` on the entry date plus the span, so an evening window with an after-midnight limit applies to the car that leaves the SAME evening as well as the one that leaves after midnight. A limit that would have to WRAP to be reached is refused at load under `same_day` and `any_span`, neither of which can say what day it falls on. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
+| **F40** | A window's exit limit is compared as WALL-CLOCK readings, never as two instants, so a window behaves the same on the night the clocks change. On the hour that occurs twice at a fall-back, two stays leaving at the same stated time an hour apart in real time both qualify; a limit at a wall time that a spring-forward skips entirely still reads, and a stay past it is still refused. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |

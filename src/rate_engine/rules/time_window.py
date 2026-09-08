@@ -510,9 +510,23 @@ def _exit_limit(entry_local, exit_by, span_limit: int) -> datetime:
 
     Naive by construction. The comparison it feeds is (date, time) against
     (date, time) -- both local readings of a wall clock, which is what the plan
-    states. Building an aware instant instead would put a UTC offset in the
-    middle of it, and an `exit_by` of 02:00 on the night the clocks change is
-    exactly where that goes wrong.
+    states.
+
+    **WHAT "AN AWARE INSTANT INSTEAD" WOULD ACTUALLY TAKE.** Said precisely
+    because the loose version of this sentence misleads, and misled a review of
+    this very function. Merely attaching the zone --
+    `limit.replace(tzinfo=plan.timezone)` -- changes NOTHING: PEP 495 compares
+    two aware datetimes that share a `tzinfo` by their naive fields and ignores
+    `fold`, so that spelling silently agrees with the reading above. A reviewer
+    who writes the counter-model that way measures nothing and is told the code
+    passes.
+
+    The divergence needs a TRUE instant comparison, through UTC or
+    `.timestamp()`. Then an `exit_by` of 01:30 on the night the clocks go back
+    IS decided by an offset: 01:00-01:59 occurs twice, the second 01:00 is an
+    hour LATER in real time than the limit's first reading, and the stay is
+    refused a rate its own wall clock says it earned. F40 holds this, and its
+    fail control is exactly that UTC comparison.
     """
     return datetime.combine(entry_local.date() + timedelta(days=span_limit), exit_by)
 

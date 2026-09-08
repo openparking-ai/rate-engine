@@ -120,6 +120,84 @@ def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
     assert "Stages with no rule type in this version: ADJUST." in planted_render
 
 
+#: The plant for the exit-limit block, and it ADDS a span rather than renaming
+#: one -- the same reason the rule-type plant adds a type. Renaming `next_day`
+#: would make the example plan's own rules invalid, the generator would stop
+#: before it reached this block, and the control would then be reporting a
+#: refusal rather than a document that failed to move.
+ADD_A_DAY_SPAN = (
+    "rules/time_window.py",
+    'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, "any_span": None}',
+    'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, '
+    '"any_span": None, "planted_span": 2}  # PLANTED',
+)
+
+
+@pytest.mark.guarantee("F9")
+def test_the_exit_limit_table_is_derived_from_the_day_span_table():
+    """PLANT: add a `day_span`. The published table and the sentence beside it
+    must both grow it.
+
+    The sentence is checked as well as the table on purpose. A derived table
+    with a hand-written sentence next to it -- "refused under `same_day` and
+    `any_span`" typed once and left -- is the failure this whole file exists to
+    catch: it reads as checked because the table above it is.
+    """
+    baseline = _render()
+    assert "| `next_day` | `exit_by` 1 local day after the entry date |" in baseline
+    assert "planted_span" not in baseline
+    assert "carried under `next_day`." in baseline
+
+    with planted(*ADD_A_DAY_SPAN):
+        planted_render = _render()
+
+    assert "| `planted_span` | `exit_by` 2 local days after the entry date |" in planted_render, (
+        "the exit-limit table did not grow a row when a day_span was added, so it "
+        "is a hand-written table rather than a reading of DAY_SPAN_LIMITS"
+    )
+    assert "carried under `next_day` and `planted_span`." in planted_render, (
+        "the table moved but the sentence beside it did not, which is a fixed "
+        "sentence borrowing a derived table's credit"
+    )
+
+
+@pytest.mark.guarantee("F9")
+def test_the_published_partial_dead_window_limit_was_PRICED():
+    """The stated limit is a MEASUREMENT, not a sentence.
+
+    `gen_window_limits` builds the partial dead window and prices two stays
+    through it, and refuses to generate if the dead one fires or the live one
+    does not. So breaking the exit limit must stop the contract generating at
+    all -- a published limit that quietly stopped being true is the thing A1.2
+    asked for a guard against.
+    """
+    baseline = _render()
+    assert "is dead for every entry after 20:00 and alive for every entry before it" in baseline
+
+    # Relax the exit condition entirely: now the "dead" late entry DOES fire.
+    with planted(
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
+        "    if exit_side is not None:",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
+        "    if False:  # PLANTED: the exit condition can no longer fail",
+    ):
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--check"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+
+    assert result.returncode != 0, (
+        "the contract generated cleanly while the window it publishes as DEAD for a "
+        "late entry was firing, so the published limit is prose rather than a "
+        "measurement"
+    )
+    assert "FIRED for an entry after 20:00" in result.stdout + result.stderr, (
+        "generation failed, but not because the published limit stopped being true:\n"
+        + (result.stdout + result.stderr)[-1500:]
+    )
+
+
 @pytest.mark.guarantee("F9")
 def test_the_gap_table_is_derived_from_the_findings_registry():
     """PLANT: rename a gap code. The table must follow it."""
@@ -195,7 +273,7 @@ def test_the_guarantee_table_is_derived_from_the_registry():
 #: and requires the non-numeric text to differ. Compared against the kind=2 set
 #: parsed out of the published document, so a new asserting block cannot arrive
 #: without a control.
-CONTROLLED_ASSERTIONS = {"rule_types", "findings", "example"}
+CONTROLLED_ASSERTIONS = {"rule_types", "findings", "example", "window_limits"}
 
 
 def _blocks() -> dict[str, int]:

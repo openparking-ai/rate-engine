@@ -32,7 +32,9 @@ from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # no
 from rate_engine.findings import CONFLICT_CODES, FAULT_CODES, GAP_CODES  # noqa: E402
 from rate_engine.plan import RESOLUTION_MODES  # noqa: E402
 from rate_engine.rules import RULE_TYPES  # noqa: E402
+from rate_engine.rules.time_window import DAY_SPAN_LIMITS  # noqa: E402
 from rate_engine.stages import STAGES  # noqa: E402
+from rate_engine.wallclock import DAYS_OF_WEEK  # noqa: E402
 
 CONTRACT = ROOT / "docs" / "CONTRACT.md"
 EXAMPLE_PLAN = ROOT / "tests" / "plans" / "downtown_v2.json"
@@ -142,6 +144,159 @@ def gen_example() -> str:
         f"breakdown, and the engine asserts it on every quote.",
     ]
     return block("example", "\n".join(parts), ASSERTION)
+
+
+#: The illustrative times for the PARTIAL dead window the block below publishes
+#: as a limit. Only the times are written here; which `day_span` can carry the
+#: shape is derived from DAY_SPAN_LIMITS, and whether the window is really dead
+#: is MEASURED by pricing two stays.
+PARTIAL_DEAD_ENTER_FROM = "06:00"
+PARTIAL_DEAD_ENTER_BY = "23:00"
+PARTIAL_DEAD_EXIT_BY = "20:00"
+
+
+def _partial_dead_plan(day_span: str) -> dict:
+    """A window that LOADS and is nonetheless dead for a late entry."""
+    return {
+        "plan_version": "contract-partial-dead",
+        "effective_from": "2026-01-01T00:00:00-04:00",
+        "timezone": "America/New_York",
+        "currency": "USD",
+        "space_classes": ["standard"],
+        "resolution": {
+            "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
+        },
+        "adjust_order": None,
+        "rules": [
+            {"id": "day-rate", "type": "time_window", "stage": "QUALIFY",
+             "space_classes": ["standard"], "label": "Day rate",
+             "applies_on": {"kind": "days_of_week",
+                            "days": list(DAYS_OF_WEEK)},
+             "enter_from": PARTIAL_DEAD_ENTER_FROM, "enter_by": PARTIAL_DEAD_ENTER_BY,
+             "exit_by": PARTIAL_DEAD_EXIT_BY, "day_span": day_span,
+             "effect": {"kind": "flat", "price_minor": 4000}},
+            {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
+             "space_classes": ["standard"], "first_period_minutes": 60,
+             "first_period_minor": 300, "repeat_period_minutes": 60,
+             "repeat_period_minor": 300, "rounding": "ceil", "max_duration_minutes": None},
+        ],
+        "decisions": [],
+    }
+
+
+def _window_applied(day_span: str, entry_at: str, exit_at: str) -> bool:
+    """Did the window fire for this stay? Asked of the engine, not assumed."""
+    status, body = run_quote(
+        {
+            "plans": [_partial_dead_plan(day_span)],
+            "entry_at": entry_at,
+            "exit_at": exit_at,
+            "space_class": "standard",
+            "currency": "USD",
+        }
+    )
+    if status != 200:
+        raise SystemExit(
+            f"the contract's partial-dead-window example did not price under "
+            f"{day_span!r}: {body}"
+        )
+    return any(line["code"] == "time_window.applied" for line in body["breakdown"])
+
+
+def gen_window_limits() -> str:
+    """A window's exit limit, and the limits ON it. DERIVED, and the second one MEASURED.
+
+    Which spans can carry a WRAPPING `exit_by` -- one earlier in the day than
+    `enter_from` -- is a property of DAY_SPAN_LIMITS rather than a sentence
+    somebody has to keep in step with it: a span whose limit falls on the entry
+    date itself (0), or which names no last day at all (None), has nowhere for a
+    wrapped limit to fall, and the loader refuses it. A span added to that table
+    appears here without this function being touched.
+
+    And the limit the refusal does NOT close is PRICED rather than described.
+    A sentence in a published contract saying "this window is dead for a late
+    entry" is worth nothing unless something asked the engine, so this builds
+    that window and prices two stays through it. If the dead one ever fires, or
+    the live one ever stops, generation fails here rather than publishing a
+    limit that is no longer true.
+    """
+    def where(limit: int | None) -> str:
+        if limit is None:
+            return "nowhere -- it names no last day, so the limit stays a bare clock reading"
+        if limit == 0:
+            return "`exit_by` on the ENTRY date"
+        days = "day" if limit == 1 else "days"
+        return f"`exit_by` {limit} local {days} after the entry date"
+
+    ordered = sorted(
+        DAY_SPAN_LIMITS.items(), key=lambda kv: (kv[1] is None, kv[1] if kv[1] else 0, kv[0])
+    )
+    rows = [
+        "| `day_span` | where the exit limit falls | an `exit_by` BEFORE `enter_from` |",
+        "| --- | --- | --- |",
+    ]
+    for span, limit in ordered:
+        wrapping = (
+            "**refused at load**" if limit is None or limit == 0
+            else "carried -- this is the ordinary evening window"
+        )
+        rows.append(f"| `{span}` | {where(limit)} | {wrapping} |")
+
+    refused = [s for s, lim in ordered if lim is None or lim == 0]
+    carried = [s for s, lim in ordered if lim is not None and lim > 0]
+    def fmt(names: list[str]) -> str:
+        """`a`, `b` and `c` -- built from the list so a span added to the table
+        joins the sentence rather than making it wrong."""
+        quoted = [f"`{n}`" for n in names]
+        if not quoted:
+            return "no span"
+        if len(quoted) == 1:
+            return quoted[0]
+        return f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+
+    # The span whose limit falls on the entry date is the one that can carry the
+    # PARTIAL shape: the limit is on the same day as the entry, so an entry after
+    # it can never be followed by an exit before it.
+    on_entry_date = [s for s, lim in ordered if lim == 0]
+    if not on_entry_date:
+        raise SystemExit(
+            "no day_span puts the exit limit on the entry date, so the partial "
+            "dead window this block publishes as a limit cannot be built"
+        )
+    partial_span = on_entry_date[0]
+
+    # MEASURED, both directions. The late entry must never fire and the early one
+    # must fire, or the published sentence is wrong in one of the two ways it can be.
+    dead = _window_applied(partial_span, "2026-06-10T20:30:00-04:00", "2026-06-10T20:45:00-04:00")
+    alive = _window_applied(partial_span, "2026-06-10T08:00:00-04:00", "2026-06-10T09:00:00-04:00")
+    if dead:
+        raise SystemExit(
+            f"the {partial_span!r} window with enter_by {PARTIAL_DEAD_ENTER_BY} and "
+            f"exit_by {PARTIAL_DEAD_EXIT_BY} FIRED for an entry after "
+            f"{PARTIAL_DEAD_EXIT_BY}; the limit this block publishes is no longer true"
+        )
+    if not alive:
+        raise SystemExit(
+            f"the {partial_span!r} window never fires at all, so calling it PARTIALLY "
+            "dead overstates what it does; the published limit is wrong"
+        )
+
+    note = (
+        f"\n\nA wrapping `exit_by` is refused at load under {fmt(refused)}, neither of "
+        f"which can say what day the limit falls on, and carried under {fmt(carried)}. "
+        "Stating a bounded span gives the limit a date; writing it as two rules is the "
+        "other way to say it."
+        "\n\n**The limit this does NOT close, stated because it is a limit.** Only the "
+        "window that NO stay could ever satisfy is refused. One that can fire for some "
+        f"entries and never for others still loads, and `validate-plan` reports it clean: "
+        f"`{partial_span}` with `enter_from` {PARTIAL_DEAD_ENTER_FROM}, `enter_by` "
+        f"{PARTIAL_DEAD_ENTER_BY} and `exit_by` {PARTIAL_DEAD_EXIT_BY} is dead for every "
+        f"entry after {PARTIAL_DEAD_EXIT_BY} and alive for every entry before it. Both "
+        "halves of that sentence were priced to write it. The engine refuses what is "
+        "unsatisfiable, not what is partly unsatisfiable, because the second is a shape "
+        "an operator may well mean -- and a refusal there would reject a plan that works."
+    )
+    return block("window_limits", "\n".join(rows) + note, ASSERTION)
 
 
 def gen_schema() -> str:
@@ -255,6 +410,8 @@ the customer is not being charged, and a surcharge applied after the cap is a
 surcharge that survives it.
 
 {rule_types}
+
+{window_limits}
 
 ## The plan document
 
@@ -471,6 +628,7 @@ def render() -> str:
         schema_block=gen_schema(),
         stages=gen_stages(),
         rule_types=gen_rule_types(),
+        window_limits=gen_window_limits(),
         resolution_inline=gen_resolution(),
         findings=gen_findings(),
         example=gen_example(),

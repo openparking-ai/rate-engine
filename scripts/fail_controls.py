@@ -61,15 +61,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the stated maximum duration stops being checked, so a stay nothing prices "
         "comes back as a NUMBER instead of a refusal",
     ),
+    # NARROWED, and the width was the point. This control plants on the WALL-CLOCK
+    # LIMIT alone. Its first form after the exit test was factored out planted
+    # `if False:` on the whole `_exit_failure` RESULT, which also disabled the
+    # day-span check -- a strictly broader break than the sentence beside it
+    # names. F2 is sensitive to the narrow defect on its own (measured: red for
+    # the limit relaxed with the span check left live), so the broader plant was
+    # buying an old control number with a bigger hammer. Pushing the limit's DATE
+    # out of reach relaxes the limit and nothing else: the span check has already
+    # run, with the real `span_limit`, before this line.
     "F2": (
         "tests/test_f2_all_conditions.py",
         "rules/time_window.py",
-        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
-        "    if exit_side is not None:",
-        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n"
-        "    if False:  # PLANTED: the exit condition can no longer fail",
-        "the window's exit condition is relaxed, so a stay that left after the "
-        "limit is given the cheap rate anyway -- partial credit, which §8 forbids",
+        '    limit_local = _exit_limit(entry_local, rule.params["exit_by"], span_limit)',
+        '    limit_local = _exit_limit(  # PLANTED: the exit limit is out of reach\n'
+        '        entry_local, rule.params["exit_by"], span_limit + 3650\n'
+        "    )",
+        "the window's exit condition is relaxed -- the wall-clock limit alone, with "
+        "the day-span check left live -- so a stay that left after the limit is "
+        "given the cheap rate anyway: partial credit, which §8 forbids",
     ),
     "F3": (
         "tests/test_f3_entry_time_governs.py",
@@ -465,6 +475,30 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "evening window with an after-midnight limit again refuses the car that "
         "leaves the same evening -- 23:45 read as 'after 02:00' -- and prices it on "
         "the plan's ordinary rate instead",
+    ),
+    # THE COUNTER-MODEL, PROMOTED TO A CONTROL. This is the exact mutation the L
+    # review installed to discover that F40's subject was unguarded: a TRUE
+    # instant comparison, through `.timestamp()`. It mispriced the repeated hour
+    # 40.00 -> 24.00 and the whole 338-test suite stayed GREEN with it in place,
+    # over 17,565 bounded exit comparisons. So this plant is not a hypothetical
+    # break -- it is the state the module was actually in, and F40 is the test
+    # that now refuses to pass under it.
+    #
+    # It must be `.timestamp()`. `limit_local.replace(tzinfo=...)` compared
+    # directly would be a NO-OP: PEP 495 compares same-zone aware datetimes by
+    # their naive fields and ignores `fold`. See `_exit_limit`'s docstring, and
+    # `test_the_naive_replace_spelling_is_NOT_a_counter_model`.
+    "F40": (
+        "tests/test_f40_the_exit_limit_is_a_wall_clock_reading.py",
+        "rules/time_window.py",
+        "    if (exit_local.date(), exit_local.time()) > "
+        "(limit_local.date(), limit_local.time()):",
+        "    # PLANTED: a TRUE instant comparison, through UTC\n"
+        "    if exit_local.timestamp() > "
+        "limit_local.replace(tzinfo=exit_local.tzinfo).timestamp():",
+        "the exit limit stops being a wall-clock reading and becomes an instant, so "
+        "on the night the clocks go back the second stay through the repeated hour "
+        "is refused a rate its own wall clock earned -- 40.00 becomes 24.00",
     ),
     "F28": (
         "tests/test_f28_next_day_is_a_bounded_span.py",

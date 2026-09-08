@@ -27,7 +27,22 @@ reading; a limit that would have to WRAP to be reached is refused at load there
 and under `same_day`, because neither can say where it falls.
 
 October 2026 dates sit away from the US daylight-saving transition on the 1st of
-November, so nothing below turns on a 25-hour day.
+November, so nothing below turns on a 25-hour day. **That is a deliberate
+exclusion, not coverage:** what the limit does when the clocks change is F40's,
+proven on the transition itself, because a module that both fixes the comparison
+and tests it on the one night it could be decided by an offset would be proving
+two things with one fixture.
+
+**WHAT THIS GUARANTEE DOES NOT COVER, AS A DERIVED FRACTION: 1 of 3.** A wrapping
+`exit_by` -- one earlier in the day than `enter_from` -- can exist in exactly one
+of the three `day_span` values, because `same_day` and `any_span` refuse it at
+load; crossed with the three effect kinds that leaves THREE cells it can occupy,
+and this module builds only `flat`. So `next_day` x `rate` and `next_day` x
+`adjust` are never exercised here. The exit test reads `day_span` and `exit_by`
+and never the effect -- see `_exit_failure`, which is handed neither -- so the
+two unexercised cells share its code path exactly and were measured correct by
+hand. The fraction is recorded rather than left implied because a guarantee that
+reads broader than it is will be trusted broader than it is.
 """
 
 from __future__ import annotations

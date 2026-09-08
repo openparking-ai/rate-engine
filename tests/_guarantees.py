@@ -264,6 +264,14 @@ GUARANTEES: dict[str, str] = {
         "A limit that would have to WRAP to be reached is refused at load under "
         "`same_day` and `any_span`, neither of which can say what day it falls on."
     ),
+    "F40": (
+        "A window's exit limit is compared as WALL-CLOCK readings, never as two "
+        "instants, so a window behaves the same on the night the clocks change. "
+        "On the hour that occurs twice at a fall-back, two stays leaving at the "
+        "same stated time an hour apart in real time both qualify; a limit at a "
+        "wall time that a spring-forward skips entirely still reads, and a stay "
+        "past it is still refused."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
