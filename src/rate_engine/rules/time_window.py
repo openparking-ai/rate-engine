@@ -97,7 +97,7 @@ from datetime import date, datetime, timedelta
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
-from ..percent import percent_of_minor, percent_text
+from ..percent import BASIS_POINTS_PER_WHOLE, percent_of_minor, percent_text
 from ..stages import ADJUST, QUALIFY
 from ..wallclock import DAYS_OF_WEEK, local_minute, parse_limit
 from . import (
@@ -685,9 +685,13 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
     if amount["kind"] == "percent":
         measure = (
             f"{percent_text(amount['percent_bp'])} {effect['direction']} on "
-            f"{format_minor(running_total_minor, currency)} "
-            f"(rounded {effect['rounding']})"
+            f"{format_minor(running_total_minor, currency)}"
         )
+        if running_total_minor * amount["percent_bp"] != magnitude * BASIS_POINTS_PER_WHOLE:
+            # Only when the division moved the number -- the test `tax._tax_line`
+            # uses. 20% of 35.00 is exactly 7.00, and a line saying it was rounded
+            # would be a false statement on the line a disputed cent is read from.
+            measure += f" (rounded {effect['rounding']})"
     else:
         measure = (
             f"{format_minor(amount['minor'], currency)} {effect['direction']} on "

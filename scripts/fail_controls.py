@@ -583,6 +583,27 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "`up` takes an extra minor unit where the percentage is exact, so every "
         "whole-valued `up` adjustment is off by one",
     ),
+    # The second tax fix round. The line's rounding clause is conditional, and a
+    # boolean is controlled from both sides: `True` is the unconditional form the
+    # line had before, `False` drops the clause where a fraction was rounded.
+    "F31/exact-says-rounded": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "rules/time_window.py",
+        '        if running_total_minor * amount["percent_bp"]'
+        " != magnitude * BASIS_POINTS_PER_WHOLE:",
+        "        if True:  # PLANTED: the line claims a rounding whatever the division did",
+        "a percentage that divides exactly is described to the customer as rounded "
+        "up or down when nothing was rounded",
+    ),
+    "F31/fraction-says-nothing": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "rules/time_window.py",
+        '        if running_total_minor * amount["percent_bp"]'
+        " != magnitude * BASIS_POINTS_PER_WHOLE:",
+        "        if False:  # PLANTED: the line never says which way a fraction went",
+        "a percentage that landed on a fraction is shown without the direction it "
+        "was rounded, so a customer disputing a cent is told nothing",
+    ),
     # A2's second build group. W2 brings terminality and the trait that finally
     # gives an ADJUST window its line; W3 brings the second cap type and the
     # three stage categories the first one detonated.

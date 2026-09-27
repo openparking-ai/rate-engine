@@ -186,3 +186,34 @@ def test_the_UP_counterpart_takes_the_next_minor_unit_on_a_REAL_FRACTION():
     assert down["fee_minor"] == BASE - 124
     assert up["fee_minor"] == BASE - 125, up["fee_minor"]
     assert "(rounded up)" in _adjust_line(up)["text"], _adjust_line(up)["text"]
+
+
+@pytest.mark.guarantee("F31")
+def test_the_line_claims_a_rounding_ONLY_when_the_division_left_a_fraction():
+    """Both cases in one place, under both roundings, so neither can be made to
+    pass by breaking the other: a clause stated unconditionally fails the exact
+    stay, and a clause dropped altogether fails the fractional one.
+
+    20% of 35.00 is exactly 7.00 -- nothing was rounded, so the line must not say
+    it was. 12.5% of 9.99 is 1.24875, so the line says which way it went. The
+    same test `tax._tax_line` uses decides it, and the amount is not touched.
+    """
+    request = {"entry_at": "2026-03-03T09:00:00-05:00",
+               "exit_at": "2026-03-03T10:00:00-05:00",
+               "space_class": "standard", "currency": "USD"}
+    exact = copy.deepcopy(PLAN)
+    exact["rules"][0]["first_period_minor"] = 3500
+    exact["rules"][1]["effect"]["amount"] = {"kind": "percent", "percent_bp": 2000}
+    assert 3500 * 2000 % 10_000 == 0, "the exact fixture has to be exact"
+
+    for rounding in ("up", "down"):
+        exact["rules"][1]["effect"]["rounding"] = rounding
+        _s, whole = run_quote(dict(request, plans=[copy.deepcopy(exact)]))
+        line = _adjust_line(whole)["text"]
+        assert whole["fee_minor"] == 3500 - 700
+        assert "20% discount on 35.00 USD -- 7.00 USD off" in line, line
+        assert "rounded" not in line, f"nothing was rounded, and the line says so: {line}"
+
+        _s, fraction = _quote(rounding)
+        line = _adjust_line(fraction)["text"]
+        assert f"12.5% discount on 9.99 USD (rounded {rounding})" in line, line
