@@ -212,7 +212,8 @@ GUARANTEES: dict[str, str] = {
     "F31": (
         "An `adjust` percentage is integer basis points and its `rounding` is "
         "CONSULTED: the same stay under `up` and under `down` differs by one minor "
-        "unit, and the breakdown line says which way it went."
+        "unit, and when the amount was rounded the breakdown line says which way "
+        "it went; when the division was exact there is no rounding clause to state."
     ),
     "F32": (
         "`grace` is TERMINAL, and free means free: a stay at or under the stated "
