@@ -97,6 +97,7 @@ from datetime import date, datetime, timedelta
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
+from ..percent import percent_of_minor, percent_text
 from ..stages import ADJUST, QUALIFY
 from ..wallclock import DAYS_OF_WEEK, local_minute, parse_limit
 from . import (
@@ -135,11 +136,6 @@ AMOUNT_KINDS: tuple[str, ...] = ("percent", "fixed")
 #: percentage lands on a fraction of a cent and somebody has to say who keeps it.
 ADJUST_ROUNDINGS: tuple[str, ...] = ("up", "down")
 
-#: 20% is 2000. **Basis points, because a percent field that could be `20.5`
-#: would either be refused by `money.refuse_non_integer_money` -- which rejects a
-#: float anywhere in a plan -- or put a float into the pricing path. Integers end
-#: to end.**
-BASIS_POINTS_PER_WHOLE: int = 10_000
 
 APPLIED = "time_window.applied"
 NOT_APPLIED = "time_window.not_applied"
@@ -664,28 +660,19 @@ def _window_clause(rule: Rule, entry_local) -> str:
     )
 
 
-def _percent(basis_points: int) -> str:
-    """2000 -> '20%', 1250 -> '12.5%'. Integer arithmetic; no float is created."""
-    whole, fraction = divmod(basis_points, 100)
-    if fraction == 0:
-        return f"{whole}%"
-    return f"{whole}.{fraction:02d}".rstrip("0") + "%"
-
-
 def _magnitude(effect: dict, running_total_minor: int) -> int:
     """How much this adjustment moves the fee, as a positive number of minor units.
 
-    Integer end to end. A percentage is basis points times the total divided by
-    10,000, and the division is the only place a fraction of a minor unit can
-    appear -- so it is the only place `rounding` is read.
+    A percentage goes through `percent.percent_of_minor`, the ONE applier a tax
+    rule shares -- a second copy of that division is a second answer to the same
+    question the day one of them is edited. This effect may state only
+    `ADJUST_ROUNDINGS`; the applier implements more, and that difference is the
+    loader's to hold, not the arithmetic's.
     """
     amount = effect["amount"]
     if amount["kind"] == "fixed":
         return amount["minor"]
-    product = running_total_minor * amount["percent_bp"]
-    if effect["rounding"] == "down":
-        return product // BASIS_POINTS_PER_WHOLE
-    return -(-product // BASIS_POINTS_PER_WHOLE)  # ceil, integer only
+    return percent_of_minor(running_total_minor, amount["percent_bp"], effect["rounding"])
 
 
 def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
@@ -697,7 +684,7 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
 
     if amount["kind"] == "percent":
         measure = (
-            f"{_percent(amount['percent_bp'])} {effect['direction']} on "
+            f"{percent_text(amount['percent_bp'])} {effect['direction']} on "
             f"{format_minor(running_total_minor, currency)} "
             f"(rounded {effect['rounding']})"
         )

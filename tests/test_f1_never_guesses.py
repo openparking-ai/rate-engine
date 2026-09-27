@@ -12,6 +12,8 @@ this guarantee exists to prevent, not a proxy for it.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from fixtures import loaded, stay, with_rule_field, without_rule
@@ -19,10 +21,12 @@ from rate_engine.engine import quote
 from rate_engine.findings import (
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
+    GAP_NO_TAX_SET_IN_FORCE,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_UNDECLARED_SPACE_CLASS,
     Refused,
 )
+from rate_engine.tax import load_tax_sets, tax_lines
 from rate_engine.validator import validate_plan
 
 LATE = "2026-03-03T09:14:00-05:00"
@@ -69,6 +73,14 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
         quote([loaded()], stay("2026-01-05T09:14:00-05:00", 120))
     reached.add(e.value.findings[0].code)
 
+    # The tax gap, from a tax fixture: an instant before every stated set.
+
+    sets = load_tax_sets([{"effective_from": "2026-01-01T00:00:00-05:00", "rules": []}])
+    with pytest.raises(Refused) as e:
+        tax_lines(sets, subtotal_minor=1000, currency="USD",
+                  at=datetime(2025, 6, 1, tzinfo=UTC))
+    reached.add(e.value.findings[0].code)
+
     from rate_engine.findings import GAP_CODES
 
     assert reached == set(GAP_CODES), (
@@ -79,6 +91,7 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
         GAP_STAY_EXCEEDS_MAX_DURATION,
         GAP_NO_ACCUMULATE_RULE,
         GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
+        GAP_NO_TAX_SET_IN_FORCE,
     }
 
 

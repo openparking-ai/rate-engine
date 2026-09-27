@@ -272,6 +272,36 @@ GUARANTEES: dict[str, str] = {
         "wall time that a spring-forward skips entirely still reads, and a stay "
         "past it is still refused."
     ),
+    "F41": (
+        "A tax rounds the way its rule states: `rounding` is required, with no "
+        "default, and is one of `up`, `down` and `nearest`, where `nearest` takes "
+        "EXACTLY half up, decided in integers on the exact remainder. Each mode is "
+        "asserted on figures where it differs from the others, the exact half "
+        "included, and the line shows the unrounded figure and which way it went."
+    ),
+    "F42": (
+        "Taxes never compound. Every rule in a set is a percentage of the same "
+        "`subtotal_minor` -- the money actually paid -- and never of a total that "
+        "already includes another tax line. A rule cannot state a base at all: the "
+        "key is refused as the unknown key it is, and so is a flat amount."
+    ),
+    "F43": (
+        "The tax set in force is chosen by the instant: the latest set taking "
+        "effect at or before it, whatever order the sets arrive in. A new set is "
+        "how a rate changes, a tax is added and a tax is repealed. An instant "
+        "before every set is REFUSED, never taxed at zero, and two sets taking "
+        "effect at the same instant are refused at load, both named."
+    ),
+    "F44": (
+        "Taxes come out in the `sequence` each rule states, never in the order the "
+        "list arrived in. A rule with no `sequence`, or two rules in one set "
+        "sharing one, is refused at load."
+    ),
+    "F45": (
+        "Tax on nothing is nothing. A subtotal of zero produces no tax lines, and "
+        "the same rules on a positive subtotal produce them. A negative subtotal, "
+        "or one that is not an integer of minor units, is refused."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

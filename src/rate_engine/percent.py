@@ -1,0 +1,85 @@
+"""A percentage of an amount of money: the ONE applier, shared.
+
+Two things in this module take a percentage of money: a `time_window`'s `adjust`
+effect, and a tax rule. They do not get one implementation each. A percentage
+taken in two places is two answers to one question the day one of them is
+edited, and the question is a customer's money -- so both call `percent_of_minor`
+below, and the only thing that differs between them is WHICH rounding modes each
+one lets a document state.
+
+**Integer end to end.** A percentage is INTEGER BASIS POINTS -- 20% is `2000`,
+12.5% is `1250` -- and the arithmetic is `amount * percent_bp` divided by 10,000.
+The division is the only place a fraction of a minor unit can appear, so it is
+the only place a rounding mode is read. No float is constructed at any point,
+and `round()` is not used: Python's `round` is banker's rounding on a float, which
+is two separate reasons it has no business deciding a cent.
+
+**The applier refuses a mode it does not implement** rather than falling through
+to one it does. The set a document may STATE is the caller's (`ADJUST_ROUNDINGS`
+for an adjustment, `TAX_ROUNDINGS` for a tax), and each loader refuses anything
+outside its own set by name. This function is the second line: it checks what it
+IMPLEMENTS, never what a loader accepts -- the F15 disposition. It used to be an
+`if down / else ceil`, which priced any mode that was not "down" as "up".
+"""
+
+from __future__ import annotations
+
+#: 20% is 2000. Basis points, because a percent field that could be `20.5` would
+#: either be refused by `money.refuse_non_integer_money` -- which rejects a float
+#: anywhere in a plan -- or put a float into the pricing path.
+BASIS_POINTS_PER_WHOLE: int = 10_000
+
+#: Every mode `percent_of_minor` implements. A document may state a SUBSET of
+#: these, and which subset is the loader's decision, not this file's.
+IMPLEMENTED_ROUNDINGS: tuple[str, ...] = ("up", "down", "nearest")
+
+
+def percent_text(basis_points: int) -> str:
+    """2000 -> '20%', 1250 -> '12.5%'. Integer arithmetic; no float is created."""
+    whole, fraction = divmod(basis_points, 100)
+    if fraction == 0:
+        return f"{whole}%"
+    return f"{whole}.{fraction:02d}".rstrip("0") + "%"
+
+
+def percent_of_minor(amount_minor: int, percent_bp: int, rounding: str) -> int:
+    """`percent_bp` basis points of `amount_minor`, rounded the way `rounding` says.
+
+    Both inputs are non-negative whole numbers by the time they arrive here -- every
+    caller validates them at load -- so the result is a non-negative magnitude, and
+    the caller gives it a sign.
+
+    * `down`    -- the fraction is dropped.
+    * `up`      -- any fraction takes the next whole minor unit.
+    * `nearest` -- to the closer whole minor unit, and EXACTLY HALF goes up
+      (half away from zero; the amount is never negative here). Decided on the
+      exact remainder, in integers: `2 * remainder >= divisor`.
+    """
+    product = amount_minor * percent_bp
+    quotient, remainder = divmod(product, BASIS_POINTS_PER_WHOLE)
+    if rounding == "down":
+        return quotient
+    if rounding == "up":
+        return quotient + (1 if remainder else 0)
+    if rounding == "nearest":
+        return quotient + (1 if 2 * remainder >= BASIS_POINTS_PER_WHOLE else 0)
+    raise ValueError(
+        f"rounding {rounding!r} is not one this applier implements "
+        f"({', '.join(IMPLEMENTED_ROUNDINGS)}). It refuses rather than pricing the "
+        "amount under a different mode."
+    )
+
+
+def exact_text(amount_minor: int, percent_bp: int, currency: str) -> str:
+    """The UNROUNDED percentage, rendered exactly, for a line a customer can check.
+
+    `amount * percent_bp` is an integer count of ten-thousandths of a minor unit,
+    so it renders exactly with four more decimal places than the currency has --
+    no float, no approximation. Trailing zeros are dropped: 85.425, not 85.425000.
+    """
+    from .currency import minor_unit_digits
+
+    digits = minor_unit_digits(currency) + 4
+    whole, part = divmod(amount_minor * percent_bp, 10**digits)
+    decimals = f"{part:0{digits}d}".rstrip("0")
+    return f"{whole}.{decimals} {currency}" if decimals else f"{whole} {currency}"

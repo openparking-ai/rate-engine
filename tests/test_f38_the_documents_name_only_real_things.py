@@ -95,6 +95,7 @@ def _owned_names() -> dict[str, set[str]]:
         weekly_max,
     )
     from rate_engine.stages import STAGES
+    from rate_engine.tax import TAX_ROUNDINGS, TAX_RULE_KEYS, TAX_SET_KEYS
     from rate_engine.wallclock import DAYS_OF_WEEK
 
     modules = (daily_max, grace, increment, space_surcharge, time_window, weekly_max)
@@ -111,6 +112,19 @@ def _owned_names() -> dict[str, set[str]]:
     values |= set(time_window.AMOUNT_KINDS) | set(time_window.ADJUST_ROUNDINGS)
     values |= set(increment.ROUNDING_MODES)
     values |= set(daily_max.DAY_BOUNDARIES) | set(weekly_max.WEEK_BOUNDARIES)
+    values |= set(TAX_ROUNDINGS)
+
+    # The tax functions, their keyword arguments, and the fields a tax set and a
+    # tax rule carry -- read from the module, so a renamed one turns this red.
+    import inspect
+
+    from rate_engine import tax
+
+    tax_names = set(tax.__all__) | set(TAX_SET_KEYS) | set(TAX_RULE_KEYS)
+    tax_names |= {
+        name for name, parameter in inspect.signature(tax.tax_lines).parameters.items()
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    }
 
     return {
         "response field": _response_fields(),
@@ -122,6 +136,7 @@ def _owned_names() -> dict[str, set[str]]:
         "rule field": fields,
         "stated value": values,
         "guarantee": set(GUARANTEES),
+        "tax": tax_names,
     }
 
 
