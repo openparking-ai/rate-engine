@@ -57,6 +57,26 @@ def test_a_rule_with_no_sequence_is_REFUSED():
 
 
 @pytest.mark.guarantee("F44")
+def test_sequence_ZERO_is_accepted_and_ordered_first_while_an_ABSENT_one_is_refused():
+    """0 is a whole number and a sequence the garage stated. A truthiness test --
+    `raw["sequence"] or None` -- would read it as missing, and nothing noticed
+    when one was planted: the behaviour was right and unguarded.
+
+    Both sides in one set, so a check that got either one wrong fails here.
+    """
+    rules = [dict(r) for r in RULES]
+    rules[2]["sequence"] = 0
+    assert _ids(rules) == ["district", "city", "state"]
+
+    rules.append({"id": "levy", "label": "Stadium levy", "percent_bp": 100,
+                  "rounding": "down"})
+    with pytest.raises(InvalidPlan) as caught:
+        _ids(rules)
+    assert caught.value.missing_keys == ("sequence",)
+    assert "rules[3]" in str(caught.value), str(caught.value)
+
+
+@pytest.mark.guarantee("F44")
 def test_two_rules_sharing_a_sequence_are_REFUSED_both_named():
     rules = [dict(r) for r in RULES]
     rules[2]["sequence"] = 2

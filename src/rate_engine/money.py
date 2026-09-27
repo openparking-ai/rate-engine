@@ -96,7 +96,7 @@ def as_non_negative_minor(value: Any, label: str) -> int:
     return minor
 
 
-def refuse_non_integer_money(node: Any, path: str = "plan") -> None:
+def refuse_non_integer_money(node: Any, path: str = "plan", *, document_name: str) -> None:
     """Walk a loaded plan and refuse a float, a bool or a Decimal ANYWHERE in it.
 
     **This function used to be called `refuse_floats`, and the old name was the
@@ -119,26 +119,33 @@ def refuse_non_integer_money(node: Any, path: str = "plan") -> None:
     The check is on the type, not on the value: ``3.0`` is refused. A plan is
     data an integrator wrote, and the moment this makes an exception for a float
     that happens to be whole, every float becomes one bug away from whole.
+
+    **`document_name` is what the refusal calls the document**, and it has no
+    default. A tax set is walked by this same function, and it used to be told it
+    was a plan: "No float appears anywhere in a plan" sends an operator to the
+    wrong document. Each loader names its own.
     """
     if isinstance(node, bool):
         raise NotMinorUnits(
-            f"{path} is a boolean ({node!r}). No bool appears anywhere in a plan, at "
-            "any depth. `bool` is an `int` subclass in Python, so one sitting in a "
+            f"{path} is a boolean ({node!r}). No bool appears anywhere in a "
+            f"{document_name}, at any depth. `bool` is an `int` subclass in Python, "
+            "so one sitting in a "
             "field this version does not read is an integer waiting for the round "
             "that starts reading it."
         )
     if isinstance(node, float):
         raise NotMinorUnits(
-            f"{path} is a float ({node!r}). No float appears anywhere in a plan, at any "
-            "depth -- not in a field this version reads, and not in one it ignores."
+            f"{path} is a float ({node!r}). No float appears anywhere in a "
+            f"{document_name}, at any depth -- not in a field this version reads, "
+            "and not in one it ignores."
         )
     if isinstance(node, dict):
         for key, value in node.items():
-            refuse_non_integer_money(value, f"{path}.{key}")
+            refuse_non_integer_money(value, f"{path}.{key}", document_name=document_name)
         return
     if isinstance(node, (list, tuple)):
         for index, value in enumerate(node):
-            refuse_non_integer_money(value, f"{path}[{index}]")
+            refuse_non_integer_money(value, f"{path}[{index}]", document_name=document_name)
         return
     if isinstance(node, Decimal):
         raise NotMinorUnits(

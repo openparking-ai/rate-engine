@@ -156,7 +156,7 @@ def load_tax_sets(document: object, where: str = "tax_sets") -> tuple[TaxSet, ..
     stated; a rounding outside `TAX_ROUNDINGS`; two rules in one set sharing an
     id or a `sequence`; and two sets taking effect at the same instant.
     """
-    refuse_non_integer_money(document, where)
+    refuse_non_integer_money(document, where, document_name="tax set")
     if not isinstance(document, list) or not document:
         raise InvalidPlan(
             f"{where} must be a non-empty list of tax sets. A garage that charges no "

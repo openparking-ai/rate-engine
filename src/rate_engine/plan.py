@@ -249,7 +249,7 @@ def load_plan(document: object, where: str = "plan") -> Plan:
 
     # Before any field is read. A float in a key this version ignores is still a
     # float in a live plan; see money.refuse_non_integer_money.
-    refuse_non_integer_money(document, where)
+    refuse_non_integer_money(document, where, document_name="plan")
     _require_keys(document, PLAN_KEYS, where)
 
     plan_version = document["plan_version"]

@@ -98,14 +98,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a float anywhere in a plan is accepted at load, including in a field this "
         "version does not yet read",
     ),
+    # The tax fix round. The walk is shared, and a tax set was told it was a plan.
+    "F4/tax-set-named": (
+        "tests/test_f4_integer_minor_units.py",
+        "tax.py",
+        '    refuse_non_integer_money(document, where, document_name="tax set")',
+        '    refuse_non_integer_money(document, where, document_name="plan")'
+        "  # PLANTED: the tax loader calls its document a plan",
+        "a float or a bool in a tax set is refused with a message saying it is "
+        "in a PLAN, sending the operator to the wrong document",
+    ),
     # P3. The plant removes the plan-wide walk entirely -- "remove the check and
     # require red". `as_minor` still guards the fields that ASK for money, so what
     # this exposes is precisely the gap the sentence was false about: the leaves
-    # nothing else types.
+    # nothing else types. Re-anchored in the tax fix round, when the walk began
+    # taking the name of the document it walks. The PLANTED DEFECT IS UNCHANGED.
     "F4b": (
         "tests/test_f4_integer_minor_units.py",
         "plan.py",
-        "    refuse_non_integer_money(document, where)",
+        '    refuse_non_integer_money(document, where, document_name="plan")',
         "    pass  # PLANTED: the plan-wide walk no longer runs",
         "a float, a bool or a Decimal in a plan field this version does not read is "
         "accepted at load, so the sentence published at four sites is false again",
@@ -552,6 +563,26 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "decision -- every percentage rounds one way whatever the document says, "
         "on a plan that reads correctly to whoever wrote it",
     ),
+    # The tax fix round. The corpus stated only `down`, so a comparison over the
+    # stated documents never reached `up`. These two arms are one character each,
+    # one per side of the branch: F31's counterpart lands on a fraction, F30's on
+    # a whole amount, and each is the only corpus fixture that sees its arm.
+    "F31/up-fraction": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "percent.py",
+        "        return quotient + (1 if remainder else 0)",
+        "        return quotient + (0 if remainder else 0)  # PLANTED: `up` drops the fraction",
+        "`up` behaves as `down` on a real fraction, so a garage that stated `up` "
+        "keeps a minor unit it said the customer would not keep",
+    ),
+    "F31/up-whole": (
+        "tests/test_f30_an_adjust_runs_after_cap_and_surcharge.py",
+        "percent.py",
+        "        return quotient + (1 if remainder else 0)",
+        "        return quotient + (1 if remainder else 1)  # PLANTED: `up` adds one to a whole",
+        "`up` takes an extra minor unit where the percentage is exact, so every "
+        "whole-valued `up` adjustment is off by one",
+    ),
     # A2's second build group. W2 brings terminality and the trait that finally
     # gives an ADJUST window its line; W3 brings the second cap type and the
     # three stage categories the first one detonated.
@@ -724,6 +755,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "        if False:  # PLANTED: two rules may share a sequence",
         "two rules stating the same `sequence` load, so their relative order is "
         "the sort's tie-break over the caller's list -- array position again",
+    ),
+    "F44/zero-sequence": (
+        "tests/test_f44_tax_order_is_the_stated_sequence.py",
+        "tax.py",
+        '    sequence = _whole(raw["sequence"], f"{where}.sequence", positive=False)',
+        '    sequence = _whole(raw["sequence"] or None, f"{where}.sequence", positive=False)'
+        "  # PLANTED: 0 is read as missing",
+        "a rule stating `sequence: 0` is refused as though it stated none -- the "
+        "truthiness trap, which the whole suite passed when it was planted by hand",
     ),
     "F45": (
         "tests/test_f45_tax_on_nothing_is_nothing.py",

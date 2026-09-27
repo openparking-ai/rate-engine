@@ -139,6 +139,13 @@ WEEKEND_DISCOUNT = {
     "decisions": [],
 }
 
+#: The same document stating `up`. A counterpart in the corpus, not a rewrite
+#: inside one test: every percentage adjustment here used to state `down`, so a
+#: comparison run over the stated documents never reached the applier's `up`
+#: branch at all.
+WEEKEND_DISCOUNT_UP = copy.deepcopy(WEEKEND_DISCOUNT)
+WEEKEND_DISCOUNT_UP["rules"][1]["effect"]["rounding"] = "up"
+
 
 def _lines(document: dict, space_class: str = "standard") -> list[dict]:
     status, body = run_quote(
@@ -223,3 +230,25 @@ def test_the_framework_contract_no_longer_states_the_blanket_claim():
         "the framework no longer documents that a TYPE can declare it speaks -- the "
         "stage stopped being the whole answer and the contract has to say so"
     )
+
+
+@pytest.mark.guarantee("F31")
+def test_the_UP_counterpart_on_a_SATURDAY_takes_the_same_whole_amount():
+    """The weekend window APPLYING, under both roundings: 86 minutes is 8.00 +
+    4.00, and 20% of 12.00 is exactly 2.40 -- no fraction, so `up` adds nothing.
+    On the Tuesday every test above uses, the window declines under either."""
+    fees = {}
+    for name, document in (("down", WEEKEND_DISCOUNT), ("up", WEEKEND_DISCOUNT_UP)):
+        status, body = run_quote(
+            {
+                "plans": [copy.deepcopy(document)],
+                "entry_at": "2026-03-07T09:14:00-05:00",
+                "exit_at": "2026-03-07T10:40:00-05:00",
+                "space_class": "standard", "currency": "USD",
+            }
+        )
+        assert status == 200, body
+        applied = [ln for ln in body["breakdown"] if ln["code"] == "time_window.applied"]
+        assert applied and applied[0]["delta_minor"] == -240, body["breakdown"]
+        fees[name] = body["fee_minor"]
+    assert fees == {"down": 960, "up": 960}, fees

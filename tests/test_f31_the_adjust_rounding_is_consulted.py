@@ -58,6 +58,13 @@ PLAN = {
     "decisions": [],
 }
 
+#: The same document stating `up`. A counterpart in the corpus, not a rewrite
+#: inside one test: every percentage adjustment here used to state `down`, so a
+#: comparison run over the stated documents never reached the applier's `up`
+#: branch at all.
+PLAN_UP = copy.deepcopy(PLAN)
+PLAN_UP["rules"][1]["effect"]["rounding"] = "up"
+
 
 def _quote(rounding: str | None = None, amount: dict | None = None):
     document = copy.deepcopy(PLAN)
@@ -166,3 +173,16 @@ def test_a_shape_the_engine_cannot_price_is_REFUSED_by_name(effect, expected):
     )
     assert status == 400, f"{effect!r} was accepted"
     assert expected in body["error"], body["error"]
+
+
+@pytest.mark.guarantee("F31")
+def test_the_UP_counterpart_takes_the_next_minor_unit_on_a_REAL_FRACTION():
+    """`up` with a remainder: 124.875 off is 125, where `down` takes 124."""
+    request = {"entry_at": "2026-03-03T09:00:00-05:00",
+               "exit_at": "2026-03-03T10:00:00-05:00",
+               "space_class": "standard", "currency": "USD"}
+    _s, down = run_quote(dict(request, plans=[copy.deepcopy(PLAN)]))
+    _s, up = run_quote(dict(request, plans=[copy.deepcopy(PLAN_UP)]))
+    assert down["fee_minor"] == BASE - 124
+    assert up["fee_minor"] == BASE - 125, up["fee_minor"]
+    assert "(rounded up)" in _adjust_line(up)["text"], _adjust_line(up)["text"]

@@ -181,3 +181,30 @@ def test_the_published_sentence_is_true_at_EVERY_LEAF_of_a_plan():
     )
 
 
+
+
+@pytest.mark.guarantee("F4")
+@pytest.mark.parametrize("probe,kind", [(8.5, "float"), (True, "bool")])
+def test_the_refusal_names_the_DOCUMENT_it_was_found_in(probe, kind):
+    """A tax set is walked by the same check as a plan, and was told it was one.
+
+    "No float appears anywhere in a plan" on a tax set sends an operator to the
+    wrong document. Both halves in ONE test, so neither can be fixed by breaking
+    the other: the tax set is named as a tax set, and a plan is still a plan.
+    """
+    from rate_engine.tax import load_tax_sets
+
+    tax_set = [{"effective_from": "2026-01-01T00:00:00-05:00", "rules": [
+        {"id": "city", "label": "City parking tax", "percent_bp": probe,
+         "rounding": "down", "sequence": 1},
+    ]}]
+    with pytest.raises(NotMinorUnits) as caught:
+        load_tax_sets(tax_set)
+    in_tax_set = str(caught.value)
+    assert "tax_sets[0].rules[0].percent_bp" in in_tax_set, in_tax_set
+    assert f"No {kind} appears anywhere in a tax set" in in_tax_set, in_tax_set
+    assert "anywhere in a plan" not in in_tax_set, in_tax_set
+
+    in_plan = _refused(_with_note(probe))
+    assert f"No {kind} appears anywhere in a plan" in in_plan, in_plan
+    assert "tax set" not in in_plan, in_plan
