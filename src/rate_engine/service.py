@@ -1,8 +1,9 @@
-"""The HTTP surface. Two routes, both thin, both over the one code path.
+"""The HTTP surface. Three routes, all thin, all over the one code path.
 
-    POST /v1/quote           plans + a stay -> the fee and the breakdown
-    POST /v1/validate-plan   a plan -> its gaps and conflicts
-    GET  /v1/health          schema version, registered rule types
+    POST /v1/quote               plans + a stay -> the fee and the breakdown
+    POST /v1/validate-plan       a plan -> its gaps and conflicts
+    POST /v1/validate-tax-sets   a garage's tax sets -> loaded, or refused by name
+    GET  /v1/health              schema version, registered rule types
 
 Written on `http.server` rather than a framework, for the same reason
 `vehicle-id` was: this module is arithmetic on integers with a door on it, and a
@@ -24,7 +25,7 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .contract import SCHEMA_VERSION, encode, run_quote, run_validate
+from .contract import SCHEMA_VERSION, encode, run_quote, run_validate, run_validate_tax_sets
 from .rules import RULE_TYPES
 
 #: Refuse a body larger than this rather than reading it into memory. A plan is
@@ -62,7 +63,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = self.path.split("?")[0]
-        runner = {"/v1/quote": run_quote, "/v1/validate-plan": run_validate}.get(route)
+        runner = {
+            "/v1/quote": run_quote,
+            "/v1/validate-plan": run_validate,
+            "/v1/validate-tax-sets": run_validate_tax_sets,
+        }.get(route)
         if runner is None:
             self._send(404, {"error": "no such route"})
             return

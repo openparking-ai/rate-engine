@@ -1,4 +1,4 @@
-"""The CLI. The same two operations, because an operator testing a rate should
+"""The CLI. The same three operations, because an operator testing a rate should
 not need an HTTP client.
 
 **This is not a simulation mode.** `rate-engine quote` builds the same request
@@ -37,7 +37,14 @@ import json
 import sys
 from pathlib import Path
 
-from .contract import SCHEMA_VERSION, breakdown_text, encode, run_quote, run_validate
+from .contract import (
+    SCHEMA_VERSION,
+    breakdown_text,
+    encode,
+    run_quote,
+    run_validate,
+    run_validate_tax_sets,
+)
 from .money import format_minor
 
 
@@ -142,6 +149,25 @@ def _cmd_validate(args) -> int:
     return 1
 
 
+def _cmd_validate_tax_sets(args) -> int:
+    """`validate-plan`'s exits, for the same reasons: `--json` is the route's bytes
+    and exits 0 or 1 on the route's status; without it an unreadable document is 2.
+    """
+    status, body = run_validate_tax_sets({"tax_sets": _load(args.tax_sets)})
+    if args.json:
+        _write_exact(encode(body))
+        return 0 if status == 200 else 1
+    if status != 200:
+        print(f"\n  the tax sets could not be read: {body['error']}\n")
+        return 2
+    print(f"\n  {len(body['tax_sets'])} tax set(s) load:")
+    for s in body["tax_sets"]:
+        stated = "no tax" if s["rule_count"] == 0 else f"{s['rule_count']} rule(s)"
+        print(f"    from {s['effective_from']}: {stated}")
+    print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rate-engine",
@@ -168,6 +194,19 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--plan", required=True)
     v.add_argument("--json", action="store_true")
     v.set_defaults(func=_cmd_validate)
+
+    t = sub.add_parser(
+        "validate-tax-sets",
+        help=(
+            "load a garage's tax sets, or refuse them by name "
+            "(the same path /v1/validate-tax-sets uses)"
+        ),
+    )
+    t.add_argument("--tax-sets", required=True, dest="tax_sets", help="a list of tax sets, or '-'")
+    t.add_argument(
+        "--json", action="store_true", help="the exact bytes /v1/validate-tax-sets returns"
+    )
+    t.set_defaults(func=_cmd_validate_tax_sets)
 
     args = parser.parse_args(argv)
     return args.func(args)
