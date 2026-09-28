@@ -37,7 +37,23 @@ from .stages import ADJUST, RESOLVING
 
 
 class InvalidPlan(ValueError):
-    """The plan document cannot be loaded. The message names the field."""
+    """The plan document cannot be loaded. The message names the field.
+
+    `missing_keys` and `unknown_keys` carry, as data, the fields `_require_keys`
+    refused -- so a caller or a test keys off WHICH field rather than off the
+    wording of the sentence. Empty on every other refusal.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing_keys: tuple[str, ...] = (),
+        unknown_keys: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.missing_keys = missing_keys
+        self.unknown_keys = unknown_keys
 
 
 #: Resolution modes a plan may state, and A2 is where they finally DECIDE
@@ -93,14 +109,16 @@ def _require_keys(document: dict, keys: frozenset[str], where: str) -> None:
         raise InvalidPlan(
             f"{where} is missing required field(s): {', '.join(missing)}. "
             "This module has no defaults; a field it cannot read is a pricing "
-            "decision nobody made."
+            "decision nobody made.",
+            missing_keys=tuple(missing),
         )
     if unknown:
         raise InvalidPlan(
             f"{where} carries key(s) this version does not understand: "
             f"{', '.join(unknown)}. They are REJECTED rather than ignored -- an "
             "ignored key is how a plan an operator believes is live prices "
-            "something else. Upgrade the engine, or remove the key."
+            "something else. Upgrade the engine, or remove the key.",
+            unknown_keys=tuple(unknown),
         )
 
 
@@ -231,7 +249,7 @@ def load_plan(document: object, where: str = "plan") -> Plan:
 
     # Before any field is read. A float in a key this version ignores is still a
     # float in a live plan; see money.refuse_non_integer_money.
-    refuse_non_integer_money(document, where)
+    refuse_non_integer_money(document, where, document_name="plan")
     _require_keys(document, PLAN_KEYS, where)
 
     plan_version = document["plan_version"]

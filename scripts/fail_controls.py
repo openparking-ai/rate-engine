@@ -98,14 +98,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a float anywhere in a plan is accepted at load, including in a field this "
         "version does not yet read",
     ),
+    # The tax fix round. The walk is shared, and a tax set was told it was a plan.
+    "F4/tax-set-named": (
+        "tests/test_f4_integer_minor_units.py",
+        "tax.py",
+        '    refuse_non_integer_money(document, where, document_name="tax set")',
+        '    refuse_non_integer_money(document, where, document_name="plan")'
+        "  # PLANTED: the tax loader calls its document a plan",
+        "a float or a bool in a tax set is refused with a message saying it is "
+        "in a PLAN, sending the operator to the wrong document",
+    ),
     # P3. The plant removes the plan-wide walk entirely -- "remove the check and
     # require red". `as_minor` still guards the fields that ASK for money, so what
     # this exposes is precisely the gap the sentence was false about: the leaves
-    # nothing else types.
+    # nothing else types. Re-anchored in the tax fix round, when the walk began
+    # taking the name of the document it walks. The PLANTED DEFECT IS UNCHANGED.
     "F4b": (
         "tests/test_f4_integer_minor_units.py",
         "plan.py",
-        "    refuse_non_integer_money(document, where)",
+        '    refuse_non_integer_money(document, where, document_name="plan")',
         "    pass  # PLANTED: the plan-wide walk no longer runs",
         "a float, a bool or a Decimal in a plan field this version does not read is "
         "accepted at load, so the sentence published at four sites is false again",
@@ -188,8 +199,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 2",
-        "SCHEMA_VERSION = 3  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 3",
+        "SCHEMA_VERSION = 4  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -539,14 +550,57 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "an adjustment is taken before the cap and the surcharge, so the customer "
         "is given a percentage of a number they are not being charged",
     ),
+    # Re-anchored in the tax round, when the division moved into the ONE applier
+    # a tax rule shares. The PLANTED DEFECT IS UNCHANGED -- every percentage
+    # rounds down whatever the plan says -- because re-pointing an anchor must
+    # not quietly weaken what the control proves.
     "F31": (
         "tests/test_f31_the_adjust_rounding_is_consulted.py",
-        "rules/time_window.py",
-        '    if effect["rounding"] == "down":',
+        "percent.py",
+        '    if rounding == "down":',
         "    if True:  # PLANTED: the stated rounding is ignored",
         "the direction a fractional minor unit goes stops being the plan's "
         "decision -- every percentage rounds one way whatever the document says, "
         "on a plan that reads correctly to whoever wrote it",
+    ),
+    # The tax fix round. The corpus stated only `down`, so a comparison over the
+    # stated documents never reached `up`. These two arms are one character each,
+    # one per side of the branch: F31's counterpart lands on a fraction, F30's on
+    # a whole amount, and each is the only corpus fixture that sees its arm.
+    "F31/up-fraction": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "percent.py",
+        "        return quotient + (1 if remainder else 0)",
+        "        return quotient + (0 if remainder else 0)  # PLANTED: `up` drops the fraction",
+        "`up` behaves as `down` on a real fraction, so a garage that stated `up` "
+        "keeps a minor unit it said the customer would not keep",
+    ),
+    "F31/up-whole": (
+        "tests/test_f30_an_adjust_runs_after_cap_and_surcharge.py",
+        "percent.py",
+        "        return quotient + (1 if remainder else 0)",
+        "        return quotient + (1 if remainder else 1)  # PLANTED: `up` adds one to a whole",
+        "`up` takes an extra minor unit where the percentage is exact, so every "
+        "whole-valued `up` adjustment is off by one",
+    ),
+    # The second tax fix round. The line's rounding clause is conditional, and a
+    # boolean is controlled from both sides: `True` is the unconditional form the
+    # line had before, `False` drops the clause where a fraction was rounded.
+    "F31/exact-says-rounded": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "rules/time_window.py",
+        '        if was_rounded(running_total_minor, amount["percent_bp"], magnitude):',
+        "        if True:  # PLANTED: the line claims a rounding whatever the division did",
+        "a percentage that divides exactly is described to the customer as rounded "
+        "up or down when nothing was rounded",
+    ),
+    "F31/fraction-says-nothing": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "rules/time_window.py",
+        '        if was_rounded(running_total_minor, amount["percent_bp"], magnitude):',
+        "        if False:  # PLANTED: the line never says which way a fraction went",
+        "a percentage that landed on a fraction is shown without the direction it "
+        "was rounded, so a customer disputing a cent is told nothing",
     ),
     # A2's second build group. W2 brings terminality and the trait that finally
     # gives an ADJUST window its line; W3 brings the second cap type and the
@@ -643,6 +697,125 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a finding code is renamed in the code and not in the prose that names it, "
         "so docs/CONTRACT.md keeps publishing an identifier nothing answers with -- "
         "the true-sounding published sentence over correct code",
+    ),
+    # The tax round's five, each with the arms its guarantee needs. Every arm
+    # alone must go red: a plant that broke two things at once would prove that
+    # something broke, not that each check measures its own subject.
+    "F41": (
+        "tests/test_f41_a_tax_rounds_the_way_its_rule_says.py",
+        "percent.py",
+        "        return quotient + (1 if 2 * remainder >= BASIS_POINTS_PER_WHOLE else 0)",
+        "        return quotient + (1 if 2 * remainder > BASIS_POINTS_PER_WHOLE else 0)"
+        "  # PLANTED: exactly half goes down",
+        "`nearest` is decided with `>` instead of `>=`, so an exact half rounds "
+        "DOWN -- 8.5 becomes 8 -- which agrees with the right answer on every "
+        "figure that is not exactly half and is wrong on the one that is",
+    ),
+    "F41/consulted": (
+        "tests/test_f41_a_tax_rounds_the_way_its_rule_says.py",
+        "tax.py",
+        "    amount = percent_of_minor(subtotal_minor, rule.percent_bp, rule.rounding)",
+        '    amount = percent_of_minor(subtotal_minor, rule.percent_bp, "down")'
+        "  # PLANTED: the rule's rounding is not read",
+        "a tax rule's `rounding` is validated, stored and never read -- the "
+        "`increment.rounding` shape -- so a garage that stated `nearest` has "
+        "every fraction dropped",
+    ),
+    # The fifth tax fix round. Whether a line gets a rounding clause is decided
+    # ONCE, in `percent.was_rounded`; it used to be written out at the tax line
+    # and at the adjustment line, and a gate broke each copy and watched the
+    # other's tests stay green. This is ONE plant with TWO arms, and both have to
+    # fire: a single target naming both test files goes red if EITHER does, which
+    # is the arrangement that would let one call site grow its own copy again
+    # without this control noticing.
+    "F31/shared-was-rounded": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "percent.py",
+        "    return amount_minor * percent_bp != result_minor * BASIS_POINTS_PER_WHOLE",
+        "    return True  # PLANTED: every percentage is said to have been rounded",
+        "the one shared rounding test is broken, and the ADJUSTMENT line has to "
+        "go red with it -- if it stays green it has stopped asking the shared test "
+        "and is deciding for itself",
+    ),
+    "F41/shared-was-rounded": (
+        "tests/test_f41_a_tax_rounds_the_way_its_rule_says.py",
+        "percent.py",
+        "    return amount_minor * percent_bp != result_minor * BASIS_POINTS_PER_WHOLE",
+        "    return True  # PLANTED: every percentage is said to have been rounded",
+        "the one shared rounding test is broken, and the TAX line has to go red "
+        "with it -- if it stays green it has stopped asking the shared test and "
+        "is deciding for itself",
+    ),
+    "F42": (
+        "tests/test_f42_taxes_do_not_compound.py",
+        "tax.py",
+        "        lines.append(_tax_line(rule, subtotal, currency))",
+        "        lines.append(_tax_line(  # PLANTED: the running total, not the subtotal\n"
+        "            rule, subtotal + sum(ln.delta_minor for ln in lines), currency))",
+        "the applier is fed the running total instead of the subtotal, so the second "
+        "tax is taken of the first -- tax of the tax, 55 where 50 is owed, and a "
+        "compounding nobody decided on",
+    ),
+    "F42/base-key": (
+        "tests/test_f42_taxes_do_not_compound.py",
+        "tax.py",
+        'TAX_RULE_KEYS: frozenset[str] = frozenset({"id", "label", "percent_bp", '
+        '"rounding", "sequence"})',
+        'TAX_RULE_KEYS: frozenset[str] = frozenset({"id", "label", "percent_bp", '
+        '"rounding", "sequence", "base"})  # PLANTED: a base is accepted',
+        "a rule stating a base LOADS, and the base it states is silently ignored -- "
+        "a garage that wrote a compounding rule is told nothing and is not taxed "
+        "the way its document reads",
+    ),
+    "F43": (
+        "tests/test_f43_the_tax_set_in_force_is_chosen_by_the_instant.py",
+        "tax.py",
+        "    in_force = [s for s in sets if s.effective_from <= at]",
+        "    in_force = list(sets)  # PLANTED: the instant is not consulted",
+        "the latest set is used whatever the instant, so a stay in March is taxed "
+        "at a rate that takes effect in July, and an instant before every set is "
+        "taxed instead of refused",
+    ),
+    "F43/same-instant": (
+        "tests/test_f43_the_tax_set_in_force_is_chosen_by_the_instant.py",
+        "tax.py",
+        "            if first.effective_from == second.effective_from:",
+        "            if False:  # PLANTED: two sets at one instant load",
+        "two sets taking effect at the same instant both load, so which one is in "
+        "force is decided by their order in the list",
+    ),
+    "F44": (
+        "tests/test_f44_tax_order_is_the_stated_sequence.py",
+        "tax.py",
+        "    for rule in sorted(chosen.rules, key=lambda r: r.sequence):",
+        "    for rule in chosen.rules:  # PLANTED: list order decides",
+        "the lines come out in whatever order the caller's list carried the rules, "
+        "and the `sequence` the garage stated is validated and never read",
+    ),
+    "F44/shared-sequence": (
+        "tests/test_f44_tax_order_is_the_stated_sequence.py",
+        "tax.py",
+        "        if other is not None:",
+        "        if False:  # PLANTED: two rules may share a sequence",
+        "two rules stating the same `sequence` load, so their relative order is "
+        "the sort's tie-break over the caller's list -- array position again",
+    ),
+    "F44/zero-sequence": (
+        "tests/test_f44_tax_order_is_the_stated_sequence.py",
+        "tax.py",
+        '    sequence = _whole(raw["sequence"], f"{where}.sequence", positive=False)',
+        '    sequence = _whole(raw["sequence"] or None, f"{where}.sequence", positive=False)'
+        "  # PLANTED: 0 is read as missing",
+        "a rule stating `sequence: 0` is refused as though it stated none -- the "
+        "truthiness trap, which the whole suite passed when it was planted by hand",
+    ),
+    "F45": (
+        "tests/test_f45_tax_on_nothing_is_nothing.py",
+        "tax.py",
+        "    if subtotal == 0:\n        return []",
+        "    if False:  # PLANTED: a zero subtotal is taxed\n        return []",
+        "a stay that paid nothing gets a tax line for every rule, each at zero -- "
+        "noise on a receipt under a fee nobody paid",
     ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",

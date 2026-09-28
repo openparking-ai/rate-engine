@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 2. One contract, three surfaces: `POST /v1/quote`, `POST
+Version 3. One contract, three surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, and the `rate-engine` CLI. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
 interface is inadequate we find out before an integrator does.
@@ -9,7 +9,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **2**
+`schema_version` **3**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -23,6 +23,27 @@ safe: **a key this engine does not understand is REJECTED and named, never
 ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
+
+### What changed in version 3
+
+**Tax, surcharges and city fees -- the arithmetic, and only the arithmetic.**
+This module now computes tax lines: a garage's taxes are percentages of the
+money actually paid, and `tax_lines` turns them into breakdown lines. See "Tax,
+surcharges and city fees" below.
+
+**Nothing a plan can state changed, and `quote()` answers exactly as it did.** A
+plan that loaded on version 2 loads on version 3 and prices to the identical fee
+and the identical breakdown. Tax is not a stage of the pipeline and is not asked
+for by `/v1/quote`: the engine never sees a validation, and tax is taken after
+one. The division a percentage adjustment makes moved into one function,
+`percent.py`, which a tax rule shares -- and an adjustment still offers exactly
+the two roundings it offered, `up` and `down`.
+
+**What a caller must do.** Nothing, to keep quoting. To tax: hand `tax_lines` the
+subtotal after every discount and validation line, and add the lines it returns
+after them, so the fee is still the running total of the ledger. A consumer
+routing on finding codes meets one new code, `GAP_NO_TAX_SET_IN_FORCE`, which
+only the tax functions produce.
 
 ### What changed in version 2
 
@@ -234,6 +255,7 @@ cannot check its work.
 | `GAP_NO_ACCUMULATE_RULE` | gap |
 | `GAP_STAY_EXCEEDS_MAX_DURATION` | gap |
 | `GAP_NO_PLAN_IN_FORCE_AT_ENTRY` | gap |
+| `GAP_NO_TAX_SET_IN_FORCE` | gap |
 | `CONFLICT_MULTIPLE_RULES_AT_STAGE` | conflict |
 | `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
 | `CONFLICT_NEGATIVE_TOTAL` | conflict |
@@ -311,7 +333,7 @@ never failed is a decoration.
 | **F29** | A `rate` effect is priced by `increment`'s own builder and applier, not by a copy of them: identical parameters produce identical lines on the same stay, and a change to `increment`'s period counting moves the window's lines with it. |
 | **F3** | The plan version in force at ENTRY prices the whole stay. A rate change mid-stay never splits it. |
 | **F30** | An `adjust` effect applies to the fee AFTER the caps and the surcharges. A percentage taken any earlier is a percentage of a number the customer is not being charged. |
-| **F31** | An `adjust` percentage is integer basis points and its `rounding` is CONSULTED: the same stay under `up` and under `down` differs by one minor unit, and the breakdown line says which way it went. |
+| **F31** | An `adjust` percentage is integer basis points and its `rounding` is CONSULTED: the same stay under `up` and under `down` differs by one minor unit, and when the amount was rounded the breakdown line says which way it went; when the division was exact there is no rounding clause to state. |
 | **F32** | `grace` is TERMINAL, and free means free: a stay at or under the stated minutes costs zero and picks up no surcharge, no cap and no adjustment. Terminality is DECLARED by the rule type at registration -- the engine never knows its name -- and a special it beat says so on the receipt. |
 | **F33** | Two caps on one stay leave the LOWER ceiling standing, the total after CAP is the same in both application orders, and the breakdown names both. Caps COMPOSE; two of them are not a conflict. |
 | **F34** | More than one rule qualifying at one stage means three different things, and the stage's category decides which: RESOLVING is a conflict, COMPOSING order-independent is not reported at all, and COMPOSING order-dependent is refused unless the plan states the order. |
@@ -322,6 +344,11 @@ never failed is a decoration.
 | **F39** | A window's exit limit runs to the day its `day_span` allows. Under a bounded span the limit is `exit_by` on the entry date plus the span, so an evening window with an after-midnight limit applies to the car that leaves the SAME evening as well as the one that leaves after midnight. A limit that would have to WRAP to be reached is refused at load under `same_day` and `any_span`, neither of which can say what day it falls on. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F40** | A window's exit limit is compared as WALL-CLOCK readings, never as two instants, so a window behaves the same on the night the clocks change. On the hour that occurs twice at a fall-back, two stays leaving at the same stated time an hour apart in real time both qualify; a limit at a wall time that a spring-forward skips entirely still reads, and a stay past it is still refused. |
+| **F41** | A tax rounds the way its rule states: `rounding` is required, with no default, and is one of `up`, `down` and `nearest`, where `nearest` takes EXACTLY half up, decided in integers on the exact remainder. Each mode is asserted on figures where it differs from the others, the exact half included, and when the amount was rounded the line shows the unrounded figure and which way it went; when the division was exact there is no rounding clause to state. |
+| **F42** | Taxes never compound. Every rule in a set is a percentage of the same `subtotal_minor` -- the money actually paid -- and never of a total that already includes another tax line. A rule cannot state a base at all: the key is refused as the unknown key it is, and so is a flat amount. |
+| **F43** | The tax set in force is chosen by the instant: the latest set taking effect at or before it, whatever order the sets arrive in. A new set is how a rate changes, a tax is added and a tax is repealed. An instant before every set is REFUSED, never taxed at zero, and two sets taking effect at the same instant are refused at load, both named. |
+| **F44** | Taxes come out in the `sequence` each rule states, never in the order the list arrived in. A rule with no `sequence`, or two rules in one set sharing one, is refused at load. |
+| **F45** | Tax on nothing is nothing. A subtotal of zero produces no tax lines, and the same rules on a positive subtotal produce them. A negative subtotal, or one that is not an integer of minor units, is refused. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
@@ -390,7 +417,11 @@ that declares one makes a zero-length stay free by the grace rule, because zero
 is at or under any positive number of minutes. Both behaviours are deliberate,
 both are tested, and which one a garage gets is stated in its own plan rather
 than assumed here.
-- **No validations, no monthly parkers, no payments, no card, no tax.**
+- **No validations, no monthly parkers, no payments, no card.**
+- **Tax only as arithmetic.** This bullet said "no tax" until version 3, and it
+  is qualified rather than deleted: the module computes tax lines on an amount it
+  is handed, and that is all. It stores no garage's taxes, applies none on its
+  own, and `/v1/quote` does not add them -- see "Tax, surcharges and city fees".
 
 ## The first money rounding, and why money stays an integer
 
@@ -399,7 +430,9 @@ and it arrives with the version bump §2 says a commercial contract makes.** Eve
 rule before it was an integer add or an integer replace, and `money.py` said in
 as many words that this module rounds no money anywhere. That sentence is now
 qualified rather than deleted: it rounds money in exactly one place, the place is
-named, and the direction is the plan's to state.
+named, and the direction is the plan's to state. Since version 3 that one place,
+`percent.py`, has two callers -- an adjustment and a tax -- and it is still one
+function, so the two cannot drift into two answers.
 
 **A percentage is INTEGER BASIS POINTS.** 20% is `2000`; 12.5% is `1250`. Not a
 decimal, because a float anywhere in a plan is refused at load — so a percent
@@ -410,8 +443,9 @@ and no float is constructed at any point.
 
 **`rounding` is stated per rule with no default**, because a percentage of a fee
 lands on a fraction of a minor unit and who keeps that fraction is the owner's
-decision. The breakdown line says which way it went and by how much, so a
-customer disputing a cent can be shown the answer rather than told it.
+decision. When the amount was rounded, the breakdown line says which way it went
+and by how much, so a customer disputing a cent can be shown the answer rather
+than told it; when the division was exact there is no rounding clause to state.
 
 **That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
@@ -429,6 +463,51 @@ Money stays an integer of minor units at every depth. Nothing here introduces a
 float, and nothing here changes what a plan written against the previous version
 answers, because such a plan no longer loads at all — see "What changed in
 version 2".
+
+## Tax, surcharges and city fees
+
+**Tax applies to the money actually paid -- after every discount and
+validation.** That is the one base there is. A tax rule states no base: the caller
+hands in `subtotal_minor`, the running total after every discount and validation
+line, and every rule is a percentage of that one number. A tax is **never taken
+of another tax**: there is no way to write one, and the applier is never handed
+anything but the subtotal (F42).
+
+**Percentage only.** A flat tax amount is not expressible, and that is a stated
+limit rather than a hidden one: there is no field for it, and a key this module
+does not understand is refused by name -- a base and a flat amount included.
+
+**A library call, not a surface, in this version.** `load_tax_sets` validates a
+garage's taxes and `tax_lines` produces the lines; neither is on `/v1/quote` or
+the CLI yet. They take an amount, a currency, an instant and the sets, and they
+know nothing about a stay, a garage, a validation, a monthly agreement or a card.
+
+A garage states its taxes as **sets**. A set carries `effective_from`, an
+offset-aware instant, and `rules`; a rule carries `id`, `label`, `percent_bp`,
+`rounding` and `sequence`, and every one of them is required.
+
+- **`percent_bp` is integer basis points**, exactly as an adjustment's is: 8.5%
+  is `850`. A float or a bool is refused at any depth, the same walk a plan gets.
+- **`rounding` has no default**, and a tax's set is its own: `up`, `down` or
+  `nearest`. Tax is conventionally taken to the nearest minor unit, which an
+  adjustment cannot state; `nearest` takes EXACTLY half up, decided in integers
+  on the exact remainder (F41). When the amount was rounded, the line shows the
+  unrounded figure and which way it went, so a driver disputing a cent is shown
+  the answer; when the division was exact there is no rounding clause to state.
+- **`sequence` is the order the lines come out in**, a whole number unique within
+  its set. The list order decides nothing (F44).
+
+**The set in force is chosen by the instant** the caller hands in -- the latest
+set taking effect at or before it. A rate changing, a tax added and a tax
+repealed are all one thing: a new set. An instant before every set is refused
+with `GAP_NO_TAX_SET_IN_FORCE`, **never taxed at zero**; two sets taking effect
+at the same instant are refused at load, both named (F43). A set with no rules is
+how a garage STATES it charges no tax. Which instant to hand in -- the exit, the
+close or an invoice date -- is the caller's to state; this module only takes it.
+
+**Tax on nothing is nothing.** A subtotal of zero produces no lines (F45). The
+set in force is still selected first, so a gap in what the garage stated is not
+hidden by an amount that happened to be zero.
 
 ---
 

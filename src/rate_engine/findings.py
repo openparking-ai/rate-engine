@@ -31,6 +31,15 @@ GAP_NO_ACCUMULATE_RULE = "GAP_NO_ACCUMULATE_RULE"
 GAP_STAY_EXCEEDS_MAX_DURATION = "GAP_STAY_EXCEEDS_MAX_DURATION"
 #: No plan version was in force at the stay's ENTRY time.
 GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
+#: No tax set the garage stated was in force at the instant the tax was asked
+#: for. REFUSED, never taxed at zero: a garage with no set in force at that
+#: instant has not said "no tax" there -- it has said nothing -- and zero is a
+#: tax position somebody would have had to state. Stating "no tax" is a set with
+#: no rules, which is a statement; see tax.py.
+#:
+#: Not reported by `validate-plan`, which validates a PLAN, and a tax set is the
+#: garage's rather than a plan's. F1 reaches it from a tax fixture.
+GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_IN_FORCE"
 
 # --- conflict codes --------------------------------------------------------
 #: Two or more rules qualify at the same stage. A1 detects and refuses; the
@@ -99,6 +108,7 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_ACCUMULATE_RULE,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
+    GAP_NO_TAX_SET_IN_FORCE,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (

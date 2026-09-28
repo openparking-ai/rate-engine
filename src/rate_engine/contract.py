@@ -31,7 +31,12 @@ from .validator import undecided, validate_plan
 #: rule type is REJECTED rather than skipped. §2 versions this contract on the
 #: assumption it will gain fields, and that assumption is only safe while removals
 #: are announced -- so a removal moves the number.
-SCHEMA_VERSION = 2
+#:
+#: **3 in the tax round, and the reason is §2's: a commercial change moves the
+#: number.** Nothing was removed and no plan changed -- a plan that loaded on 2
+#: loads and prices identically on 3 -- but the module now computes tax lines and
+#: has a finding code a consumer routing on codes has not seen before.
+SCHEMA_VERSION = 3
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})

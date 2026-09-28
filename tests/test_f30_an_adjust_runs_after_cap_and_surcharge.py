@@ -56,6 +56,13 @@ PLAN = {
     "decisions": [],
 }
 
+#: The same document stating `up`. A counterpart in the corpus, not a rewrite
+#: inside one test: every percentage adjustment here used to state `down`, so a
+#: comparison run over the stated documents never reached the applier's `up`
+#: branch at all.
+PLAN_UP = copy.deepcopy(PLAN)
+PLAN_UP["rules"][3]["effect"]["rounding"] = "up"
+
 ENTRY = "2026-03-03T09:00:00-05:00"
 EXIT = "2026-03-03T19:00:00-05:00"  # 10 hours
 
@@ -166,3 +173,15 @@ def test_a_FLAT_window_claiming_ADJUST_is_refused_by_the_same_check():
     status, body = _quote(mislabelled)
     assert status == 400
     assert "stage is 'ADJUST'" in body["error"] and "QUALIFY" in body["error"], body["error"]
+
+
+@pytest.mark.guarantee("F31")
+def test_the_UP_counterpart_adds_NOTHING_where_there_is_no_fraction():
+    """`up` with no remainder: 20% of 35.00 is exactly 7.00, so `up` and `down`
+    agree to the unit. The other side of the `up` branch from F31's fixture,
+    which always lands on a fraction."""
+    status, body = _quote(PLAN_UP)
+    assert status == 200, body
+    assert body["fee_minor"] == CORRECT, body["fee_minor"]
+    line = [ln for ln in body["breakdown"] if ln["code"] == "time_window.applied"][0]
+    assert line["delta_minor"] == -700, line
