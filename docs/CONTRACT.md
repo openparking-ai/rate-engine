@@ -344,7 +344,7 @@ never failed is a decoration.
 | **F39** | A window's exit limit runs to the day its `day_span` allows. Under a bounded span the limit is `exit_by` on the entry date plus the span, so an evening window with an after-midnight limit applies to the car that leaves the SAME evening as well as the one that leaves after midnight. A limit that would have to WRAP to be reached is refused at load under `same_day` and `any_span`, neither of which can say what day it falls on. |
 | **F4** | Money is an integer of minor units. A float, a bool or a Decimal anywhere in a plan is refused at load. |
 | **F40** | A window's exit limit is compared as WALL-CLOCK readings, never as two instants, so a window behaves the same on the night the clocks change. On the hour that occurs twice at a fall-back, two stays leaving at the same stated time an hour apart in real time both qualify; a limit at a wall time that a spring-forward skips entirely still reads, and a stay past it is still refused. |
-| **F41** | A tax rounds the way its rule states: `rounding` is required, with no default, and is one of `up`, `down` and `nearest`, where `nearest` takes EXACTLY half up, decided in integers on the exact remainder. Each mode is asserted on figures where it differs from the others, the exact half included, and the line shows the unrounded figure and which way it went. |
+| **F41** | A tax rounds the way its rule states: `rounding` is required, with no default, and is one of `up`, `down` and `nearest`, where `nearest` takes EXACTLY half up, decided in integers on the exact remainder. Each mode is asserted on figures where it differs from the others, the exact half included, and when the amount was rounded the line shows the unrounded figure and which way it went; when the division was exact there is no rounding clause to state. |
 | **F42** | Taxes never compound. Every rule in a set is a percentage of the same `subtotal_minor` -- the money actually paid -- and never of a total that already includes another tax line. A rule cannot state a base at all: the key is refused as the unknown key it is, and so is a flat amount. |
 | **F43** | The tax set in force is chosen by the instant: the latest set taking effect at or before it, whatever order the sets arrive in. A new set is how a rate changes, a tax is added and a tax is repealed. An instant before every set is REFUSED, never taxed at zero, and two sets taking effect at the same instant are refused at load, both named. |
 | **F44** | Taxes come out in the `sequence` each rule states, never in the order the list arrived in. A rule with no `sequence`, or two rules in one set sharing one, is refused at load. |
@@ -443,8 +443,9 @@ and no float is constructed at any point.
 
 **`rounding` is stated per rule with no default**, because a percentage of a fee
 lands on a fraction of a minor unit and who keeps that fraction is the owner's
-decision. The breakdown line says which way it went and by how much, so a
-customer disputing a cent can be shown the answer rather than told it.
+decision. When the amount was rounded, the breakdown line says which way it went
+and by how much, so a customer disputing a cent can be shown the answer rather
+than told it; when the division was exact there is no rounding clause to state.
 
 **That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
@@ -490,8 +491,9 @@ offset-aware instant, and `rules`; a rule carries `id`, `label`, `percent_bp`,
 - **`rounding` has no default**, and a tax's set is its own: `up`, `down` or
   `nearest`. Tax is conventionally taken to the nearest minor unit, which an
   adjustment cannot state; `nearest` takes EXACTLY half up, decided in integers
-  on the exact remainder (F41). The line shows the unrounded figure and which way
-  it went, so a driver disputing a cent is shown the answer.
+  on the exact remainder (F41). When the amount was rounded, the line shows the
+  unrounded figure and which way it went, so a driver disputing a cent is shown
+  the answer; when the division was exact there is no rounding clause to state.
 - **`sequence` is the order the lines come out in**, a whole number unique within
   its set. The list order decides nothing (F44).
 

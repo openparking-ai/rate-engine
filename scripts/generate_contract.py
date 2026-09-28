@@ -623,8 +623,9 @@ and no float is constructed at any point.
 
 **`rounding` is stated per rule with no default**, because a percentage of a fee
 lands on a fraction of a minor unit and who keeps that fraction is the owner's
-decision. The breakdown line says which way it went and by how much, so a
-customer disputing a cent can be shown the answer rather than told it.
+decision. When the amount was rounded, the breakdown line says which way it went
+and by how much, so a customer disputing a cent can be shown the answer rather
+than told it; when the division was exact there is no rounding clause to state.
 
 **That rounding is not the rounding this module already had.**
 `increment.rounding` rounds TIME into whole periods: it decides that a 61-minute
@@ -670,8 +671,9 @@ offset-aware instant, and `rules`; a rule carries `id`, `label`, `percent_bp`,
 - **`rounding` has no default**, and a tax's set is its own: `up`, `down` or
   `nearest`. Tax is conventionally taken to the nearest minor unit, which an
   adjustment cannot state; `nearest` takes EXACTLY half up, decided in integers
-  on the exact remainder (F41). The line shows the unrounded figure and which way
-  it went, so a driver disputing a cent is shown the answer.
+  on the exact remainder (F41). When the amount was rounded, the line shows the
+  unrounded figure and which way it went, so a driver disputing a cent is shown
+  the answer; when the division was exact there is no rounding clause to state.
 - **`sequence` is the order the lines come out in**, a whole number unique within
   its set. The list order decides nothing (F44).
 

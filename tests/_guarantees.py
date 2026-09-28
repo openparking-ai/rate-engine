@@ -278,7 +278,9 @@ GUARANTEES: dict[str, str] = {
         "default, and is one of `up`, `down` and `nearest`, where `nearest` takes "
         "EXACTLY half up, decided in integers on the exact remainder. Each mode is "
         "asserted on figures where it differs from the others, the exact half "
-        "included, and the line shows the unrounded figure and which way it went."
+        "included, and when the amount was rounded the line shows the unrounded "
+        "figure and which way it went; when the division was exact there is no "
+        "rounding clause to state."
     ),
     "F42": (
         "Taxes never compound. Every rule in a set is a percentage of the same "
