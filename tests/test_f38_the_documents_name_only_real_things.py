@@ -65,7 +65,7 @@ VOCABULARY = frozenset(
         "HH:MM", "YYYY-MM-DD", "%H:%M",
         # the CLI and the routes
         "rate-engine", "quote", "validate-plan", "/v1/quote", "/v1/validate-plan",
-        "validate-tax-sets", "/v1/validate-tax-sets",
+        "validate-tax-sets", "/v1/validate-tax-sets", "/v1/tax",
         "POST", "pytest", "pip",
         # keys of a JSON response body, which are strings in the code, not names
         "invalid", "rule_count", "tax_sets",
@@ -173,6 +173,23 @@ def _response_fields() -> set[str]:
     fields |= set(refused)
     for finding in refused["findings"]:
         fields |= set(finding)
+
+    # And the tax door's answer, taken the same way: a figure with a line in it.
+    from rate_engine.contract import run_tax
+
+    status, taxed = run_tax(
+        {
+            "tax_sets": [{"effective_from": "2026-01-01T00:00:00Z", "rules": [{
+                "id": "city", "label": "City tax", "percent_bp": 1000,
+                "rounding": "up", "sequence": 1,
+            }]}],
+            "subtotal_minor": 1000, "currency": "USD", "at": "2026-06-01T00:00:00Z",
+        }
+    )
+    assert status == 200 and taxed["lines"], taxed
+    fields |= set(taxed)
+    for line in taxed["lines"]:
+        fields |= set(line)
     return fields
 
 

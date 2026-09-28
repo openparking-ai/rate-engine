@@ -1,8 +1,9 @@
-"""The HTTP surface. Three routes, all thin, all over the one code path.
+"""The HTTP surface. Four routes, all thin, all over the one code path.
 
     POST /v1/quote               plans + a stay -> the fee and the breakdown
     POST /v1/validate-plan       a plan -> its gaps and conflicts
     POST /v1/validate-tax-sets   a garage's tax sets -> loaded, or refused by name
+    POST /v1/tax                 tax sets + a subtotal at an instant -> the tax lines
     GET  /v1/health              schema version, registered rule types
 
 Written on `http.server` rather than a framework, for the same reason
@@ -25,7 +26,14 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .contract import SCHEMA_VERSION, encode, run_quote, run_validate, run_validate_tax_sets
+from .contract import (
+    SCHEMA_VERSION,
+    encode,
+    run_quote,
+    run_tax,
+    run_validate,
+    run_validate_tax_sets,
+)
 from .rules import RULE_TYPES
 
 #: Refuse a body larger than this rather than reading it into memory. A plan is
@@ -67,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
             "/v1/quote": run_quote,
             "/v1/validate-plan": run_validate,
             "/v1/validate-tax-sets": run_validate_tax_sets,
+            "/v1/tax": run_tax,
         }.get(route)
         if runner is None:
             self._send(404, {"error": "no such route"})
@@ -80,8 +89,22 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, {"error": f"body larger than {MAX_BODY_BYTES} bytes"})
             return
         raw = self.rfile.read(length) if length else b""
+        # DECODED HERE, STRICTLY, and only then parsed. `json.loads` handed BYTES
+        # runs its own encoding detection: a UTF-16 or UTF-32 body, a UTF-8 body
+        # behind a byte-order mark, and surrogates encoded as bytes were all
+        # decoded and answered 200, while a malformed byte raised a
+        # `UnicodeDecodeError` nothing caught and the connection dropped with no
+        # answer at all. JSON over HTTP is UTF-8 (RFC 8259), and a caller that
+        # decodes one set of bytes differently from this engine is judged on text
+        # it never sent. An empty body is still `null`, and still refused by the
+        # request's own sentence rather than by this one.
         try:
-            document = json.loads(raw or b"null")
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            self._send(400, {"error": f"body is not UTF-8: {exc}"})
+            return
+        try:
+            document = json.loads(text or "null")
         except json.JSONDecodeError as exc:
             self._send(400, {"error": f"body is not JSON: {exc}"})
             return

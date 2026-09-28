@@ -127,6 +127,14 @@ jobs:
         # run -- and it is a separate step so a failure here is visible as one.
         run: python scripts/fail_controls.py --anchors
 
+      - name: The control ids match their pin
+        # The full run below refuses a guarantee with NO control, and nothing
+        # else looked at the arms: deleting one arm of a guarantee that has
+        # several left every step green. scripts/fail_controls.ids pins the set,
+        # compared by equality both ways, so a removed arm -- or an added one not
+        # recorded -- is red here, as its own step.
+        run: python scripts/fail_controls.py --pin
+
       - name: Every guarantee, proven able to FAIL
         # Breaks the thing each guarantee guards and requires red. A test that
         # has never failed is a decoration. This step is what makes every
