@@ -305,8 +305,9 @@ def gen_schema() -> str:
 
 TEMPLATE = """# The rate engine contract
 
-Version {schema}. One contract, three surfaces: `POST /v1/quote`, `POST
-/v1/validate-plan`, and the `rate-engine` CLI. Our own platform is an ordinary
+Version {schema}. One contract, four surfaces: `POST /v1/quote`, `POST
+/v1/validate-plan`, `POST /v1/validate-tax-sets`, and the `rate-engine` CLI,
+which carries the same three operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
 interface is inadequate we find out before an integrator does.
 
@@ -347,6 +348,19 @@ subtotal after every discount and validation line, and add the lines it returns
 after them, so the fee is still the running total of the ledger. A consumer
 routing on finding codes meets one new code, `GAP_NO_TAX_SET_IN_FORCE`, which
 only the tax functions produce.
+
+### A door added within version 3, and why the number did not move
+
+`POST /v1/validate-tax-sets` and `rate-engine validate-tax-sets` hand a garage's
+tax sets to `load_tax_sets` and answer what it answers (F46). **The number stays
+3.** §2 moves it for a change a consumer must notice: version 2 for a removal,
+version 3 for the tax arithmetic and a finding code nobody routing on codes had
+seen. This round is neither. The loader's rules are the ones version 3 already
+published; the door adds no rule, no finding code and no field to any existing
+response; and a caller that never calls it gets byte-identical answers from every
+other door -- including the `schema_version` stamp, which a bump would have
+changed on every quote for no change in any price. A consumer that wants the door
+asks `/v1/validate-tax-sets`, and an engine that predates it answers 404.
 
 ### What changed in version 2
 
@@ -657,10 +671,16 @@ anything but the subtotal (F42).
 limit rather than a hidden one: there is no field for it, and a key this module
 does not understand is refused by name -- a base and a flat amount included.
 
-**A library call, not a surface, in this version.** `load_tax_sets` validates a
-garage's taxes and `tax_lines` produces the lines; neither is on `/v1/quote` or
-the CLI yet. They take an amount, a currency, an instant and the sets, and they
-know nothing about a stay, a garage, a validation, a monthly agreement or a card.
+**Validating is a door; computing is still a library call.**
+`POST /v1/validate-tax-sets` and `rate-engine validate-tax-sets` take a body
+carrying one key, `tax_sets`, and hand its list to `load_tax_sets`, in
+`validate-plan`'s shape: 200 with each
+set's `effective_from` as read and its `rule_count`, or 400 with `invalid` and the
+loader's own sentence naming the field. A caller that stores a garage's taxes
+stores what this door accepted, and nothing else judges them (F46). `tax_lines`
+is not on `/v1/quote` or the CLI yet. Both take an amount, a currency, an
+instant and the sets, and they know nothing about a stay, a garage, a
+validation, a monthly agreement or a card.
 
 A garage states its taxes as **sets**. A set carries `effective_from`, an
 offset-aware instant, and `rules`; a rule carries `id`, `label`, `percent_bp`,

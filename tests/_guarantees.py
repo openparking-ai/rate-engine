@@ -305,6 +305,14 @@ GUARANTEES: dict[str, str] = {
         "the same rules on a positive subtotal produce them. A negative subtotal, "
         "or one that is not an integer of minor units, is refused."
     ),
+    "F46": (
+        "A tax set is judged by the loader and nowhere else. `/v1/validate-tax-sets` "
+        "and `rate-engine validate-tax-sets` hand it to `load_tax_sets` and answer "
+        "what it answers: every refusal it makes reaches both surfaces as the same "
+        "named refusal, byte for byte, and what it loads is valid from both -- so a "
+        "caller that stores only what this door accepted stores nothing the engine "
+        "will refuse when it computes the tax."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

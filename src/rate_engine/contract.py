@@ -1,6 +1,7 @@
 """The wire contract: version, request parsing, and ONE serializer.
 
-Every surface -- `/v1/quote`, `/v1/validate-plan` and both CLI commands -- turns
+Every surface -- `/v1/quote`, `/v1/validate-plan`, `/v1/validate-tax-sets` and
+their three CLI commands -- turns
 its answer into JSON through the functions here and nowhere else. That is F6's
 other half: proving the CLI and the HTTP route both MOVE when the engine changes
 is weaker than proving they cannot differ, and a single serializer is what makes
@@ -24,6 +25,7 @@ from .engine import Quote, Stay, make_stay, quote
 from .findings import Refused
 from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
+from .tax import load_tax_sets
 from .validator import undecided, validate_plan
 
 #: **2 in A2, and the bump is not decoration.** A plan written for version 1 does
@@ -40,6 +42,7 @@ SCHEMA_VERSION = 3
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})
+VALIDATE_TAX_SETS_REQUEST_KEYS = frozenset({"tax_sets"})
 
 
 def _require(document: object, keys: frozenset[str], where: str) -> dict:
@@ -96,6 +99,21 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
 def parse_validate_request(document: object):
     body = _require(document, VALIDATE_REQUEST_KEYS, "request")
     return load_plan(body["plan"], "request.plan")
+
+
+def parse_validate_tax_sets_request(document: object):
+    """A garage's tax sets, loaded by `tax.load_tax_sets` -- THE loader, not a copy.
+
+    This door adds no rule. Whatever `load_tax_sets` refuses is refused here, in
+    its words, and whatever it loads is valid: a caller that stores only what this
+    door accepted stores only what the engine will load when it computes the tax.
+    A second validator -- in this module or in a caller -- is the defect the door
+    exists to remove: two of them agreed on most inputs and disagreed on ten, and
+    a set one accepted and the other refused was stored where it could never be
+    loaded again.
+    """
+    body = _require(document, VALIDATE_TAX_SETS_REQUEST_KEYS, "request")
+    return load_tax_sets(body["tax_sets"], "request.tax_sets")
 
 
 # --- the one serializer ----------------------------------------------------
@@ -167,6 +185,21 @@ def validate_response(plan) -> dict[str, Any]:
     }
 
 
+def validate_tax_sets_response(sets) -> dict[str, Any]:
+    """What was loaded, set by set in the order it arrived: the instant each takes
+    effect, as the loader read it, and how many rules it holds. No finding list:
+    a tax set has no gaps to acknowledge -- the loader either loads it or refuses
+    it by name, and the refusal is `invalid_response`, exactly as a plan's is.
+    """
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "tax_sets": [
+            {"effective_from": s.effective_from.isoformat(), "rule_count": len(s.rules)}
+            for s in sets
+        ],
+    }
+
+
 def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     """Parse, price, serialize -- the whole of `/v1/quote` and of `rate-engine quote`.
 
@@ -202,6 +235,21 @@ def run_validate(document: object) -> tuple[int, dict[str, Any]]:
     except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
     return 200, validate_response(plan)
+
+
+def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
+    """The whole of `/v1/validate-tax-sets` and of `rate-engine validate-tax-sets`.
+
+    `run_validate`'s shape exactly -- the same three refusals caught and nothing
+    wider (see `run_quote` on why `TypeError` is not one of them), the same 400
+    and the same body -- so a caller that speaks to one door needs no new habit
+    for the other.
+    """
+    try:
+        sets = parse_validate_tax_sets_request(document)
+    except (InvalidPlan, NotMinorUnits, ValueError) as exc:
+        return 400, invalid_response(exc)
+    return 200, validate_tax_sets_response(sets)
 
 
 def breakdown_text(ledger: Ledger, currency: str, width: int = 78) -> str:

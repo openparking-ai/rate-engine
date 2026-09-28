@@ -817,6 +817,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay that paid nothing gets a tax line for every rule, each at zero -- "
         "noise on a receipt under a fee nobody paid",
     ),
+    # The tax-set door. Two arms, each required red on its own: the door stops
+    # asking the loader, and the loader itself is broken -- the second is the one
+    # that proves the door is not a copy, because a copy would stay green.
+    "F46": (
+        "tests/test_f46_a_tax_set_has_one_door.py",
+        "contract.py",
+        '    return load_tax_sets(body["tax_sets"], "request.tax_sets")',
+        '    return tuple(body["tax_sets"])  # PLANTED: the door no longer asks the loader',
+        "the tax-set door answers valid for anything shaped like a list, so a caller "
+        "stores sets the engine will refuse when it computes the tax",
+    ),
+    "F46/loader-is-the-door": (
+        "tests/test_f46_a_tax_set_has_one_door.py",
+        "tax.py",
+        '    if not isinstance(label, str) or not label.strip():',
+        '    if not isinstance(label, str) or not label:  # PLANTED: blank is only empty',
+        "the LOADER stops treating a whitespace-only label as blank; the door must "
+        "go red with it, or it is judging tax sets by some rule other than the loader's",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",

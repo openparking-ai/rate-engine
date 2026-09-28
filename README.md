@@ -72,11 +72,12 @@ No dependencies. Python 3.11 or newer.
 ```
 pip install -e .
 rate-engine validate-plan --plan your-plan.json
+rate-engine validate-tax-sets --tax-sets your-tax-sets.json
 rate-engine quote --plan your-plan.json --entry ... --exit ... \
     --space-class standard --currency USD
 ```
 
-Or over HTTP — `POST /v1/quote`, `POST /v1/validate-plan`:
+Or over HTTP — `POST /v1/quote`, `POST /v1/validate-plan`, `POST /v1/validate-tax-sets`:
 
 ```
 python -c "from rate_engine.service import serve; serve()"
