@@ -589,8 +589,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F31/exact-says-rounded": (
         "tests/test_f31_the_adjust_rounding_is_consulted.py",
         "rules/time_window.py",
-        '        if running_total_minor * amount["percent_bp"]'
-        " != magnitude * BASIS_POINTS_PER_WHOLE:",
+        '        if was_rounded(running_total_minor, amount["percent_bp"], magnitude):',
         "        if True:  # PLANTED: the line claims a rounding whatever the division did",
         "a percentage that divides exactly is described to the customer as rounded "
         "up or down when nothing was rounded",
@@ -598,8 +597,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F31/fraction-says-nothing": (
         "tests/test_f31_the_adjust_rounding_is_consulted.py",
         "rules/time_window.py",
-        '        if running_total_minor * amount["percent_bp"]'
-        " != magnitude * BASIS_POINTS_PER_WHOLE:",
+        '        if was_rounded(running_total_minor, amount["percent_bp"], magnitude):',
         "        if False:  # PLANTED: the line never says which way a fraction went",
         "a percentage that landed on a fraction is shown without the direction it "
         "was rounded, so a customer disputing a cent is told nothing",
@@ -722,6 +720,31 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a tax rule's `rounding` is validated, stored and never read -- the "
         "`increment.rounding` shape -- so a garage that stated `nearest` has "
         "every fraction dropped",
+    ),
+    # The fifth tax fix round. Whether a line gets a rounding clause is decided
+    # ONCE, in `percent.was_rounded`; it used to be written out at the tax line
+    # and at the adjustment line, and a gate broke each copy and watched the
+    # other's tests stay green. This is ONE plant with TWO arms, and both have to
+    # fire: a single target naming both test files goes red if EITHER does, which
+    # is the arrangement that would let one call site grow its own copy again
+    # without this control noticing.
+    "F31/shared-was-rounded": (
+        "tests/test_f31_the_adjust_rounding_is_consulted.py",
+        "percent.py",
+        "    return amount_minor * percent_bp != result_minor * BASIS_POINTS_PER_WHOLE",
+        "    return True  # PLANTED: every percentage is said to have been rounded",
+        "the one shared rounding test is broken, and the ADJUSTMENT line has to "
+        "go red with it -- if it stays green it has stopped asking the shared test "
+        "and is deciding for itself",
+    ),
+    "F41/shared-was-rounded": (
+        "tests/test_f41_a_tax_rounds_the_way_its_rule_says.py",
+        "percent.py",
+        "    return amount_minor * percent_bp != result_minor * BASIS_POINTS_PER_WHOLE",
+        "    return True  # PLANTED: every percentage is said to have been rounded",
+        "the one shared rounding test is broken, and the TAX line has to go red "
+        "with it -- if it stays green it has stopped asking the shared test and "
+        "is deciding for itself",
     ),
     "F42": (
         "tests/test_f42_taxes_do_not_compound.py",

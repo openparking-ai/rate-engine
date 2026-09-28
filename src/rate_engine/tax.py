@@ -44,7 +44,13 @@ from .breakdown import Line
 from .currency import is_known
 from .findings import GAP_NO_TAX_SET_IN_FORCE, Finding, Refused
 from .money import as_non_negative_minor, format_minor, refuse_non_integer_money
-from .percent import BASIS_POINTS_PER_WHOLE, exact_text, percent_of_minor, percent_text
+from .percent import (
+    BASIS_POINTS_PER_WHOLE,
+    exact_text,
+    percent_of_minor,
+    percent_text,
+    was_rounded,
+)
 from .plan import InvalidPlan, _require_keys, parse_instant
 
 #: Which way a fractional minor unit goes on a tax line. Stated per rule, with NO
@@ -217,7 +223,7 @@ def _tax_line(rule: TaxRule, subtotal_minor: int, currency: str) -> Line:
     amount = percent_of_minor(subtotal_minor, rule.percent_bp, rule.rounding)
     unrounded = subtotal_minor * rule.percent_bp
     measure = f"{percent_text(rule.percent_bp)} of {format_minor(subtotal_minor, currency)} paid"
-    if unrounded != amount * BASIS_POINTS_PER_WHOLE:
+    if was_rounded(subtotal_minor, rule.percent_bp, amount):
         # The exact figure and the direction, so a driver disputing a cent is
         # shown the answer rather than told it. `nearest` also says which way
         # it went, because the mode alone does not.

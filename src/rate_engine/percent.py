@@ -70,6 +70,25 @@ def percent_of_minor(amount_minor: int, percent_bp: int, rounding: str) -> int:
     )
 
 
+def was_rounded(amount_minor: int, percent_bp: int, result_minor: int) -> bool:
+    """Did taking `percent_bp` of `amount_minor` round to reach `result_minor`?
+
+    The ONE test for whether a line gets a rounding clause, and both lines that
+    can carry one -- the tax line and the adjustment line -- call it. It used to
+    be written out at each of them, the same comparison twice, and a gate showed
+    the two were copies rather than one thing: breaking either left the other's
+    tests green. Two copies of a money test are two things that drift, and the
+    line they decide is the line a disputed cent is read from.
+
+    It lives beside `percent_of_minor` because the division there is the only
+    place a fraction can appear, so it is the only place a rounding can have
+    happened. Compared in integers: the unrounded product against the result
+    scaled back up. 20% of 35.00 is exactly 7.00 and is not rounded; 12.5% of
+    9.99 is not, and is.
+    """
+    return amount_minor * percent_bp != result_minor * BASIS_POINTS_PER_WHOLE
+
+
 def exact_text(amount_minor: int, percent_bp: int, currency: str) -> str:
     """The UNROUNDED percentage, rendered exactly, for a line a customer can check.
 
