@@ -305,9 +305,9 @@ def gen_schema() -> str:
 
 TEMPLATE = """# The rate engine contract
 
-Version {schema}. One contract, four surfaces: `POST /v1/quote`, `POST
-/v1/validate-plan`, `POST /v1/validate-tax-sets`, and the `rate-engine` CLI,
-which carries the same three operations. Our own platform is an ordinary
+Version {schema}. One contract, five surfaces: `POST /v1/quote`, `POST
+/v1/validate-plan`, `POST /v1/validate-tax-sets`, `POST /v1/tax`, and the
+`rate-engine` CLI, which carries the same four operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
 interface is inadequate we find out before an integrator does.
 
@@ -361,6 +361,30 @@ response; and a caller that never calls it gets byte-identical answers from ever
 other door -- including the `schema_version` stamp, which a bump would have
 changed on every quote for no change in any price. A consumer that wants the door
 asks `/v1/validate-tax-sets`, and an engine that predates it answers 404.
+
+### A second door within version 3, and why the number still did not move
+
+`POST /v1/tax` and `rate-engine tax` compute a garage's tax lines on a subtotal
+(F47). **The number stays 3, by the same test.** The door adds no rule: it calls
+`tax_lines`, whose arithmetic version 3 published. It adds no finding code:
+`GAP_NO_TAX_SET_IN_FORCE` is the one it can return, and version 3 published that
+too. And it adds no field to any existing response. A bump would change the
+`schema_version` stamp on every quote with no price changing. A caller that never
+asks `/v1/tax` gets byte-identical answers from every other door, and an engine
+that predates it answers 404.
+
+**The body of every POST is read as UTF-8, and nothing else is.** This is a
+correction of a leak, not a removal, and it is recorded here because it changes
+what a few bodies are answered. The contract never said a body could be anything
+but JSON, and JSON over HTTP is UTF-8 (RFC 8259). But the body used to go to the
+parser as bytes, and the parser guesses the encoding. A UTF-16 or UTF-32 body, a
+UTF-8 body behind a byte-order mark, and surrogates encoded as bytes were all
+decoded and answered. A malformed byte dropped the connection with no answer at
+all. Now the body is decoded strictly first. A body that does not decode is a 400
+saying it is not UTF-8. One that decodes and is not JSON gets the 400 it always
+got, and an empty body still gets the request's own sentence. A caller whose
+layer decodes the same bytes differently from this engine would otherwise be
+judged on text it never sent.
 
 ### What changed in version 2
 
@@ -671,16 +695,25 @@ anything but the subtotal (F42).
 limit rather than a hidden one: there is no field for it, and a key this module
 does not understand is refused by name -- a base and a flat amount included.
 
-**Validating is a door; computing is still a library call.**
+**Validating is a door, and so is computing.**
 `POST /v1/validate-tax-sets` and `rate-engine validate-tax-sets` take a body
 carrying one key, `tax_sets`, and hand its list to `load_tax_sets`, in
 `validate-plan`'s shape: 200 with each
 set's `effective_from` as read and its `rule_count`, or 400 with `invalid` and the
 loader's own sentence naming the field. A caller that stores a garage's taxes
-stores what this door accepted, and nothing else judges them (F46). `tax_lines`
-is not on `/v1/quote` or the CLI yet. Both take an amount, a currency, an
-instant and the sets, and they know nothing about a stay, a garage, a
-validation, a monthly agreement or a card.
+stores what this door accepted, and nothing else judges them (F46).
+
+`POST /v1/tax` and `rate-engine tax` take the same `tax_sets` and the three
+arguments `tax_lines` takes: `subtotal_minor`, `currency` and `at`. They answer
+200 with `lines`, written exactly as a quote's breakdown lines are, and
+`total_minor`, their sum. They answer 422 with the findings when no set is in
+force at `at`, and 400 with `invalid` and the sentence of whichever check refused
+-- the loader's, or `tax_lines`' own for a currency it does not render or a
+subtotal that is not a whole, non-negative number of minor units (F47). The two
+surfaces are one function, so a figure, a refusal and an unreadable request come
+back as the same bytes from both. `/v1/quote` still does not call it: tax is taken
+after a validation, and the engine never sees one. None of these doors knows
+anything about a stay, a garage, a validation, a monthly agreement or a card.
 
 A garage states its taxes as **sets**. A set carries `effective_from`, an
 offset-aware instant, and `rules`; a rule carries `id`, `label`, `percent_bp`,

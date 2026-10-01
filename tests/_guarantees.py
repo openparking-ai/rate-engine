@@ -313,6 +313,13 @@ GUARANTEES: dict[str, str] = {
         "caller that stores only what this door accepted stores nothing the engine "
         "will refuse when it computes the tax."
     ),
+    "F47": (
+        "A tax figure is reached the same way from both surfaces. `/v1/tax` and "
+        "`rate-engine tax` hand the request to one function, which calls `tax_lines` "
+        "and writes its lines as a breakdown's are written, with their total: the "
+        "same status and the same bytes from both, for a figure, a refusal and a "
+        "request that cannot be read."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

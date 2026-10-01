@@ -1,4 +1,4 @@
-"""The CLI. The same three operations, because an operator testing a rate should
+"""The CLI. The same four operations, because an operator testing a rate should
 not need an HTTP client.
 
 **This is not a simulation mode.** `rate-engine quote` builds the same request
@@ -42,6 +42,7 @@ from .contract import (
     breakdown_text,
     encode,
     run_quote,
+    run_tax,
     run_validate,
     run_validate_tax_sets,
 )
@@ -168,6 +169,44 @@ def _cmd_validate_tax_sets(args) -> int:
     return 0
 
 
+def _cmd_tax(args) -> int:
+    """`quote`'s exits: `--json` is the route's bytes and exits 0 or 1 on the
+    route's status; without it a refusal is 1 and an unreadable request is 2.
+    The request is built here and handed to `run_tax`, the function `/v1/tax`
+    calls -- the CLI decides nothing about a tax figure (F47).
+    """
+    request = {
+        "tax_sets": _load(args.tax_sets),
+        "subtotal_minor": args.subtotal,
+        "currency": args.currency,
+        "at": args.at,
+    }
+    status, body = run_tax(request)
+    if args.json:
+        _write_exact(encode(body))
+        return 0 if status == 200 else 1
+
+    if status == 200:
+        from .breakdown import Ledger, Line
+
+        ledger = Ledger([Line(**line) for line in body["lines"]])
+        if ledger.lines:
+            print()
+            print(breakdown_text(ledger, args.currency))
+        else:
+            print("\n  no tax lines")
+        print(f"\n  TAX  {format_minor(body['total_minor'], args.currency)}\n")
+        return 0
+    if body.get("refused"):
+        print("\n  REFUSED -- nothing was guessed.\n")
+        for finding in body["findings"]:
+            print(f"    [{finding['kind']}] {finding['code']}")
+            print(f"      {finding['text']}\n")
+        return 1
+    print(f"\n  the request could not be read: {body['error']}\n")
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rate-engine",
@@ -207,6 +246,22 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", help="the exact bytes /v1/validate-tax-sets returns"
     )
     t.set_defaults(func=_cmd_validate_tax_sets)
+
+    x = sub.add_parser(
+        "tax", help="the tax lines on a subtotal (the same path /v1/tax uses)"
+    )
+    x.add_argument("--tax-sets", required=True, dest="tax_sets", help="a list of tax sets, or '-'")
+    x.add_argument(
+        "--subtotal", required=True, type=int,
+        help="the money actually paid, in minor units, after every discount and validation",
+    )
+    x.add_argument("--currency", required=True)
+    x.add_argument(
+        "--at", required=True,
+        help="the instant that chooses the set in force, ISO 8601 with an offset",
+    )
+    x.add_argument("--json", action="store_true", help="the exact bytes /v1/tax returns")
+    x.set_defaults(func=_cmd_tax)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -9,6 +9,7 @@ subject broken, it was not measuring its subject and this script says so.
     python scripts/fail_controls.py            # every control
     python scripts/fail_controls.py F3 F8      # a subset
     python scripts/fail_controls.py --anchors  # anchors only, in a second
+    python scripts/fail_controls.py --pin      # the control ids against their pin
 
 **The anchor pre-flight.** `--anchors` counts every plant's `from` string in its
 file without running a single test. An anchor is a string in a source file, and
@@ -836,6 +837,49 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the LOADER stops treating a whitespace-only label as blank; the door must "
         "go red with it, or it is judging tax sets by some rule other than the loader's",
     ),
+    # The tax door. Two arms, each required red on its own: the CLI's path and the
+    # route's path each broken while the other is left alone. One plant breaking
+    # both would stay a control even if the test compared one surface to itself.
+    "F47": (
+        "tests/test_f47_a_tax_figure_has_one_path.py",
+        "cli.py",
+        '        "subtotal_minor": args.subtotal,',
+        '        "subtotal_minor": args.subtotal + 1,  # PLANTED: the CLI taxes another amount',
+        "`rate-engine tax` hands the one function a different request from the one "
+        "`/v1/tax` does, so an operator testing a tax at the terminal is shown a "
+        "figure the garage will not charge",
+    ),
+    "F47/route": (
+        "tests/test_f47_a_tax_figure_has_one_path.py",
+        "service.py",
+        '            "/v1/tax": run_tax,',
+        '            "/v1/tax": lambda d: run_tax(  # PLANTED: the route taxes by its own path\n'
+        '                {**d, "subtotal_minor": 0} if isinstance(d, dict) else d\n'
+        "            ),",
+        "`/v1/tax` reaches its figure by a path the CLI does not take, so the two "
+        "surfaces answer the same request differently",
+    ),
+    # The body's decode. Two arms: json's own encoding detection put back, and the
+    # catch removed. The first leaves the malformed bytes answered and lets UTF-16
+    # and UTF-32 through; the second leaves them refused-by-crash. Neither is the
+    # other, so each has to fire on its own.
+    "F16/body-decoded-strictly": (
+        "tests/test_f16_a_body_is_read_as_utf8.py",
+        "service.py",
+        '            text = raw.decode("utf-8")',
+        '            text = raw.decode(json.detect_encoding(raw), "surrogatepass")  # PLANTED',
+        "a POST body is decoded by json's own detection again, so a UTF-16 or UTF-32 "
+        "body is read and answered, and a caller that decodes those bytes differently "
+        "is judged on text it never sent",
+    ),
+    "F16/undecodable-body-answered": (
+        "tests/test_f16_a_body_is_read_as_utf8.py",
+        "service.py",
+        "        except UnicodeDecodeError as exc:",
+        "        except LookupError as exc:  # PLANTED: an undecodable body escapes again",
+        "a body that is not UTF-8 raises out of the handler, and the caller gets a "
+        "dropped connection with no status and no body",
+    ),
     "F8": (
         "tests/test_f8_breakdown_adds_up.py",
         "engine.py",
@@ -846,6 +890,42 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the ledger exists to make impossible",
     ),
 }
+
+
+#: The set of control ids, pinned. `main` fails a guarantee left with NO arm, and
+#: nothing else looked at the arms: deleting one arm of a guarantee that has
+#: several -- the arm that caught the defect the others cannot see -- left every
+#: check green. This file is the record, and `--pin` compares the two as SETS by
+#: equality, both directions. Adding or removing a control is therefore a change
+#: to this file too, made in the same commit, where a reviewer sees it.
+PIN = ROOT / "scripts" / "fail_controls.ids"
+
+
+def pinned_ids() -> set[str]:
+    lines = PIN.read_text().splitlines()
+    return {ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")}
+
+
+def pin_mismatch(ids: set[str], pinned: set[str]) -> tuple[list[str], list[str]]:
+    """(pinned but gone from CONTROLS, in CONTROLS but not pinned)."""
+    return sorted(pinned - ids), sorted(ids - pinned)
+
+
+def check_pin() -> int:
+    gone, unpinned = pin_mismatch(set(CONTROLS), pinned_ids())
+    if gone:
+        print(f"PINNED CONTROLS MISSING from CONTROLS: {', '.join(gone)}")
+    if unpinned:
+        print(f"controls not in {PIN.relative_to(ROOT)}: {', '.join(unpinned)}")
+    if gone or unpinned:
+        print(
+            "\nThe control set and its pin disagree. A removed arm is a guarantee "
+            "measured less than it was; a new one is recorded in the pin in the "
+            "same commit."
+        )
+        return 1
+    print(f"all {len(CONTROLS)} control ids match {PIN.relative_to(ROOT)}.")
+    return 0
 
 
 def check_anchors() -> int:
@@ -908,6 +988,8 @@ def run_control(gid: str) -> bool:
 def main(argv: list[str]) -> int:
     if "--anchors" in argv:
         return check_anchors()
+    if "--pin" in argv:
+        return check_pin()
 
     # An argument selects a control id exactly, or a guarantee id and then every
     # arm of it -- `F6b` has to keep meaning "F6b", not "no such control".
@@ -930,7 +1012,7 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    if check_anchors():
+    if check_pin() or check_anchors():
         return 1
 
     results = {gid: run_control(gid) for gid in wanted}

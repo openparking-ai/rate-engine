@@ -1,7 +1,7 @@
 """The wire contract: version, request parsing, and ONE serializer.
 
-Every surface -- `/v1/quote`, `/v1/validate-plan`, `/v1/validate-tax-sets` and
-their three CLI commands -- turns
+Every surface -- `/v1/quote`, `/v1/validate-plan`, `/v1/validate-tax-sets`,
+`/v1/tax` and their four CLI commands -- turns
 its answer into JSON through the functions here and nowhere else. That is F6's
 other half: proving the CLI and the HTTP route both MOVE when the engine changes
 is weaker than proving they cannot differ, and a single serializer is what makes
@@ -25,7 +25,7 @@ from .engine import Quote, Stay, make_stay, quote
 from .findings import Refused
 from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
-from .tax import load_tax_sets
+from .tax import load_tax_sets, tax_lines
 from .validator import undecided, validate_plan
 
 #: **2 in A2, and the bump is not decoration.** A plan written for version 1 does
@@ -43,6 +43,7 @@ SCHEMA_VERSION = 3
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})
 VALIDATE_TAX_SETS_REQUEST_KEYS = frozenset({"tax_sets"})
+TAX_REQUEST_KEYS = frozenset({"tax_sets", "subtotal_minor", "currency", "at"})
 
 
 def _require(document: object, keys: frozenset[str], where: str) -> dict:
@@ -114,6 +115,20 @@ def parse_validate_tax_sets_request(document: object):
     """
     body = _require(document, VALIDATE_TAX_SETS_REQUEST_KEYS, "request")
     return load_tax_sets(body["tax_sets"], "request.tax_sets")
+
+
+def parse_tax_request(document: object):
+    """The loader's own document, and the three arguments `tax_lines` takes.
+
+    Only the request shape, the sets and the instant are judged here. The
+    subtotal and the currency go to `tax_lines` exactly as they arrived, because
+    it judges them itself -- a second check here would be a second rule, the
+    defect `parse_validate_tax_sets_request` records.
+    """
+    body = _require(document, TAX_REQUEST_KEYS, "request")
+    sets = load_tax_sets(body["tax_sets"], "request.tax_sets")
+    at = parse_instant(body["at"], "request.at")
+    return sets, body["subtotal_minor"], body["currency"], at
 
 
 # --- the one serializer ----------------------------------------------------
@@ -200,6 +215,21 @@ def validate_tax_sets_response(sets) -> dict[str, Any]:
     }
 
 
+def tax_response(lines) -> dict[str, Any]:
+    """The lines exactly as `Ledger.to_json()` writes a breakdown's, and their total.
+
+    `total_minor` is the ledger's own total, the one route to a sum this module
+    has (F8): the caller adds these lines after its validation line, and its fee
+    is still the running total of its ledger.
+    """
+    ledger = Ledger(list(lines))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "lines": ledger.to_json(),
+        "total_minor": ledger.total_minor,
+    }
+
+
 def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     """Parse, price, serialize -- the whole of `/v1/quote` and of `rate-engine quote`.
 
@@ -250,6 +280,35 @@ def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
     except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
     return 200, validate_tax_sets_response(sets)
+
+
+def run_tax(document: object) -> tuple[int, dict[str, Any]]:
+    """The whole of `/v1/tax` and of `rate-engine tax`.
+
+    The shapes are the ones that already exist: 400 `invalid` with the sentence
+    the loader or `tax_lines` wrote, 422 with the findings `Refused` carries, 200
+    with the lines. **The 400 covers the `tax_lines` CALL, not only the parse.**
+    `tax_lines` judges its own three arguments -- a currency it does not render, a
+    negative or non-integer subtotal -- and it does so after the request has
+    parsed; a refusal caught only around parsing escapes this function exactly as
+    a plain float once escaped `run_quote`. `ValueError` is caught around the
+    parse and NOT around the arithmetic, for `run_quote`'s reason: past the parse
+    nothing refuses by raising one, so one arriving there is a bug, and it is
+    allowed to crash rather than come back as "your request is invalid".
+    """
+    try:
+        sets, subtotal_minor, currency, at = parse_tax_request(document)
+    except (InvalidPlan, NotMinorUnits, ValueError) as exc:
+        return 400, invalid_response(exc)
+    try:
+        lines = tax_lines(sets, subtotal_minor=subtotal_minor, currency=currency, at=at)
+    except (InvalidPlan, NotMinorUnits) as exc:
+        return 400, invalid_response(exc)
+    except Refused as refused:
+        # 422, as `run_quote`: well-formed, and the garage's own statement cannot
+        # tax this instant -- the module working, not a bad request.
+        return 422, refusal_response(refused)
+    return 200, tax_response(lines)
 
 
 def breakdown_text(ledger: Ledger, currency: str, width: int = 78) -> str:
