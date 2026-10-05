@@ -180,7 +180,8 @@ number or sentence has drifted from the code it describes.
 
 ## Licence
 
-AGPL-3.0-or-later. Contributions welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md); a signed [CLA](CLA.md) is required.
+AGPL-3.0-or-later.
+
+Open Parking AI does not accept outside contributions. Pull requests, issues and comments are limited to the maintainers.
 
 Built by 72 Knots Method by 72Knots.ai
