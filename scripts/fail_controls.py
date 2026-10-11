@@ -165,14 +165,6 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
-    "F11": (
-        "tests/test_f11_conflicts_are_refused.py",
-        "engine.py",
-        "        if len(qualifying) > 1:",
-        "        if False:  # PLANTED: a conflict is no longer detected",
-        "two rules qualifying at one stage stop being refused, so the pipeline "
-        "silently applies both and the plan's resolution mode is never consulted",
-    ),
     "F10": (
         "tests/test_f10_unambiguous_plan_selection.py",
         "engine.py",
@@ -200,8 +192,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 3",
-        "SCHEMA_VERSION = 4  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 4",
+        "SCHEMA_VERSION = 5  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -329,6 +321,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}",
         "every probe enters at one fixed time again, so two rules that both qualify "
         "only for an early entry never collide and validate-plan reports the plan "
+        "clean while the engine refuses a real stay",
+    ),
+    # U7g. The probe axes read a window's days and times at every stage, because
+    # the conflict a plan can still state lives at ADJUST. Put the QUALIFY-only
+    # read back and the dawn discounts are never probed before 05:30.
+    "F19/every-stage": (
+        "tests/test_f19_validator_probes_declared_boundaries.py",
+        "validator.py",
+        "    return [rule for stage in STAGES for rule in plan.rules_for_stage(stage)]",
+        "    return list(plan.rules_for_stage('QUALIFY'))  # PLANTED: QUALIFY only again",
+        "the validator reads the days and times of specials only, so two discounts "
+        "that collide on an early entry are never probed there and a plan is reported "
         "clean while the engine refuses a real stay",
     ),
     # X6. A4 established the "two comparisons" half of this item did not exist --
@@ -652,7 +656,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    # way, and there is nothing for an owner to decide.\n"
         "    return None",
         "    return Finding(  # PLANTED: composing rules reported as a conflict again\n"
-        "        code=CONFLICT_MULTIPLE_RULES_AT_STAGE,\n"
+        "        code=CONFLICT_UNORDERED_ADJUSTMENTS,\n"
         '        text=f"{len(qualifying)} rules qualify at {stage}",\n'
         "        rule_ids=ids,\n"
         "    )",
@@ -692,8 +696,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F38": (
         "tests/test_f38_the_documents_name_only_real_things.py",
         "findings.py",
-        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"',
-        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_TIED_ON_PRICE"'
+        'GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_IN_FORCE"',
+        'GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_STATED"'
         "  # PLANTED: the published code is renamed",
         "a finding code is renamed in the code and not in the prose that names it, "
         "so docs/CONTRACT.md keeps publishing an identifier nothing answers with -- "
@@ -840,6 +844,32 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # The tax door. Two arms, each required red on its own: the CLI's path and the
     # route's path each broken while the other is left alone. One plant breaking
     # both would stay a control even if the test compared one surface to itself.
+    # F48 replaced F11 in U7g. Two arms, because the guarantee has two halves
+    # that fail differently: the tie refused again (the F11 behaviour put back),
+    # and the comparison lost (the dearer rule chosen), which a tie-only test
+    # would never see.
+    "F48/tie-refused-again": (
+        "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
+        "engine.py",
+        "        # Never a conflict. A TERMINAL rule wins outright by what its type is; else",
+        "        _t = _candidate_totals(qualifying, stay, plan)  # PLANTED: F11 put back\n"
+        "        if len(set(_t.values())) == 1 and not any(\n"
+        "            TERMINAL in RULE_TRAITS[r.type] for r in qualifying\n"
+        "        ):\n"
+        "            return Finding(code=CONFLICT_AMBIGUOUS_PLAN_SELECTION,\n"
+        "                           text='PLANTED: the tie is refused', rule_ids=ids)\n"
+        "        # Never a conflict. A TERMINAL rule wins outright by what its type is; else",
+        "two specials charging the same amount are refused again, so a plan whose "
+        "every stay has one answer cannot be stored",
+    ),
+    "F48/dearer-chosen": (
+        "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
+        "engine.py",
+        "    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))",
+        "    return max(qualifying, key=lambda rule: (totals[rule.id], rule.id))  # PLANTED",
+        "the dearer of two qualifying specials is applied, so the driver pays more "
+        "than the plan's own rule says",
+    ),
     "F47": (
         "tests/test_f47_a_tax_figure_has_one_path.py",
         "cli.py",

@@ -30,8 +30,8 @@ from rate_engine.breakdown import Line
 from rate_engine.contract import run_quote
 from rate_engine.engine import QUALIFIERS, quote
 from rate_engine.findings import (
-    CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_NEGATIVE_TOTAL,
+    CONFLICT_UNORDERED_ADJUSTMENTS,
     Refused,
 )
 from rate_engine.plan import load_plan
@@ -87,7 +87,7 @@ def test_a_negative_total_is_refused_by_ITS_OWN_code(negative_rule):
         quote([load_plan(_document())], _stay())
     finding = caught.value.findings[0]
     assert finding.code == CONFLICT_NEGATIVE_TOTAL
-    assert finding.code != CONFLICT_MULTIPLE_RULES_AT_STAGE, (
+    assert finding.code != CONFLICT_UNORDERED_ADJUSTMENTS, (
         "the refusal names a cause that did not occur"
     )
     assert "negative fee" in finding.text
@@ -109,22 +109,28 @@ def test_the_code_reaches_a_caller_unchanged(negative_rule):
 
 
 @pytest.mark.guarantee("F21")
-def test_the_MULTI_RULE_conflict_still_uses_the_multi_rule_code():
+def test_the_ADJUSTMENT_conflict_still_uses_its_own_code():
     """The control on the item above, and the half that would catch an over-broad
-    fix: splitting a code must not have moved the case it was split FROM."""
+    fix: splitting a code must not have moved the case it was split FROM.
+
+    This used to be the multi-rule code, split from in the same round. That code
+    was removed in schema version 4 (a tie is priced now, F48), so the control
+    moved to the other conflict a plan can still state: two adjustments that both
+    apply with no order given."""
+    every_day = {"kind": "days_of_week",
+                 "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
+    adjust = {"type": "time_window", "stage": "ADJUST", "space_classes": ["standard"],
+              "applies_on": every_day, "enter_from": "00:00", "enter_by": "23:59",
+              "exit_by": "23:59", "day_span": "any_span"}
     document = copy.deepcopy(DOWNTOWN_V2)
     document["space_classes"] = ["standard"]
     document["rules"] = [
-        {"id": "eb-a", "type": "time_window", "stage": "QUALIFY",
-         "space_classes": ["standard"], "label": "Early bird A",
-         "applies_on": {"kind": "days_of_week", "days": ["tue"]},
-         "enter_from": "00:00", "enter_by": "09:00", "exit_by": "17:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
-        {"id": "eb-b", "type": "time_window", "stage": "QUALIFY",
-         "space_classes": ["standard"], "label": "Early bird B",
-         "applies_on": {"kind": "days_of_week", "days": ["tue"]},
-         "enter_from": "00:00", "enter_by": "10:00", "exit_by": "18:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
+        {**adjust, "id": "pct", "label": "Ten off",
+         "effect": {"kind": "adjust", "direction": "discount",
+                    "amount": {"kind": "percent", "percent_bp": 1000}, "rounding": "down"}},
+        {**adjust, "id": "two", "label": "Two off",
+         "effect": {"kind": "adjust", "direction": "discount",
+                    "amount": {"kind": "fixed", "minor": 200}, "rounding": "down"}},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,
@@ -138,7 +144,7 @@ def test_the_MULTI_RULE_conflict_still_uses_the_multi_rule_code():
         }
     )
     assert status == 422
-    assert body["findings"][0]["code"] == CONFLICT_MULTIPLE_RULES_AT_STAGE
+    assert body["findings"][0]["code"] == CONFLICT_UNORDERED_ADJUSTMENTS
 
 
 def _stay():

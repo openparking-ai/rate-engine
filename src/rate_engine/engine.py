@@ -29,7 +29,6 @@ from datetime import datetime
 from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
-    CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_NEGATIVE_TOTAL,
     CONFLICT_UNORDERED_ADJUSTMENTS,
     FAULT_RULE_RETURNED_NOT_LINES,
@@ -160,28 +159,35 @@ def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
     return totals
 
 
-def _tied_cheapest(plan: Plan, stay: Stay, stage: str, qualifying: list) -> list:
-    """The rules that tie for cheapest, if more than one does. Else an empty list.
+def _charged_the_same(plan: Plan, stage: str, rule, winner, totals: dict[str, int]) -> bool:
+    """Whether a rule that lost under `cheapest_wins` charged what the winner did.
 
-    ONE implementation, called by `find_conflicts` to refuse the tie and by
-    `_winner` to pick when there is none -- so the refusal and the choice can
-    never disagree about which rule was cheapest.
+    **A tie at the cheapest amount is a price, not a conflict.** His rule, 2026-10-11:
+    "always cheaper goes first". Two specials that both charge 12.00 USD leave the
+    driver paying 12.00 USD whichever one is named, so there is nothing for an owner
+    to decide and nothing for the engine to guess -- the money is the same either
+    way. Until U7g this was refused as a conflict, which made the plan store reject
+    a plan whose every stay had one answer.
+
+    The NAME on the receipt still has to be one rule, and it is the lowest rule id:
+    stated by the operator, stable, and never the caller's array position. This
+    only decides which line says "applied" and which says "charged the same".
     """
-    if plan.resolution[stage]["mode"] != "cheapest_wins":
-        return []
-    totals = _candidate_totals(qualifying, stay, plan)
-    cheapest = min(totals.values())
-    tied = [rule for rule in qualifying if totals[rule.id] == cheapest]
-    return tied if len(tied) > 1 else []
+    return (
+        plan.resolution[stage]["mode"] == "cheapest_wins"
+        and totals.get(rule.id) is not None
+        and totals[rule.id] == totals.get(winner.id)
+    )
 
 
 def _winner(plan: Plan, stay: Stay, stage: str, qualifying: list):
     """Which of several qualifying rules APPLIES at a resolving stage.
 
     Terminality first, because it is a property of the rule type and beats
-    anything the plan says. Then the plan's own mode. A tie under
-    `cheapest_wins` has already been refused by `find_conflicts` before any
-    pricing happens, so this is never asked to guess.
+    anything the plan says. Then the plan's own mode. Under `cheapest_wins` the
+    lowest charge wins, and a tie at that charge goes to the lowest rule id: the
+    driver pays the same amount either way, so the id only decides which rule the
+    receipt names (see `_charged_the_same`). Nothing here is a guess about money.
     """
     if not qualifying:
         return None
@@ -206,9 +212,25 @@ def _resolved_line(rule, winner, stage: str, plan: Plan, totals: dict[str, int])
     answer to the question an attendant is asked, and dropping the loser would
     leave a breakdown in which a rate the customer was entitled to is simply
     absent.
+
+    A loser that charged the SAME as the winner says so: "charged the same" is
+    the true reason it was not named, and "applied instead" alone would read as
+    if one of them had been cheaper.
     """
     from .money import format_minor
 
+    if _charged_the_same(plan, stage, rule, winner, totals):
+        return Line(
+            code="resolved",
+            rule_id=rule.id,
+            text=(
+                f"{rule.display_name} qualified at "
+                f"{format_minor(totals[rule.id], plan.currency)} and charged the same as "
+                f"{winner.display_name}, which is named because its rule id comes first "
+                f"(plan resolves {stage} by {plan.resolution[stage]['mode']})"
+            ),
+            delta_minor=0,
+        )
     return Line(
         code="resolved",
         rule_id=rule.id,
@@ -454,10 +476,10 @@ def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
 
     So the answer is per CATEGORY, and stages.py holds which is which:
 
-    * RESOLVING -- a genuine either/or. Reported, unless a TERMINAL rule
-      qualified: terminality is an outright win declared by the rule type, not an
-      ambiguity for the plan to settle, so grace beating a weekend rate is not a
-      conflict.
+    * RESOLVING -- a genuine either/or, and the plan always settles it: a
+      TERMINAL rule wins outright, `stated_order` names every rule, and
+      `cheapest_wins` takes the lowest charge -- a tie there is the same money
+      whichever rule is named, so since U7g it is priced, not refused.
     * COMPOSING, ORDER-INDEPENDENT -- both apply and the total is the same
       either way. Nothing to report and nothing to decide.
     * COMPOSING, ORDER-DEPENDENT -- both apply and the order changes the money,
@@ -477,28 +499,13 @@ def _conflict_at(plan: Plan, stay: Stay, stage: str, qualifying: list) -> Findin
     """What more than one qualifying rule MEANS at this stage. None means nothing."""
     ids = tuple(r.id for r in qualifying)
     if stage in RESOLVING:
-        terminal = [r for r in qualifying if TERMINAL in RULE_TRAITS[r.type]]
-        if len(terminal) == 1:
-            # Not an ambiguity: one of them wins outright by what its type is,
-            # and the others get a `superseded` line saying so.
-            return None
-        tied = _tied_cheapest(plan, stay, stage, qualifying)
-        if not tied:
-            # The plan's mode settles it. This is the whole of W4: the field an
-            # owner was made to fill in now decides something.
-            return None
-        tied_ids = tuple(r.id for r in tied)
-        return Finding(
-            code=CONFLICT_MULTIPLE_RULES_AT_STAGE,
-            text=(
-                f"{len(tied)} rules qualify at {stage} ({', '.join(tied_ids)}) and "
-                f"charge the same amount, so resolution "
-                f"{plan.resolution[stage]['mode']!r} cannot choose between them. "
-                "State an order for that stage, or price them differently -- the "
-                "engine will not pick"
-            ),
-            rule_ids=tied_ids,
-        )
+        # Never a conflict. A TERMINAL rule wins outright by what its type is; else
+        # the plan's mode settles it -- `stated_order` names every rule at load,
+        # and `cheapest_wins` takes the lowest charge, a tie at that charge being
+        # the same money whichever rule is named (see `_charged_the_same`). This
+        # is the whole of W4 and of U7g: the field an owner was made to fill in
+        # decides, and the engine has nothing left to refuse here.
+        return None
     if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is None:
         return Finding(
             code=CONFLICT_UNORDERED_ADJUSTMENTS,

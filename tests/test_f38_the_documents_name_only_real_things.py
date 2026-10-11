@@ -75,6 +75,9 @@ VOCABULARY = frozenset(
         # values a plan may state that are checked as members elsewhere, plus the
         # shapes the contract quotes back at the reader
         "20.5", "2000", "1250",
+        # a finding code REMOVED in schema version 4, named only where the
+        # contract records the removal so a consumer routing on it can find out why
+        "CONFLICT_MULTIPLE_RULES_AT_STAGE",
     }
 )
 

@@ -32,7 +32,7 @@ from .engine import Stay, find_conflicts, find_gaps
 from .findings import Finding
 from .plan import Plan
 from .rules.time_window import DAY_SPAN_LIMITS
-from .stages import ACCUMULATE, QUALIFY
+from .stages import ACCUMULATE, STAGES
 from .wallclock import DAYS_OF_WEEK
 
 #: The reference entry the validator has always used: early enough that an
@@ -47,6 +47,22 @@ DEFAULT_PROBE_ENTRY_MINUTE = 7 * 60
 REFERENCE_DATE = date(2026, 3, 3)
 
 
+def _windowed_rules(plan: Plan) -> list:
+    """Every rule that states a day or a time, at EVERY stage.
+
+    **This read QUALIFY only until U7g, and that hid the conflict that is left.**
+    Two specials at QUALIFY are settled by the plan's mode now, tie included
+    (F48), so the conflict a plan can still state is two DISCOUNTS at ADJUST with
+    no order given -- and a discount window states its days and times exactly as
+    a special does. Probing only QUALIFY's times meant two discounts colliding
+    only before 05:30 were never probed there, and the validator reported the
+    plan clean while the engine refused a real stay: the defect F19 exists for,
+    one stage over. A rule that names no time contributes nothing below, so
+    reading every stage costs nothing for the ones that do not.
+    """
+    return [rule for stage in STAGES for rule in plan.rules_for_stage(stage)]
+
+
 def _entry_minutes_of_day(plan: Plan) -> set[int]:
     """Every ENTRY time this plan makes interesting, as minutes past local midnight.
 
@@ -58,7 +74,7 @@ def _entry_minutes_of_day(plan: Plan) -> set[int]:
     is where those times live.
     """
     marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}  # the original reference, and midnight
-    for rule in plan.rules_for_stage(QUALIFY):
+    for rule in _windowed_rules(plan):
         enter_by = rule.params.get("enter_by")
         if enter_by is not None:
             at = enter_by.hour * 60 + enter_by.minute
@@ -91,7 +107,7 @@ def _entry_dates(plan: Plan) -> set[date]:
     """
     dates = {REFERENCE_DATE}
     week_starts = REFERENCE_DATE - timedelta(days=REFERENCE_DATE.weekday())
-    for rule in plan.rules_for_stage(QUALIFY):
+    for rule in _windowed_rules(plan):
         applies_on = rule.params.get("applies_on")
         if applies_on is None:
             continue
@@ -127,7 +143,7 @@ def _duration_marks(plan: Plan, entry_minute: int) -> set[int]:
             # branch is never entered by any stay the validator tries.
             marks.add(3 * 24 * 60)
 
-    for rule in plan.rules_for_stage(QUALIFY):
+    for rule in _windowed_rules(plan):
         exit_by = rule.params.get("exit_by")
         if exit_by is None:
             continue

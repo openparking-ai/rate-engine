@@ -147,7 +147,7 @@ def test_CONTROL_an_empty_body_and_a_valid_request_answer_as_they_did(port):
         status, raw = _post(port, route, b"")
         assert (status, json.loads(raw)) == (
             400,
-            {"schema_version": 3, "invalid": True,
+            {"schema_version": 4, "invalid": True,
              "error": "request must be an object, got NoneType."},
         ), route
         expected_status, expected = run(document)

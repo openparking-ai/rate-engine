@@ -11,8 +11,10 @@ So stages.py carries three categories and this file holds all three arms. Testin
 only the widening would leave "the engine no longer refuses anything" passing
 every check.
 
-* **RESOLVING** (QUALIFY, ACCUMULATE) -- an either/or. Still refused, still names
-  both. `tests/test_f11_conflicts_are_refused.py` is the other half of this arm.
+* **RESOLVING** (QUALIFY, ACCUMULATE) -- an either/or, and the plan's mode
+  always settles it: the cheaper wins, and since U7g a tie at the cheapest charge
+  is priced at that charge. `tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py`
+  is the other half of this arm.
 * **COMPOSING, order-independent** (CAP, SURCHARGE) -- both apply and the total
   is the same either way. Not reported at all: there is nothing to decide.
 * **COMPOSING, order-dependent** (ADJUST) -- both apply and the order changes the
@@ -26,10 +28,7 @@ import copy
 import pytest
 
 from rate_engine.contract import run_quote
-from rate_engine.findings import (
-    CONFLICT_MULTIPLE_RULES_AT_STAGE,
-    CONFLICT_UNORDERED_ADJUSTMENTS,
-)
+from rate_engine.findings import CONFLICT_UNORDERED_ADJUSTMENTS
 from rate_engine.stages import (
     COMPOSING_ORDER_DEPENDENT,
     COMPOSING_ORDER_INDEPENDENT,
@@ -113,25 +112,20 @@ def test_every_stage_falls_in_EXACTLY_ONE_category():
 
 
 @pytest.mark.guarantee("F34")
-def test_two_rules_at_a_RESOLVING_stage_are_STILL_a_conflict():
-    """The arm that must not have been widened away. Two specials cannot both be
-    the price -- and at the SAME price nothing can choose between them.
-
-    W4 made the modes act, so two windows at different prices resolve rather than
-    refuse. The tie is what is left, and it is still a refusal: the engine will
-    not pick, for the same reason `select_plan` will not pick between two plan
-    versions sharing an effective date.
-    """
+def test_two_rules_at_a_RESOLVING_stage_are_settled_by_the_mode_TIE_INCLUDED():
+    """Two specials cannot both be the price, and the plan's mode says which. The
+    cheaper wins; at the same price the driver pays that price either way, so the
+    stay is priced (F48) rather than refused, and only ONE of them is applied."""
     status, body = _quote(_plan([_window("win-a", "QUALIFY", 1200),
                                  _window("win-b", "QUALIFY", 1200)]))
-    assert status == 422, body
-    finding = body["findings"][0]
-    assert finding["code"] == CONFLICT_MULTIPLE_RULES_AT_STAGE
-    assert set(finding["rule_ids"]) == {"win-a", "win-b"}
+    assert status == 200, body
+    assert body["fee_minor"] == 1200
+    applied = [ln["rule_id"] for ln in body["breakdown"] if ln["code"] == "time_window.applied"]
+    assert applied == ["win-a"], f"not exactly one base applied: {applied}"
 
-    # And the control on it: the same pair at different prices now PRICES.
-    status, priced = _quote(_plan([_window("win-a", "QUALIFY", 1200),
-                                   _window("win-b", "QUALIFY", 1500)]))
+    # And at different prices the cheaper one, whichever id it carries.
+    status, priced = _quote(_plan([_window("win-a", "QUALIFY", 1500),
+                                   _window("win-b", "QUALIFY", 1200)]))
     assert status == 200, priced
     assert priced["fee_minor"] == 1200
 
@@ -180,7 +174,6 @@ def test_two_rules_at_the_ORDER_DEPENDENT_stage_are_refused_under_their_OWN_code
     assert status == 422, body
     finding = body["findings"][0]
     assert finding["code"] == CONFLICT_UNORDERED_ADJUSTMENTS
-    assert finding["code"] != CONFLICT_MULTIPLE_RULES_AT_STAGE
 
 
 @pytest.mark.guarantee("F34")

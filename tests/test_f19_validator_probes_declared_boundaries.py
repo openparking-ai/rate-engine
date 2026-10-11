@@ -14,9 +14,15 @@ makes that time interesting, and the plan is where those times live -- so ENTRY
 became a derived axis alongside duration, and the sentence now says what the
 mechanism does.
 
-**The counterexample below is the L3's own, unchanged.** A fix verified against a
-new test written to pass would prove nothing; §6 requires the exact probe that
-failed.
+**The counterexample below is the L3's own, with one change forced by U7g.** A
+fix verified against a new test written to pass would prove nothing; §6 requires
+the exact probe that failed. Its two windows, their days, their entry and exit
+limits and the probe stay are unchanged. What moved is the STAGE: two specials
+overlapping at QUALIFY are no longer a conflict at all (the cheaper wins, and a
+tie is priced -- F48), so the same two windows are now two DISCOUNTS at ADJUST
+with no order stated, which is the conflict a plan can still contain. The
+property measured is the same: they collide only for an entry before 05:30, and
+a validator probing one entry time never sees it.
 """
 
 from __future__ import annotations
@@ -27,20 +33,20 @@ import pytest
 
 from fixtures import DOWNTOWN_V2
 from rate_engine.contract import parse_validate_request, run_quote, run_validate
-from rate_engine.findings import CONFLICT_MULTIPLE_RULES_AT_STAGE
+from rate_engine.findings import CONFLICT_UNORDERED_ADJUSTMENTS
 from rate_engine.validator import probe_stays
 
-#: Two rules that both qualify only for an entry before 06:00, on a plan with no
+#: Two rules that both qualify only for an entry before 05:30, on a plan with no
 #: ceiling so no unrelated gap masks the result. The L3's counterexample, carried
 #: forward onto `time_window` unchanged in everything it measures: the two rules
 #: apply on every day, so the day axis cannot be what makes them overlap.
 #:
-#: **They now charge the SAME price, and that is not cosmetic.** W4 made the
-#: resolution modes act, so two rules at different prices are no longer a
-#: conflict -- `cheapest_wins` settles them. What survives is the tie, which
-#: nothing can settle, and this file is about whether the VALIDATOR sees what the
-#: engine would refuse. A fixture the engine no longer refuses would have made it
-#: pass while measuring nothing.
+#: **They are DISCOUNTS at ADJUST with no `adjust_order`, and that is not
+#: cosmetic.** Two specials at QUALIFY are settled by `cheapest_wins` whatever
+#: they charge (F48), so they are no longer a conflict the validator could miss.
+#: Two discounts that both apply with no order stated are -- and this file is
+#: about whether the VALIDATOR sees what the engine would refuse. A fixture the
+#: engine no longer refuses would have made it pass while measuring nothing.
 DAWN_CONFLICT = {
     "plan_version": "r3-counterexample",
     "effective_from": "2026-02-01T00:00:00-05:00",
@@ -52,18 +58,22 @@ DAWN_CONFLICT = {
     },
     "adjust_order": None,
     "rules": [
-        {"id": "eb-dawn-a", "type": "time_window", "stage": "QUALIFY",
+        {"id": "eb-dawn-a", "type": "time_window", "stage": "ADJUST",
          "space_classes": ["standard"], "label": "Dawn A",
          "applies_on": {"kind": "days_of_week",
                         "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
          "enter_from": "00:00", "enter_by": "06:00", "exit_by": "17:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
-        {"id": "eb-dawn-b", "type": "time_window", "stage": "QUALIFY",
+         "day_span": "same_day",
+         "effect": {"kind": "adjust", "direction": "discount",
+                    "amount": {"kind": "fixed", "minor": 100}, "rounding": "down"}},
+        {"id": "eb-dawn-b", "type": "time_window", "stage": "ADJUST",
          "space_classes": ["standard"], "label": "Dawn B",
          "applies_on": {"kind": "days_of_week",
                         "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
          "enter_from": "00:00", "enter_by": "05:30", "exit_by": "16:00",
-         "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}},
+         "day_span": "same_day",
+         "effect": {"kind": "adjust", "direction": "discount",
+                    "amount": {"kind": "fixed", "minor": 100}, "rounding": "down"}},
         {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
          "space_classes": ["standard"], "first_period_minutes": 60,
          "first_period_minor": 800, "repeat_period_minutes": 60,
@@ -78,7 +88,7 @@ def test_the_conflict_the_validator_used_to_miss_is_now_REPORTED():
     status, body = run_validate({"plan": copy.deepcopy(DAWN_CONFLICT)})
     assert status == 200
     codes = [f["code"] for f in body["findings"]]
-    assert CONFLICT_MULTIPLE_RULES_AT_STAGE in codes, (
+    assert CONFLICT_UNORDERED_ADJUSTMENTS in codes, (
         f"validate-plan still reports this plan clean: {body['findings']}"
     )
 

@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 3. One contract, five surfaces: `POST /v1/quote`, `POST
+Version 4. One contract, five surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, `POST /v1/validate-tax-sets`, `POST /v1/tax`, and the
 `rate-engine` CLI, which carries the same four operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
@@ -10,7 +10,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **3**
+`schema_version` **4**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -24,6 +24,30 @@ safe: **a key this engine does not understand is REJECTED and named, never
 ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
+
+### What changed in version 4
+
+**A tie at the cheapest charge is priced, and its finding code is gone.** Two
+rules that qualify at QUALIFY or ACCUMULATE and charge the same amount under
+`cheapest_wins` were refused as `CONFLICT_MULTIPLE_RULES_AT_STAGE`. The rule the
+garage owner gave is "always cheaper goes first", and at a tie nothing is
+cheaper: the driver pays that amount whichever rule is named. So the stay is
+priced at that amount, the lowest rule id is named as applied, and every other
+rule says it charged the same (F48, which replaces F11). With the tie gone,
+nothing could produce the code, and a registered code nothing can produce is a
+promise with no mechanism behind it -- so it was REMOVED, and a removal moves the
+number.
+
+**`validate-plan` reads the days and times of a window at every stage.** It used
+to read them at QUALIFY only. The conflict a plan can still state is two
+adjustments with no order, and an adjustment's window states its days and times
+exactly as a special does; two discounts colliding only before 05:30 were never
+probed there (F19).
+
+**What a caller must do.** A plan that loaded on version 3 loads on version 4,
+and every stay it priced is priced identically. A stay version 3 refused for a
+tie is now priced. A consumer routing on finding codes stops seeing
+`CONFLICT_MULTIPLE_RULES_AT_STAGE`; no code was added.
 
 ### What changed in version 3
 
@@ -124,9 +148,9 @@ harmless only while no second rule type existed at a composing stage.
 AND a weekly cap would have refused every stay in the garage.
 
 And at a resolving stage, two rules at different prices are now settled by the
-plan's mode instead of refused. `CONFLICT_MULTIPLE_RULES_AT_STAGE` therefore
-means something narrower than it did: a TIE, which no mode can settle. The code
-is unchanged and still reachable; what changed is how much it covers.
+plan's mode instead of refused. The multi-rule conflict code therefore meant
+something narrower than it did: a TIE. (Version 4 prices the tie too and removes
+the code; see "What changed in version 4".)
 
 **A window that would have to wrap past midnight is REFUSED, and that is a stated
 gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
@@ -217,8 +241,10 @@ the competing rules themselves charge for the stay — not the final fee. A cap 
 an adjustment downstream applies to whichever rule wins and could in principle
 bring two different bases to the same number; comparing final fees would mean
 running the whole pipeline once per candidate, and would still not be "the
-customer's fee" for the rules that lost. Two rules charging the SAME amount
-cannot be separated by it and are refused, naming both.
+customer's fee" for the rules that lost. Two rules charging the SAME amount are a
+tie, and since version 4 a tie is PRICED at that amount: the driver pays the same
+whichever rule is named, so the lowest rule id is named as applied and every other
+says it charged the same (F48).
 
 `adjust_order` is a different thing and is stated separately: a list of rule ids,
 or null, giving the sequence the ADJUST rules run in. **An order is not a
@@ -230,8 +256,9 @@ left out would take a silent position in the sequence.
 
 ## Gaps, conflicts, and the refusal
 
-A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
-at one stage whose resolution the plan does not settle. One mechanism serves both
+A **gap** is a stay the plan cannot price. A **conflict** is something the plan
+leaves for the engine to decide about money -- two adjustments with no order
+stated, two plan versions in force at one instant. One mechanism serves both
 places it is needed: `validate-plan` reports them so an owner can decide, and at
 quote time a gap is a **refusal that names what is missing**.
 
@@ -240,7 +267,7 @@ the stage decides which.** This used to be one answer for all five stages, and i
 was wrong in a way that only a second rule type could expose:
 
 - **QUALIFY and ACCUMULATE resolve.** Two rules are a genuine either/or -- only
-  one of them can be the price -- so it is a conflict and the plan settles it.
+  one of them can be the price -- and the plan's resolution mode settles it.
 - **CAP and SURCHARGE compose, in any order.** Two caps are not a contradiction;
   they are two ceilings, and the lower one wins whichever ran first. Nothing is
   reported, because there is nothing for an owner to decide. Their lines are
@@ -256,11 +283,12 @@ was wrong in a way that only a second rule type could expose:
 is, rather than by anything the plan says, so a grace period beating a weekend
 rate is settled and the beaten rule gets a line saying so.
 
-**And at a resolving stage the plan's MODE settles it**, so two windows at
-different prices are priced rather than refused. What is left is the case no mode
-can settle: two rules that qualify and charge the SAME amount under
-`cheapest_wins`. There is nothing to be cheapest about, the engine will not pick,
-and the refusal names both and says that stating an order would settle it.
+**And at a resolving stage the plan's MODE settles it, every time.** Two windows
+at different prices are priced by the cheaper under `cheapest_wins`, or by the
+first named under `stated_order`. Two that charge the SAME amount under
+`cheapest_wins` are priced at that amount too (version 4, F48): there is nothing
+cheaper, the driver pays the same either way, and the lowest rule id is the one
+the receipt names. Nothing at a resolving stage is refused any more.
 
 **Every rule that lost is still on the receipt**, naming the winner, both prices
 and the mode that chose — a breakdown that silently omitted a rate the customer
@@ -294,7 +322,6 @@ cannot check its work.
 | `GAP_STAY_EXCEEDS_MAX_DURATION` | gap |
 | `GAP_NO_PLAN_IN_FORCE_AT_ENTRY` | gap |
 | `GAP_NO_TAX_SET_IN_FORCE` | gap |
-| `CONFLICT_MULTIPLE_RULES_AT_STAGE` | conflict |
 | `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
 | `CONFLICT_NEGATIVE_TOTAL` | conflict |
 | `CONFLICT_UNORDERED_ADJUSTMENTS` | conflict |
@@ -345,7 +372,6 @@ never failed is a decoration.
 | --- | --- |
 | **F1** | The engine never guesses. A stay the plan cannot price is REFUSED, naming the gap, and no number is returned. |
 | **F10** | Plan selection is never ambiguous. Two versions in force at the same instant are REFUSED and both named, never resolved by the order of the caller's list. |
-| **F11** | An ambiguity the PLAN cannot settle is REFUSED and both rules named, with the stated mode quoted back and the refusal saying what would settle it. Since the modes act, that means a TIE: two rules qualifying at one stage and charging the same amount, which `cheapest_wins` cannot separate. |
 | **F12** | `validate-plan` separates the findings an owner has still to look at from the ones they have recorded a decision for. Every finding is reported either way. |
 | **F12b** | A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` can cause a fee to be produced. |
 | **F13** | The fixture corpus holds a case either side of every threshold the rules branch on, read out of the plans rather than from a list -- so no guarantee is proven against a corpus that could only ever exercise one branch. |
@@ -374,7 +400,7 @@ never failed is a decoration.
 | **F31** | An `adjust` percentage is integer basis points and its `rounding` is CONSULTED: the same stay under `up` and under `down` differs by one minor unit, and when the amount was rounded the breakdown line says which way it went; when the division was exact there is no rounding clause to state. |
 | **F32** | `grace` is TERMINAL, and free means free: a stay at or under the stated minutes costs zero and picks up no surcharge, no cap and no adjustment. Terminality is DECLARED by the rule type at registration -- the engine never knows its name -- and a special it beat says so on the receipt. |
 | **F33** | Two caps on one stay leave the LOWER ceiling standing, the total after CAP is the same in both application orders, and the breakdown names both. Caps COMPOSE; two of them are not a conflict. |
-| **F34** | More than one rule qualifying at one stage means three different things, and the stage's category decides which: RESOLVING is a conflict, COMPOSING order-independent is not reported at all, and COMPOSING order-dependent is refused unless the plan states the order. |
+| **F34** | More than one rule qualifying at one stage means three different things, and the stage's category decides which: RESOLVING is settled by the plan's resolution mode (one rule applies, a tie included -- F48), COMPOSING order-independent is not reported at all, and COMPOSING order-dependent is refused unless the plan states the order. |
 | **F35** | Two qualifying ADJUST rules with no stated `adjust_order` are REFUSED naming both; with an order they produce that order's total, and the two orders genuinely differ -- 20% off then a fixed amount is not the same fee as the fixed amount then 20% off. |
 | **F36** | The resolution modes DECIDE. Two windows qualifying on one stay resolve to the cheaper under `cheapest_wins` and to the stated one under `stated_order`, on the SAME stay -- and the rules that lost still appear, each naming the winner, both prices and the mode that chose. |
 | **F37** | A `stated_order` must name every rule at its stage EXACTLY ONCE, and one that does not is refused at LOAD, naming what is missing. A rule left out would take a silent position, and array position deciding money is what this module refuses everywhere else. |
@@ -389,6 +415,7 @@ never failed is a decoration.
 | **F45** | Tax on nothing is nothing. A subtotal of zero produces no tax lines, and the same rules on a positive subtotal produce them. A negative subtotal, or one that is not an integer of minor units, is refused. |
 | **F46** | A tax set is judged by the loader and nowhere else. `/v1/validate-tax-sets` and `rate-engine validate-tax-sets` hand it to `load_tax_sets` and answer what it answers: every refusal it makes reaches both surfaces as the same named refusal, byte for byte, and what it loads is valid from both -- so a caller that stores only what this door accepted stores nothing the engine will refuse when it computes the tax. |
 | **F47** | A tax figure is reached the same way from both surfaces. `/v1/tax` and `rate-engine tax` hand the request to one function, which calls `tax_lines` and writes its lines as a breakdown's are written, with their total: the same status and the same bytes from both, for a figure, a refusal and a request that cannot be read. |
+| **F48** | A tie at the cheapest charge is PRICED, not refused. Two rules qualifying at one resolving stage and charging the same amount under `cheapest_wins` validate clean; the stay is priced at that amount, the lowest rule id is named as applied, and every other says it charged the same. A cheaper rule still wins whatever its id. Replaces F11, which refused the tie. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |

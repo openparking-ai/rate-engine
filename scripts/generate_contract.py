@@ -328,6 +328,30 @@ ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
 
+### What changed in version 4
+
+**A tie at the cheapest charge is priced, and its finding code is gone.** Two
+rules that qualify at QUALIFY or ACCUMULATE and charge the same amount under
+`cheapest_wins` were refused as `CONFLICT_MULTIPLE_RULES_AT_STAGE`. The rule the
+garage owner gave is "always cheaper goes first", and at a tie nothing is
+cheaper: the driver pays that amount whichever rule is named. So the stay is
+priced at that amount, the lowest rule id is named as applied, and every other
+rule says it charged the same (F48, which replaces F11). With the tie gone,
+nothing could produce the code, and a registered code nothing can produce is a
+promise with no mechanism behind it -- so it was REMOVED, and a removal moves the
+number.
+
+**`validate-plan` reads the days and times of a window at every stage.** It used
+to read them at QUALIFY only. The conflict a plan can still state is two
+adjustments with no order, and an adjustment's window states its days and times
+exactly as a special does; two discounts colliding only before 05:30 were never
+probed there (F19).
+
+**What a caller must do.** A plan that loaded on version 3 loads on version 4,
+and every stay it priced is priced identically. A stay version 3 refused for a
+tie is now priced. A consumer routing on finding codes stops seeing
+`CONFLICT_MULTIPLE_RULES_AT_STAGE`; no code was added.
+
 ### What changed in version 3
 
 **Tax, surcharges and city fees -- the arithmetic, and only the arithmetic.**
@@ -427,9 +451,9 @@ harmless only while no second rule type existed at a composing stage.
 AND a weekly cap would have refused every stay in the garage.
 
 And at a resolving stage, two rules at different prices are now settled by the
-plan's mode instead of refused. `CONFLICT_MULTIPLE_RULES_AT_STAGE` therefore
-means something narrower than it did: a TIE, which no mode can settle. The code
-is unchanged and still reachable; what changed is how much it covers.
+plan's mode instead of refused. The multi-rule conflict code therefore meant
+something narrower than it did: a TIE. (Version 4 prices the tie too and removes
+the code; see "What changed in version 4".)
 
 **A window that would have to wrap past midnight is REFUSED, and that is a stated
 gap.** `enter_from` later than `enter_by` — "enter between 22:00 and 02:00" — is
@@ -495,8 +519,10 @@ the competing rules themselves charge for the stay — not the final fee. A cap 
 an adjustment downstream applies to whichever rule wins and could in principle
 bring two different bases to the same number; comparing final fees would mean
 running the whole pipeline once per candidate, and would still not be "the
-customer's fee" for the rules that lost. Two rules charging the SAME amount
-cannot be separated by it and are refused, naming both.
+customer's fee" for the rules that lost. Two rules charging the SAME amount are a
+tie, and since version 4 a tie is PRICED at that amount: the driver pays the same
+whichever rule is named, so the lowest rule id is named as applied and every other
+says it charged the same (F48).
 
 `adjust_order` is a different thing and is stated separately: a list of rule ids,
 or null, giving the sequence the ADJUST rules run in. **An order is not a
@@ -508,8 +534,9 @@ left out would take a silent position in the sequence.
 
 ## Gaps, conflicts, and the refusal
 
-A **gap** is a stay the plan cannot price. A **conflict** is two rules qualifying
-at one stage whose resolution the plan does not settle. One mechanism serves both
+A **gap** is a stay the plan cannot price. A **conflict** is something the plan
+leaves for the engine to decide about money -- two adjustments with no order
+stated, two plan versions in force at one instant. One mechanism serves both
 places it is needed: `validate-plan` reports them so an owner can decide, and at
 quote time a gap is a **refusal that names what is missing**.
 
@@ -518,7 +545,7 @@ the stage decides which.** This used to be one answer for all five stages, and i
 was wrong in a way that only a second rule type could expose:
 
 - **QUALIFY and ACCUMULATE resolve.** Two rules are a genuine either/or -- only
-  one of them can be the price -- so it is a conflict and the plan settles it.
+  one of them can be the price -- and the plan's resolution mode settles it.
 - **CAP and SURCHARGE compose, in any order.** Two caps are not a contradiction;
   they are two ceilings, and the lower one wins whichever ran first. Nothing is
   reported, because there is nothing for an owner to decide. Their lines are
@@ -534,11 +561,12 @@ was wrong in a way that only a second rule type could expose:
 is, rather than by anything the plan says, so a grace period beating a weekend
 rate is settled and the beaten rule gets a line saying so.
 
-**And at a resolving stage the plan's MODE settles it**, so two windows at
-different prices are priced rather than refused. What is left is the case no mode
-can settle: two rules that qualify and charge the SAME amount under
-`cheapest_wins`. There is nothing to be cheapest about, the engine will not pick,
-and the refusal names both and says that stating an order would settle it.
+**And at a resolving stage the plan's MODE settles it, every time.** Two windows
+at different prices are priced by the cheaper under `cheapest_wins`, or by the
+first named under `stated_order`. Two that charge the SAME amount under
+`cheapest_wins` are priced at that amount too (version 4, F48): there is nothing
+cheaper, the driver pays the same either way, and the lowest rule id is the one
+the receipt names. Nothing at a resolving stage is refused any more.
 
 **Every rule that lost is still on the receipt**, naming the winner, both prices
 and the mode that chose — a breakdown that silently omitted a rate the customer
