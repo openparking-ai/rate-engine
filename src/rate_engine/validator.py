@@ -26,6 +26,7 @@ and it is closed here rather than left for the next outside pass to find.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from .engine import Stay, find_conflicts, find_gaps
@@ -213,12 +214,16 @@ def validate_plan(plan: Plan) -> list[Finding]:
 
     Deduplicated by identifier rather than by sentence: the same gap found at
     three probe durations says a slightly different number each time, and an
-    owner should be asked about it once.
+    owner should be asked about it once. Each carries the stay that found it
+    (`probe`, U7g): the first probe, in probe order, that produced it.
     """
     seen: dict[tuple[str, tuple[str, ...]], Finding] = {}
     for stay in probe_stays(plan):
         for finding in find_gaps(plan, stay) + find_conflicts(plan, stay):
-            seen.setdefault((finding.code, finding.rule_ids), finding)
+            # The FIRST probe that found it, in probe order: deterministic, and
+            # the stay an owner can be told about -- when it came in and left.
+            found_by = (stay.entry_at.isoformat(), stay.exit_at.isoformat())
+            seen.setdefault((finding.code, finding.rule_ids), replace(finding, probe=found_by))
     return [seen[key] for key in sorted(seen)]
 
 

@@ -137,6 +137,12 @@ class Finding:
     text: str
     #: The rule ids involved, where the finding is about rules.
     rule_ids: tuple[str, ...] = ()
+    #: The stay that found it, as `(entry_at, exit_at)` ISO instants -- set by
+    #: `validate-plan`, which probes stays the plan's own boundaries make
+    #: interesting, and None on a refusal at quote time, where the caller
+    #: already holds the stay. An owner reading "nothing prices this" needs to
+    #: know which car it was about: when it came in and when it left (U7g).
+    probe: tuple[str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.code not in ALL_CODES:
@@ -169,12 +175,16 @@ class Finding:
         raise AssertionError(f"{self.code!r} is registered but belongs to no kind.")
 
     def to_json(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "code": self.code,
             "kind": self.kind,
             "text": self.text,
             "rule_ids": list(self.rule_ids),
         }
+        # Only where it was set, so a refusal at quote time is the bytes it was.
+        if self.probe is not None:
+            out["probe"] = {"entry_at": self.probe[0], "exit_at": self.probe[1]}
+        return out
 
 
 class Refused(Exception):

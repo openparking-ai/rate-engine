@@ -68,7 +68,7 @@ VOCABULARY = frozenset(
         "validate-tax-sets", "/v1/validate-tax-sets", "/v1/tax",
         "POST", "pytest", "pip",
         # keys of a JSON response body, which are strings in the code, not names
-        "invalid", "rule_count", "tax_sets",
+        "invalid", "rule_count", "tax_sets", "probe",
         # things named in prose that are code but not identifiers of ours
         "datetime.time", "time.fromisoformat", "json.dumps", "importlib.reload",
         "max", "min",

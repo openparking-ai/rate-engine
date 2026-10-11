@@ -322,6 +322,11 @@ GUARANTEES: dict[str, str] = {
         "named as applied, and every other says it charged the same. A cheaper rule "
         "still wins whatever its id. Replaces F11, which refused the tie."
     ),
+    "F49": (
+        "Every `validate-plan` finding names the stay that found it: `probe`, the "
+        "entry and exit of the first probe stay that produced it, and that stay "
+        "produces it. A refusal at quote time carries no `probe` key."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

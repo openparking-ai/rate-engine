@@ -44,6 +44,11 @@ adjustments with no order, and an adjustment's window states its days and times
 exactly as a special does; two discounts colliding only before 05:30 were never
 probed there (F19).
 
+**A `validate-plan` finding names the stay that found it.** Each carries
+`probe`, the `entry_at` and `exit_at` of the first probe stay that produced it, so
+an owner can be told which car it was about (F49). A refusal at quote time is
+unchanged: it is about the stay the caller sent, and has no `probe` key.
+
 **What a caller must do.** A plan that loaded on version 3 loads on version 4,
 and every stay it priced is priced identically. A stay version 3 refused for a
 tie is now priced. A consumer routing on finding codes stops seeing
@@ -416,6 +421,7 @@ never failed is a decoration.
 | **F46** | A tax set is judged by the loader and nowhere else. `/v1/validate-tax-sets` and `rate-engine validate-tax-sets` hand it to `load_tax_sets` and answer what it answers: every refusal it makes reaches both surfaces as the same named refusal, byte for byte, and what it loads is valid from both -- so a caller that stores only what this door accepted stores nothing the engine will refuse when it computes the tax. |
 | **F47** | A tax figure is reached the same way from both surfaces. `/v1/tax` and `rate-engine tax` hand the request to one function, which calls `tax_lines` and writes its lines as a breakdown's are written, with their total: the same status and the same bytes from both, for a figure, a refusal and a request that cannot be read. |
 | **F48** | A tie at the cheapest charge is PRICED, not refused. Two rules qualifying at one resolving stage and charging the same amount under `cheapest_wins` validate clean; the stay is priced at that amount, the lowest rule id is named as applied, and every other says it charged the same. A cheaper rule still wins whatever its id. Replaces F11, which refused the tie. |
+| **F49** | Every `validate-plan` finding names the stay that found it: `probe`, the entry and exit of the first probe stay that produced it, and that stay produces it. A refusal at quote time carries no `probe` key. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |

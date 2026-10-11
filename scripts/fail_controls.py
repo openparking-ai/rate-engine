@@ -870,6 +870,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the dearer of two qualifying specials is applied, so the driver pays more "
         "than the plan's own rule says",
     ),
+    "F49": (
+        "tests/test_f49_a_finding_names_the_stay_that_found_it.py",
+        "validator.py",
+        "replace(finding, probe=found_by))",
+        "finding)  # PLANTED: the stay that found it is dropped",
+        "a finding reaches the owner with no stay, so the sentence cannot say "
+        "which car it was about",
+    ),
     "F47": (
         "tests/test_f47_a_tax_figure_has_one_path.py",
         "cli.py",

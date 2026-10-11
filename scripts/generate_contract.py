@@ -347,6 +347,11 @@ adjustments with no order, and an adjustment's window states its days and times
 exactly as a special does; two discounts colliding only before 05:30 were never
 probed there (F19).
 
+**A `validate-plan` finding names the stay that found it.** Each carries
+`probe`, the `entry_at` and `exit_at` of the first probe stay that produced it, so
+an owner can be told which car it was about (F49). A refusal at quote time is
+unchanged: it is about the stay the caller sent, and has no `probe` key.
+
 **What a caller must do.** A plan that loaded on version 3 loads on version 4,
 and every stay it priced is priced identically. A stay version 3 refused for a
 tie is now priced. A consumer routing on finding codes stops seeing
