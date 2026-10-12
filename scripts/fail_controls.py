@@ -983,6 +983,24 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "on the time-based way the losing special's line says the cheaper special "
         "was applied, when the hour was charged",
     ),
+    # U7g fix 3, G5. Re-gate 2's plant: the "why not" lines kept only when two or
+    # more specials qualify. The three-special tests above never reach the one-
+    # qualifier case and stayed green on it (receipt 289bf252).
+    "F50/why-not-one-qualifier-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "            for rule in plan.rules_for_stage(QUALIFY):\n"
+        "                if rule in qualifying:\n"
+        "                    if rule is not cheapest:\n",
+        "            for rule in (  # PLANTED: the why-not lines only when 2+ qualify\n"
+        "                plan.rules_for_stage(QUALIFY) if len(qualifying) > 1 else []\n"
+        "            ):\n"
+        "                if rule in qualifying:\n"
+        "                    if rule is not cheapest:\n",
+        "on the time-based way, when the early bird alone qualifies and loses to "
+        "the hour, every other special's line is gone, so the breakdown frozen on "
+        "the stay cannot say why the weekend rate was not given",
+    ),
     "F49": (
         "tests/test_f49_a_finding_names_the_stay_that_found_it.py",
         "validator.py",

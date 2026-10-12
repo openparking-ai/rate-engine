@@ -328,6 +328,57 @@ def test_a_tie_between_the_losing_specials_says_so_on_the_time_based_way():
     assert "charged the same as Early bird" in morning[0].text, morning[0].text
 
 
+# --- U7g fix 3, G5: exactly ONE special qualifies and the hour wins -----------
+#
+# The common case, and the one the three-special tests above never reach: an
+# early bird fits, loses to the hour, and every other special of the plan is for
+# other days or other dates. Re-gate 2 left out the "why not" lines only when one
+# special qualifies, and every test stayed green. Here the plan has the early
+# bird, Weekend (other days) and Game night (other dates), and on a Tuesday
+# 08:00 -> 10:30 only the early bird qualifies.
+
+GAME_NIGHT = {"id": "game-night", "type": "time_window", "stage": "QUALIFY",
+              "space_classes": ["standard"], "label": "Game night",
+              "applies_on": {"kind": "dates", "dates": ["2026-03-06", "2026-03-13"]},
+              "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+              "day_span": "next_day", "effect": {"kind": "flat", "price_minor": 500}}
+ONE_QUALIFIES = _with_rule(_with_rule(PLAN, WEEKEND), GAME_NIGHT)
+
+
+def test_the_one_qualifier_fixture_has_exactly_one_special_that_fits():
+    """The control on the fixture: on 06 Mar, a Game night date and a Friday,
+    Game night fits and is the 5.00 charged; on Tuesday 03 Mar only the early
+    bird does, so the case below is the one-qualifier case and no other."""
+    friday = stay("2026-03-06T08:00:00-05:00", 150)
+    result = _quote(ONE_QUALIFIES, friday)
+    assert result.fee_minor == 500, _codes(result)
+    tuesday = _quote(ONE_QUALIFIES, IN_0800_OUT_1030)
+    assert "resolved" not in _codes(tuesday), _codes(tuesday)
+
+
+@pytest.mark.guarantee("F50")
+def test_where_ONE_special_fits_and_the_hour_wins_the_others_still_say_why_not():
+    """Tuesday 08:00 -> 10:30: the early bird alone qualifies, and the hour's
+    7.00 beats its 9.00. Weekend (not on a Tuesday) and Game night (not on 03
+    Mar) each keep their `not_applied` line, by name and in the plan's order,
+    and the early bird's only line is the comparison."""
+    result = _quote(ONE_QUALIFIES, IN_0800_OUT_1030)
+    assert result.fee_minor == 700, _codes(result)
+    assert "time_window.applied" not in _codes(result)
+    specials = ("early-bird", "weekend", "game-night")
+    lines = [(ln.rule_id, ln.code) for ln in result.breakdown.lines if ln.rule_id in specials]
+    assert lines == [
+        ("weekend", "time_window.not_applied"),
+        ("game-night", "time_window.not_applied"),
+        ("early-bird", TIME_BASED_USED),
+    ], _codes(result)
+    weekend = _lines_of_rule(result, "weekend")[0]
+    game_night = _lines_of_rule(result, "game-night")[0]
+    assert "Weekend NOT applied" in weekend.text, weekend.text
+    assert "Game night NOT applied" in game_night.text, game_night.text
+    assert weekend.delta_minor == 0 and game_night.delta_minor == 0
+
+
 # --- U7g fix 2, G1: the contract's partly dead window, under cheapest_wins ----
 #
 # docs/CONTRACT.md publishes a window 06:00-23:00 in, out by 20:00, same day, as
