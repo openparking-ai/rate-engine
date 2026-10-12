@@ -45,9 +45,13 @@ F36
 F37
 F38
 F39
+F39/cheapest-hour-charged
+F39/cheapest-window-refused
 F4
 F4/tax-set-named
 F40
+F40/cheapest-hour-charged
+F40/cheapest-window-refused
 F41
 F41/consulted
 F41/shared-was-rounded
@@ -69,7 +73,12 @@ F49
 F4b
 F5
 F50/dearer-chosen
+F50/partly-dead-hour-charged
+F50/partly-dead-window-refused
 F50/special-always-used
+F50/why-not-losers-left-out
+F50/why-not-says-applied
+F50/why-not-unqualified-left-out
 F6
 F6b/attribute-form
 F6b/imported-name-form

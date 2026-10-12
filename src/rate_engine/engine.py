@@ -204,7 +204,9 @@ def _winner(plan: Plan, stay: Stay, stage: str, qualifying: list):
     return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))
 
 
-def _resolved_line(rule, winner, stage: str, plan: Plan, totals: dict[str, int]) -> Line:
+def _resolved_line(
+    rule, winner, stage: str, plan: Plan, totals: dict[str, int], by_time: bool = False
+) -> Line:
     """A rule that qualified and lost, said out loud, with the reason.
 
     §8's first requirement is that a customer can read WHY. "Weekend rate
@@ -216,6 +218,10 @@ def _resolved_line(rule, winner, stage: str, plan: Plan, totals: dict[str, int])
     A loser that charged the SAME as the winner says so: "charged the same" is
     the true reason it was not named, and "applied instead" alone would read as
     if one of them had been cheaper.
+
+    `by_time`: the stay was charged by the time-based rate, which was less than
+    the cheapest special too (`_the_cheaper_way`). The winner was then NOT
+    applied, so the line says it was the cheaper special, never "applied instead".
     """
     from .money import format_minor
 
@@ -238,7 +244,8 @@ def _resolved_line(rule, winner, stage: str, plan: Plan, totals: dict[str, int])
             f"{rule.display_name} qualified at "
             f"{format_minor(totals[rule.id], plan.currency)} -- "
             f"{winner.display_name} {format_minor(totals[winner.id], plan.currency)} "
-            f"applied instead (plan resolves {stage} by "
+            + ("was the cheaper special" if by_time else "applied instead")
+            + f" (plan resolves {stage} by "
             f"{plan.resolution[stage]['mode']})"
         ),
         delta_minor=0,
@@ -603,10 +610,22 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             continue
 
         if stage == QUALIFY and not with_specials:
+            # Every special still says why it was not used, as on the special's
+            # way: one that did not qualify gives its own reason, one that
+            # qualified and lost to a cheaper special says so. The cheapest
+            # special's own line is the comparison line `_the_cheaper_way` adds.
+            # These are frozen on every closed stay and read in a dispute.
+            qualifying = _qualifying(plan, stay, QUALIFY)
+            cheapest = _winner(plan, stay, QUALIFY, qualifying)
+            totals = _candidate_totals(qualifying, stay, plan) if len(qualifying) > 1 else {}
             for rule in plan.rules_for_stage(QUALIFY):
-                if not QUALIFIERS[rule.type](rule, stay, plan):
-                    for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
-                        ledger.add(line)
+                if rule in qualifying:
+                    if rule is not cheapest:
+                        lost = _resolved_line(rule, cheapest, QUALIFY, plan, totals, by_time=True)
+                        ledger.add(lost)
+                    continue
+                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
+                    ledger.add(line)
             continue
 
         if stage in RESOLVING:

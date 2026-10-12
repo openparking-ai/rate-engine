@@ -357,7 +357,10 @@ used: `special_used` or `time_based_used`, its `rule_id` the special, delta zero
 and `compared_minor` what the other way would have charged -- absent when the
 time-based rate alone cannot price the stay, in which case the special is the
 only way. `stated_order` is unchanged (the special replaces), and so is grace,
-which prices a stay alone.
+which prices a stay alone. When the time-based rate is charged, every other
+special keeps its line, as on the special's way: its own reason for not
+applying, or a line saying it qualified and which cheaper special was compared
+-- "was the cheaper special", never "applied instead", because none was.
 
 **`validate-plan` reads the days and times of a window at every stage.** It used
 to read them at QUALIFY only. The conflict a plan can still state is two

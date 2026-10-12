@@ -330,3 +330,69 @@ def test_the_naive_replace_spelling_is_NOT_a_counter_model():
         "the UTC comparison agrees with the wall-clock one, so F40's fail control "
         "cannot break anything"
     )
+
+
+# --- U7g fix 2, G1: the same night under `cheapest_wins` ----------------------
+#
+# The module moved to `stated_order` in U7g fix 1 (its 40.00 window is dearer
+# than the hour, so under `cheapest_wins` it would not be used though it
+# qualified). That left `cheapest_wins` with no test on the night the clocks
+# change. Here the window is CHEAPER: 10.00, against the hour's 3.00 + 7 x 3.00 =
+# 24.00 for the second pass out at 01:00. An instant reading of the limit refuses
+# that pass and charges 24.00; so does a comparison that charges the hour.
+
+CHEAP_WINDOW_PRICE = 1000
+TIME_BASED_SECOND_PASS_0100 = 2400
+
+
+def _cheapest_wins_fee(entry_at: str, exit_at: str, *, entry_dates: list[str],
+                       exit_by: str) -> tuple[int, list[str]]:
+    document = _plan_for(entry_dates, exit_by)
+    document["resolution"] = {"QUALIFY": {"mode": "cheapest_wins"},
+                              "ACCUMULATE": {"mode": "cheapest_wins"}}
+    document["rules"][0]["effect"]["price_minor"] = CHEAP_WINDOW_PRICE
+    status, body = run_quote(
+        {
+            "plans": [document],
+            "entry_at": entry_at,
+            "exit_at": exit_at,
+            "space_class": "standard",
+            "currency": "USD",
+        }
+    )
+    assert status == 200, body
+    return body["fee_minor"], [ln["code"] for ln in body["breakdown"]]
+
+
+def test_the_cheapest_wins_fixture_puts_the_window_below_the_hour():
+    """The control: 18:30 EDT to 01:00 EST is seven and a half hours."""
+    assert _elapsed_hours(FALL_ENTRY, SECOND_PASS_0100) == 7.5
+    assert TIME_BASED_SECOND_PASS_0100 == 300 + 7 * 300 > CHEAP_WINDOW_PRICE
+
+
+@pytest.mark.guarantee("F40")
+def test_under_cheapest_wins_BOTH_passes_get_the_cheaper_window():
+    for exit_at in (FIRST_PASS_0100, SECOND_PASS_0100, SECOND_PASS_0129):
+        fee, codes = _cheapest_wins_fee(FALL_ENTRY, exit_at,
+                                        entry_dates=FALL_DATES, exit_by=FALL_EXIT_BY)
+        assert fee == CHEAP_WINDOW_PRICE, (
+            f"out at {exit_at}, charged {fee}: the window was refused or the hour charged"
+        )
+        assert "time_window.applied" in codes and "special_used" in codes, codes
+
+
+@pytest.mark.guarantee("F40")
+def test_under_cheapest_wins_the_skipped_wall_time_still_reads():
+    fee, codes = _cheapest_wins_fee(SPRING_ENTRY, BEFORE_THE_GAP_0159,
+                                    entry_dates=SPRING_DATES, exit_by=SPRING_EXIT_BY)
+    assert fee == CHEAP_WINDOW_PRICE and "time_window.applied" in codes, (fee, codes)
+    fee, codes = _cheapest_wins_fee(SPRING_ENTRY, AFTER_THE_GAP_0300,
+                                    entry_dates=SPRING_DATES, exit_by=SPRING_EXIT_BY)
+    assert fee == TIME_BASED_0300 and "time_window.not_applied" in codes, (fee, codes)
+
+
+@pytest.mark.guarantee("F40")
+def test_under_cheapest_wins_past_the_limit_the_hour_is_charged():
+    fee, codes = _cheapest_wins_fee(FALL_ENTRY, SECOND_PASS_0131,
+                                    entry_dates=FALL_DATES, exit_by=FALL_EXIT_BY)
+    assert fee == TIME_BASED_0131 and "special_used" not in codes, (fee, codes)

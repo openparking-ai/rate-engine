@@ -50,7 +50,10 @@ used: `special_used` or `time_based_used`, its `rule_id` the special, delta zero
 and `compared_minor` what the other way would have charged -- absent when the
 time-based rate alone cannot price the stay, in which case the special is the
 only way. `stated_order` is unchanged (the special replaces), and so is grace,
-which prices a stay alone.
+which prices a stay alone. When the time-based rate is charged, every other
+special keeps its line, as on the special's way: its own reason for not
+applying, or a line saying it qualified and which cheaper special was compared
+-- "was the cheaper special", never "applied instead", because none was.
 
 **`validate-plan` reads the days and times of a window at every stage.** It used
 to read them at QUALIFY only. The conflict a plan can still state is two
@@ -441,7 +444,7 @@ never failed is a decoration.
 | **F49** | Every `validate-plan` finding names the stay that found it: `probe`, the entry and exit of the first probe stay that produced it, and that stay produces it. A refusal at quote time carries no `probe` key. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
-| **F50** | Under `cheapest_wins` a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` still lets the special replace the time-based charge, and a stay the time-based rate alone cannot price is priced by the special. |
+| **F50** | Under `cheapest_wins` a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` still lets the special replace the time-based charge, and a stay the time-based rate alone cannot price is priced by the special. When the time-based rate is charged, every other special still has its line, as on the special's way: its own reason, or that it qualified and a cheaper special was compared instead -- never that one was applied. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |

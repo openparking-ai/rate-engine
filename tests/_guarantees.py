@@ -334,7 +334,10 @@ GUARANTEES: dict[str, str] = {
         "a tie keeping the special. The breakdown says which way was used and what the "
         "other would have charged (`compared_minor`). Grace still prices a stay alone, "
         "`stated_order` still lets the special replace the time-based charge, and a "
-        "stay the time-based rate alone cannot price is priced by the special."
+        "stay the time-based rate alone cannot price is priced by the special. When "
+        "the time-based rate is charged, every other special still has its line, as "
+        "on the special's way: its own reason, or that it qualified and a cheaper "
+        "special was compared instead -- never that one was applied."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

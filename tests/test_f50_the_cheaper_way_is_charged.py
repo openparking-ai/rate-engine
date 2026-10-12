@@ -236,3 +236,152 @@ def test_the_compared_amount_reaches_the_caller_and_only_on_its_line():
     pairs = [(ln["code"], ln["compared_minor"]) for ln in carrying]
     assert pairs == [(TIME_BASED_USED, EARLY_BIRD)]
     assert sum(ln["delta_minor"] for ln in body["breakdown"]) == 700
+
+
+# --- U7g fix 2, G5: the "why not" lines when the time-based rate wins ---------
+#
+# The README promises the specials that did not apply, and why. On the special's
+# way every other special has its line: its own reason, or `resolved` when it
+# qualified and lost to a cheaper special. The time-based way must carry the
+# same lines -- they are frozen on every closed stay and are what an attendant
+# reads in a dispute. The fixture has one special of each kind beside the early
+# bird: one that qualifies and costs more (Morning, 10.00), and one that does
+# not qualify (Weekend, not on a Tuesday).
+
+MORNING = {"id": "morning", "type": "time_window", "stage": "QUALIFY",
+           "space_classes": ["standard"], "label": "Morning",
+           "applies_on": {"kind": "days_of_week", "days": ["mon", "tue", "wed", "thu", "fri"]},
+           "enter_from": "06:00", "enter_by": "10:00", "exit_by": "20:00",
+           "day_span": "same_day", "effect": {"kind": "flat", "price_minor": 1000}}
+WEEKEND = {"id": "weekend", "type": "time_window", "stage": "QUALIFY",
+           "space_classes": ["standard"], "label": "Weekend",
+           "applies_on": {"kind": "days_of_week", "days": ["sat", "sun"]},
+           "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+           "day_span": "next_day", "effect": {"kind": "flat", "price_minor": 1200}}
+THREE_SPECIALS = _with_rule(_with_rule(PLAN, MORNING), WEEKEND)
+
+
+def _lines_of_rule(result, rule_id: str) -> list:
+    return [ln for ln in result.breakdown.lines if ln.rule_id == rule_id]
+
+
+def test_the_why_not_fixture_has_one_special_of_each_kind():
+    """The control on the fixture: on the special's way (05:00 -> 18:00, early
+    bird 9.00 against the hour's 27.00) Morning qualified and lost, and Weekend
+    did not qualify -- so each kind of line is there to be looked for."""
+    result = _quote(THREE_SPECIALS, IN_0500_OUT_1800)
+    assert result.fee_minor == EARLY_BIRD
+    # Morning's enter_from is 06:00: in at 05:00 it does not qualify here.
+    in_0700 = stay("2026-03-03T07:00:00-05:00", 600)
+    result = _quote(THREE_SPECIALS, in_0700)
+    assert result.fee_minor == EARLY_BIRD
+    assert [ln.code for ln in _lines_of_rule(result, "morning")] == ["resolved"]
+    assert [ln.code for ln in _lines_of_rule(result, "weekend")] == ["time_window.not_applied"]
+
+
+@pytest.mark.guarantee("F50")
+def test_where_the_hour_wins_every_other_special_still_says_why_not():
+    """08:00 -> 10:30 on a Tuesday: the hour's 7.00 beats the early bird's 9.00,
+    which beat Morning's 10.00. Morning says it qualified and the early bird was
+    the cheaper special; Weekend says it is not for a Tuesday; the early bird's
+    own line is the comparison."""
+    result = _quote(THREE_SPECIALS, IN_0800_OUT_1030)
+    assert result.fee_minor == 700
+    assert "time_window.applied" not in _codes(result)
+    morning = _lines_of_rule(result, "morning")
+    assert [ln.code for ln in morning] == ["resolved"], _codes(result)
+    assert "Morning qualified at 10.00 USD" in morning[0].text, morning[0].text
+    assert "Early bird 9.00 USD was the cheaper special" in morning[0].text, morning[0].text
+    assert "applied instead" not in morning[0].text, (
+        f"the line says the early bird applied, and the hour was charged: {morning[0].text}"
+    )
+    weekend = _lines_of_rule(result, "weekend")
+    assert [ln.code for ln in weekend] == ["time_window.not_applied"], _codes(result)
+    assert [ln.code for ln in _lines_of_rule(result, "early-bird")] == [TIME_BASED_USED]
+    assert all(ln.delta_minor == 0 for ln in morning + weekend)
+
+
+@pytest.mark.guarantee("F50")
+def test_the_why_not_lines_are_the_same_on_both_ways():
+    """Every special other than the one compared has exactly one line on either
+    way, in the plan's order: 08:00 -> 10:30 is charged by the hour, 07:00 ->
+    17:00 by the early bird (9.00 against the hour's 3.00 + 9 x 2.00 = 21.00)."""
+    for at in (IN_0800_OUT_1030, stay("2026-03-03T07:00:00-05:00", 600)):
+        result = _quote(THREE_SPECIALS, at)
+        for rule_id in ("morning", "weekend"):
+            assert len(_lines_of_rule(result, rule_id)) == 1, (at, _codes(result))
+        others = ("morning", "weekend")
+        order = [ln.rule_id for ln in result.breakdown.lines if ln.rule_id in others]
+        assert order == ["morning", "weekend"], order
+
+
+@pytest.mark.guarantee("F50")
+def test_a_tie_between_the_losing_specials_says_so_on_the_time_based_way():
+    """Morning at 9.00 ties the early bird; the hour's 7.00 is less than both.
+    Morning says it charged the same, which is why the early bird is the one named."""
+    document = copy.deepcopy(THREE_SPECIALS)
+    document["rules"][2]["effect"]["price_minor"] = EARLY_BIRD
+    result = _quote(document, IN_0800_OUT_1030)
+    assert result.fee_minor == 700
+    morning = _lines_of_rule(result, "morning")
+    assert [ln.code for ln in morning] == ["resolved"]
+    assert "charged the same as Early bird" in morning[0].text, morning[0].text
+
+
+# --- U7g fix 2, G1: the contract's partly dead window, under cheapest_wins ----
+#
+# docs/CONTRACT.md publishes a window 06:00-23:00 in, out by 20:00, same day, as
+# alive for an early entry and dead for a late one -- measured under
+# `stated_order`, where a 40.00 window replaces the hour. Here it is CHEAPER
+# than the hour and the plan resolves by `cheapest_wins`: the window must apply
+# and be charged where it fits, and not where it is dead.
+
+DAY_RATE = 1000
+
+
+def _day_rate_plan() -> dict:
+    return {
+        "plan_version": "partial-dead-cheapest",
+        "effective_from": "2026-01-01T00:00:00-04:00",
+        "timezone": "America/New_York",
+        "currency": "USD",
+        "space_classes": ["standard"],
+        "resolution": {"QUALIFY": {"mode": "cheapest_wins"},
+                       "ACCUMULATE": {"mode": "cheapest_wins"}},
+        "adjust_order": None,
+        "rules": [
+            {"id": "day-rate", "type": "time_window", "stage": "QUALIFY",
+             "space_classes": ["standard"], "label": "Day rate",
+             "applies_on": {"kind": "days_of_week",
+                            "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+             "enter_from": "06:00", "enter_by": "23:00", "exit_by": "20:00",
+             "day_span": "same_day", "effect": {"kind": "flat", "price_minor": DAY_RATE}},
+            {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
+             "space_classes": ["standard"], "first_period_minutes": 60,
+             "first_period_minor": 300, "repeat_period_minutes": 60,
+             "repeat_period_minor": 300, "rounding": "ceil", "max_duration_minutes": None},
+        ],
+        "decisions": [],
+    }
+
+
+@pytest.mark.guarantee("F50")
+def test_the_contract_partly_dead_window_is_charged_where_it_fits_and_is_cheaper():
+    """In 08:00, out 19:00 on Wednesday 10 June 2026: by the hour 3.00 + 10 x 3.00
+    = 33.00, the window 10.00 -- the window applies and is charged, and the line
+    says what the hour would have been."""
+    result = _quote(_day_rate_plan(), stay("2026-06-10T08:00:00-04:00", 660))
+    assert result.fee_minor == DAY_RATE
+    assert "time_window.applied" in _codes(result)
+    line = _compared(result)
+    assert line.code == SPECIAL_USED and line.compared_minor == 3300
+
+
+@pytest.mark.guarantee("F50")
+def test_the_contract_partly_dead_window_stays_dead_for_a_late_entry():
+    """In 20:30, out 20:45: past the 20:00 limit on the entry date, so the window
+    does not qualify and the hour's 3.00 is charged with no comparison."""
+    result = _quote(_day_rate_plan(), stay("2026-06-10T20:30:00-04:00", 15))
+    assert result.fee_minor == 300
+    assert "time_window.not_applied" in _codes(result)
+    assert SPECIAL_USED not in _codes(result) and TIME_BASED_USED not in _codes(result)

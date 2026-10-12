@@ -891,6 +891,98 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the stay is charged whichever of the special and the time-based rate costs "
         "the driver MORE",
     ),
+    # U7g fix 2, G1. F39, F40 and the contract's partly dead window moved to
+    # `stated_order` in fix 1, so `cheapest_wins` had no test on any of them. Each
+    # now has one where the window is CHEAPER and applies, and each is proven on
+    # BOTH ways it can be lost: the window refused (that guarantee's own defect)
+    # and the hour charged though it costs more. The target is the one new test,
+    # not the module, so the older tests cannot fire the control for it.
+    "F39/cheapest-window-refused": (
+        "tests/test_f39_the_exit_limit_runs_to_the_day_the_span_allows.py::test_under_cheapest_wins_the_car_out_at_2345_gets_the_cheaper_window",
+        "rules/time_window.py",
+        "    if (exit_local.date(), exit_local.time()) > (limit_local.date(), limit_local.time()):",
+        "    if exit_local.time() > rule.params[\"exit_by\"]:  # PLANTED: back to a bare clock",
+        "under `cheapest_wins` the car out at 23:45 is refused a window CHEAPER than "
+        "the hour, because its after-midnight limit is read as a bare clock",
+    ),
+    "F39/cheapest-hour-charged": (
+        "tests/test_f39_the_exit_limit_runs_to_the_day_the_span_allows.py::test_under_cheapest_wins_the_car_out_at_2345_gets_the_cheaper_window",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "under `cheapest_wins` the event window qualifies and is cheaper, and the "
+        "hour is charged instead",
+    ),
+    "F40/cheapest-window-refused": (
+        "tests/test_f40_the_exit_limit_is_a_wall_clock_reading.py::test_under_cheapest_wins_BOTH_passes_get_the_cheaper_window",
+        "rules/time_window.py",
+        "    if (exit_local.date(), exit_local.time()) > "
+        "(limit_local.date(), limit_local.time()):",
+        "    # PLANTED: a TRUE instant comparison, through UTC\n"
+        "    if exit_local.timestamp() > "
+        "limit_local.replace(tzinfo=exit_local.tzinfo).timestamp():",
+        "under `cheapest_wins` the second pass through the repeated hour is refused "
+        "a window CHEAPER than the hour -- 10.00 becomes 24.00",
+    ),
+    "F40/cheapest-hour-charged": (
+        "tests/test_f40_the_exit_limit_is_a_wall_clock_reading.py::test_under_cheapest_wins_BOTH_passes_get_the_cheaper_window",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "under `cheapest_wins` the night window qualifies on both passes and is "
+        "cheaper, and the hour is charged instead",
+    ),
+    "F50/partly-dead-window-refused": (
+        "tests/test_f50_the_cheaper_way_is_charged.py::test_the_contract_partly_dead_window_is_charged_where_it_fits_and_is_cheaper",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    if rule.params[\"exit_by\"] < rule.params[\"enter_by\"]:\n"
+        "        failed.append(\"PLANTED: a partly dead window treated as dead\")\n"
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "the contract's 06:00-23:00 / out by 20:00 window is treated as dead for "
+        "every entry, so the early car is charged the hour's 33.00, not 10.00",
+    ),
+    "F50/partly-dead-hour-charged": (
+        "tests/test_f50_the_cheaper_way_is_charged.py::test_the_contract_partly_dead_window_is_charged_where_it_fits_and_is_cheaper",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "the contract's partly dead window qualifies and is cheaper, and the hour "
+        "is charged instead",
+    ),
+    # U7g fix 2, G5. When the time-based rate wins, every other special still
+    # says why it was not used. Three arms: the specials that did not qualify go
+    # silent (the re-gate's R10), the ones that qualified and lost go silent, and
+    # the loser's line claims the cheaper special was applied when the hour was.
+    "F50/why-not-unqualified-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "                        ledger.add(lost)\n"
+        "                    continue\n"
+        "                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):\n"
+        "                    ledger.add(line)\n",
+        "                        ledger.add(lost)\n"
+        "                    continue\n"
+        "                pass  # PLANTED: a special that did not qualify is silent\n",
+        "on the time-based way a special that did not qualify has no line, so the "
+        "breakdown frozen on the stay cannot say why the weekend rate was not given",
+    ),
+    "F50/why-not-losers-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "                        ledger.add(lost)\n",
+        "                        pass  # PLANTED: a special that lost is silent\n",
+        "on the time-based way a special that qualified and lost to a cheaper one "
+        "has no line, so a rate the driver was entitled to is simply absent",
+    ),
+    "F50/why-not-says-applied": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "totals, by_time=True)",
+        "totals, by_time=False)  # PLANTED",
+        "on the time-based way the losing special's line says the cheaper special "
+        "was applied, when the hour was charged",
+    ),
     "F49": (
         "tests/test_f49_a_finding_names_the_stay_that_found_it.py",
         "validator.py",
