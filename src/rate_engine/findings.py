@@ -42,10 +42,13 @@ GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_IN_FORCE"
 
 # --- conflict codes --------------------------------------------------------
-#: Two or more rules qualify at the same stage. A1 detects and refuses; the
-#: resolution modes that would settle it are round A2 (see docs/CONTRACT.md,
-#: "What this version does not do").
-CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"
+#: **`CONFLICT_MULTIPLE_RULES_AT_STAGE` was removed in schema version 4.** It
+#: named two rules qualifying at a RESOLVING stage that the plan could not
+#: settle, and after A2 the only such case left was a tie at the cheapest charge
+#: under `cheapest_wins`. U7g prices that tie -- the driver pays the same either
+#: way -- so nothing could produce the code any more, and a registered code
+#: nothing can produce is a promise with no mechanism behind it. See
+#: docs/CONTRACT.md, "What changed in version 4".
 #: Two or more plan versions share the latest `effective_from` at or before the
 #: stay's entry, so "the version in force at entry" names more than one document.
 #:
@@ -61,12 +64,12 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: The rules between them produced a NEGATIVE total. Refused rather than handing a
 #: customer a negative amount.
 #:
-#: It used to be raised as CONFLICT_MULTIPLE_RULES_AT_STAGE, which is documented
-#: exclusively for two rules qualifying at one stage. Nothing was mispriced -- the
-#: refusal is correct and the SENTENCE said what really happened -- but the CODE
-#: named a cause that had not occurred, and the code is what anything mechanical
-#: keys off. A consumer routing on it would have told an operator to settle a
-#: resolution order that was not the problem.
+#: It used to be raised as CONFLICT_MULTIPLE_RULES_AT_STAGE (removed in version
+#: 4), which was documented exclusively for two rules qualifying at one stage.
+#: Nothing was mispriced -- the refusal is correct and the SENTENCE said what
+#: really happened -- but the CODE named a cause that had not occurred, and the
+#: code is what anything mechanical keys off. A consumer routing on it would
+#: have told an operator to settle a resolution order that was not the problem.
 #:
 #: Unreachable with the four rule types A1 ships: every money field goes through
 #: `as_non_negative_minor`, and `daily_max` sets the total to exactly
@@ -78,9 +81,9 @@ CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
 #: Two or more ADJUST rules qualify and the plan does not say in what order to
 #: apply them.
 #:
-#: This is a DIFFERENT question from the one above, which is why it is a
-#: different code. Two rules qualifying at QUALIFY is "which one is the price" --
-#: an either/or the plan settles with a resolution mode. Two adjustments is not
+#: This is a DIFFERENT question from two rules qualifying at QUALIFY, which is
+#: "which one is the price" -- an either/or the plan always settles with its
+#: resolution mode. Two adjustments is not
 #: an either/or at all: BOTH apply, and the only open question is the sequence.
 #: 20% off then 5.00 off is not 5.00 off then 20% off, and the difference is
 #: money, so the engine will not pick -- for the same reason it will not pick
@@ -112,7 +115,6 @@ GAP_CODES: tuple[str, ...] = (
 )
 
 CONFLICT_CODES: tuple[str, ...] = (
-    CONFLICT_MULTIPLE_RULES_AT_STAGE,
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_NEGATIVE_TOTAL,
     CONFLICT_UNORDERED_ADJUSTMENTS,
@@ -135,6 +137,12 @@ class Finding:
     text: str
     #: The rule ids involved, where the finding is about rules.
     rule_ids: tuple[str, ...] = ()
+    #: The stay that found it, as `(entry_at, exit_at)` ISO instants -- set by
+    #: `validate-plan`, which probes stays the plan's own boundaries make
+    #: interesting, and None on a refusal at quote time, where the caller
+    #: already holds the stay. An owner reading "nothing prices this" needs to
+    #: know which car it was about: when it came in and when it left (U7g).
+    probe: tuple[str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.code not in ALL_CODES:
@@ -167,12 +175,16 @@ class Finding:
         raise AssertionError(f"{self.code!r} is registered but belongs to no kind.")
 
     def to_json(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "code": self.code,
             "kind": self.kind,
             "text": self.text,
             "rule_ids": list(self.rule_ids),
         }
+        # Only where it was set, so a refusal at quote time is the bytes it was.
+        if self.probe is not None:
+            out["probe"] = {"entry_at": self.probe[0], "exit_at": self.probe[1]}
+        return out
 
 
 class Refused(Exception):

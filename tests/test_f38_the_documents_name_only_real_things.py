@@ -68,13 +68,16 @@ VOCABULARY = frozenset(
         "validate-tax-sets", "/v1/validate-tax-sets", "/v1/tax",
         "POST", "pytest", "pip",
         # keys of a JSON response body, which are strings in the code, not names
-        "invalid", "rule_count", "tax_sets",
+        "invalid", "rule_count", "tax_sets", "probe",
         # things named in prose that are code but not identifiers of ours
         "datetime.time", "time.fromisoformat", "json.dumps", "importlib.reload",
         "max", "min",
         # values a plan may state that are checked as members elsewhere, plus the
         # shapes the contract quotes back at the reader
         "20.5", "2000", "1250",
+        # a finding code REMOVED in schema version 4, named only where the
+        # contract records the removal so a consumer routing on it can find out why
+        "CONFLICT_MULTIPLE_RULES_AT_STAGE",
     }
 )
 
@@ -85,6 +88,7 @@ def _owned_names() -> dict[str, set[str]]:
     """Everything this module actually holds, by category. Read from the code."""
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
+    from rate_engine.engine import SPECIAL_USED, TIME_BASED_USED
     from rate_engine.findings import ALL_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
     from rate_engine.rules import (
@@ -140,6 +144,7 @@ def _owned_names() -> dict[str, set[str]]:
         "stated value": values,
         "guarantee": set(GUARANTEES),
         "tax": tax_names,
+        "engine line code": {SPECIAL_USED, TIME_BASED_USED},
     }
 
 
@@ -165,6 +170,15 @@ def _response_fields() -> set[str]:
     assert status == 200, priced
     fields = set(request) | set(priced)
     for line in priced["breakdown"]:
+        fields |= set(line)
+
+    # A stay the early bird qualifies for, so the line that compares the special
+    # with the time-based rate -- and the key only it carries -- is derived too.
+    status, compared = run_quote(
+        {**request, "entry_at": "2026-03-03T08:30:00-05:00", "exit_at": "2026-03-03T09:30:00-05:00"}
+    )
+    assert status == 200, compared
+    for line in compared["breakdown"]:
         fields |= set(line)
 
     # A stay past the plan's stated ceiling, so the refusal shape is derived too.

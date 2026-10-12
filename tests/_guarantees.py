@@ -69,12 +69,6 @@ GUARANTEES: dict[str, str] = {
         "A rule's only channel to the fee is a list of Lines. A malformed return is "
         "REFUSED by name, not left to crash inside the ledger."
     ),
-    "F11": (
-        "An ambiguity the PLAN cannot settle is REFUSED and both rules named, with "
-        "the stated mode quoted back and the refusal saying what would settle it. "
-        "Since the modes act, that means a TIE: two rules qualifying at one stage "
-        "and charging the same amount, which `cheapest_wins` cannot separate."
-    ),
     "F10": (
         "Plan selection is never ambiguous. Two versions in force at the same instant "
         "are REFUSED and both named, never resolved by the order of the caller's list."
@@ -228,7 +222,8 @@ GUARANTEES: dict[str, str] = {
     ),
     "F34": (
         "More than one rule qualifying at one stage means three different things, "
-        "and the stage's category decides which: RESOLVING is a conflict, COMPOSING "
+        "and the stage's category decides which: RESOLVING is settled by the plan's "
+        "resolution mode (one rule applies, a tie included -- F48), COMPOSING "
         "order-independent is not reported at all, and COMPOSING order-dependent is "
         "refused unless the plan states the order."
     ),
@@ -319,6 +314,30 @@ GUARANTEES: dict[str, str] = {
         "and writes its lines as a breakdown's are written, with their total: the "
         "same status and the same bytes from both, for a figure, a refusal and a "
         "request that cannot be read."
+    ),
+    "F48": (
+        "A tie at the cheapest charge is PRICED, not refused. Two rules qualifying at "
+        "one resolving stage and charging the same amount under `cheapest_wins` "
+        "validate clean; the stay is priced at that amount, the lowest rule id is "
+        "named as applied, and every other says it charged the same. A cheaper rule "
+        "still wins whatever its id. Replaces F11, which refused the tie."
+    ),
+    "F49": (
+        "Every `validate-plan` finding names the stay that found it: `probe`, the "
+        "entry and exit of the first probe stay that produced it, and that stay "
+        "produces it. A refusal at quote time carries no `probe` key."
+    ),
+    "F50": (
+        "Under `cheapest_wins` a special that qualifies is never dearer than the "
+        "time-based rate: the stay is priced through the whole pipeline both ways -- "
+        "with the special, and by the time-based rate alone -- and charged the lower, "
+        "a tie keeping the special. The breakdown says which way was used and what the "
+        "other would have charged (`compared_minor`). Grace still prices a stay alone, "
+        "`stated_order` still lets the special replace the time-based charge, and a "
+        "stay the time-based rate alone cannot price is priced by the special. When "
+        "the time-based rate is charged, every other special still has its line, as "
+        "on the special's way: its own reason, or that it qualified and a cheaper "
+        "special was compared instead -- never that one was applied."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

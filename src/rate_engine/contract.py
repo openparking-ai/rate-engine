@@ -38,7 +38,12 @@ from .validator import undecided, validate_plan
 #: number.** Nothing was removed and no plan changed -- a plan that loaded on 2
 #: loads and prices identically on 3 -- but the module now computes tax lines and
 #: has a finding code a consumer routing on codes has not seen before.
-SCHEMA_VERSION = 3
+#:
+#: **4 in U7g: a finding code was REMOVED.** A tie at the cheapest charge is
+#: priced now (F48), so `CONFLICT_MULTIPLE_RULES_AT_STAGE` had nothing left to
+#: name and went. Every plan that loaded on 3 loads on 4 and every stay it priced
+#: is priced the same; a stay 3 refused for a tie is priced.
+SCHEMA_VERSION = 4
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})

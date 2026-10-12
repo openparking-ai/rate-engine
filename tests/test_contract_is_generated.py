@@ -355,9 +355,9 @@ def test_the_findings_table_asserts_a_KIND_not_just_a_code():
     ):
         with planted(
             "findings.py",
-            "CONFLICT_CODES: tuple[str, ...] = (\n    CONFLICT_MULTIPLE_RULES_AT_STAGE,",
+            "CONFLICT_CODES: tuple[str, ...] = (\n    CONFLICT_AMBIGUOUS_PLAN_SELECTION,",
             "CONFLICT_CODES: tuple[str, ...] = (\n    GAP_NO_ACCUMULATE_RULE,\n"
-            "    CONFLICT_MULTIPLE_RULES_AT_STAGE,",
+            "    CONFLICT_AMBIGUOUS_PLAN_SELECTION,",
         ):
             planted_render = _render()
 

@@ -165,14 +165,6 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
-    "F11": (
-        "tests/test_f11_conflicts_are_refused.py",
-        "engine.py",
-        "        if len(qualifying) > 1:",
-        "        if False:  # PLANTED: a conflict is no longer detected",
-        "two rules qualifying at one stage stop being refused, so the pipeline "
-        "silently applies both and the plan's resolution mode is never consulted",
-    ),
     "F10": (
         "tests/test_f10_unambiguous_plan_selection.py",
         "engine.py",
@@ -200,8 +192,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 3",
-        "SCHEMA_VERSION = 4  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 4",
+        "SCHEMA_VERSION = 5  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -329,6 +321,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    marks = {DEFAULT_PROBE_ENTRY_MINUTE, 0}",
         "every probe enters at one fixed time again, so two rules that both qualify "
         "only for an early entry never collide and validate-plan reports the plan "
+        "clean while the engine refuses a real stay",
+    ),
+    # U7g. The probe axes read a window's days and times at every stage, because
+    # the conflict a plan can still state lives at ADJUST. Put the QUALIFY-only
+    # read back and the dawn discounts are never probed before 05:30.
+    "F19/every-stage": (
+        "tests/test_f19_validator_probes_declared_boundaries.py",
+        "validator.py",
+        "    return [rule for stage in STAGES for rule in plan.rules_for_stage(stage)]",
+        "    return list(plan.rules_for_stage('QUALIFY'))  # PLANTED: QUALIFY only again",
+        "the validator reads the days and times of specials only, so two discounts "
+        "that collide on an early entry are never probed there and a plan is reported "
         "clean while the engine refuses a real stay",
     ),
     # X6. A4 established the "two comparisons" half of this item did not exist --
@@ -652,7 +656,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    # way, and there is nothing for an owner to decide.\n"
         "    return None",
         "    return Finding(  # PLANTED: composing rules reported as a conflict again\n"
-        "        code=CONFLICT_MULTIPLE_RULES_AT_STAGE,\n"
+        "        code=CONFLICT_UNORDERED_ADJUSTMENTS,\n"
         '        text=f"{len(qualifying)} rules qualify at {stage}",\n'
         "        rule_ids=ids,\n"
         "    )",
@@ -692,8 +696,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F38": (
         "tests/test_f38_the_documents_name_only_real_things.py",
         "findings.py",
-        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_MULTIPLE_RULES_AT_STAGE"',
-        'CONFLICT_MULTIPLE_RULES_AT_STAGE = "CONFLICT_TIED_ON_PRICE"'
+        'GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_IN_FORCE"',
+        'GAP_NO_TAX_SET_IN_FORCE = "GAP_NO_TAX_SET_STATED"'
         "  # PLANTED: the published code is renamed",
         "a finding code is renamed in the code and not in the prose that names it, "
         "so docs/CONTRACT.md keeps publishing an identifier nothing answers with -- "
@@ -840,6 +844,171 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # The tax door. Two arms, each required red on its own: the CLI's path and the
     # route's path each broken while the other is left alone. One plant breaking
     # both would stay a control even if the test compared one surface to itself.
+    # F48 replaced F11 in U7g. Two arms, because the guarantee has two halves
+    # that fail differently: the tie refused again (the F11 behaviour put back),
+    # and the comparison lost (the dearer rule chosen), which a tie-only test
+    # would never see.
+    "F48/tie-refused-again": (
+        "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
+        "engine.py",
+        "        # Never a conflict. A TERMINAL rule wins outright by what its type is; else",
+        "        _t = _candidate_totals(qualifying, stay, plan)  # PLANTED: F11 put back\n"
+        "        if len(set(_t.values())) == 1 and not any(\n"
+        "            TERMINAL in RULE_TRAITS[r.type] for r in qualifying\n"
+        "        ):\n"
+        "            return Finding(code=CONFLICT_AMBIGUOUS_PLAN_SELECTION,\n"
+        "                           text='PLANTED: the tie is refused', rule_ids=ids)\n"
+        "        # Never a conflict. A TERMINAL rule wins outright by what its type is; else",
+        "two specials charging the same amount are refused again, so a plan whose "
+        "every stay has one answer cannot be stored",
+    ),
+    "F48/dearer-chosen": (
+        "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
+        "engine.py",
+        "    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))",
+        "    return max(qualifying, key=lambda rule: (totals[rule.id], rule.id))  # PLANTED",
+        "the dearer of two qualifying specials is applied, so the driver pays more "
+        "than the plan's own rule says",
+    ),
+    # U7g fix 1. Two arms: the comparison skipped (the special replaces the
+    # time-based charge whatever it costs, the behaviour before the fix) and the
+    # comparison inverted (the dearer way charged). A test that only met stays
+    # where the special is cheaper would pass the first; one that only met stays
+    # where the hourly rate is cheaper would pass the second.
+    "F50/special-always-used": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special always replaces the time-based charge",
+        "a qualifying special is charged even where the time-based rate costs the "
+        "driver less",
+    ),
+    "F50/dearer-chosen": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if time_fee > special_fee:  # PLANTED: the dearer way charged",
+        "the stay is charged whichever of the special and the time-based rate costs "
+        "the driver MORE",
+    ),
+    # U7g fix 2, G1. F39, F40 and the contract's partly dead window moved to
+    # `stated_order` in fix 1, so `cheapest_wins` had no test on any of them. Each
+    # now has one where the window is CHEAPER and applies, and each is proven on
+    # BOTH ways it can be lost: the window refused (that guarantee's own defect)
+    # and the hour charged though it costs more. The target is the one new test,
+    # not the module, so the older tests cannot fire the control for it.
+    "F39/cheapest-window-refused": (
+        "tests/test_f39_the_exit_limit_runs_to_the_day_the_span_allows.py::test_under_cheapest_wins_the_car_out_at_2345_gets_the_cheaper_window",
+        "rules/time_window.py",
+        "    if (exit_local.date(), exit_local.time()) > (limit_local.date(), limit_local.time()):",
+        "    if exit_local.time() > rule.params[\"exit_by\"]:  # PLANTED: back to a bare clock",
+        "under `cheapest_wins` the car out at 23:45 is refused a window CHEAPER than "
+        "the hour, because its after-midnight limit is read as a bare clock",
+    ),
+    "F39/cheapest-hour-charged": (
+        "tests/test_f39_the_exit_limit_runs_to_the_day_the_span_allows.py::test_under_cheapest_wins_the_car_out_at_2345_gets_the_cheaper_window",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "under `cheapest_wins` the event window qualifies and is cheaper, and the "
+        "hour is charged instead",
+    ),
+    "F40/cheapest-window-refused": (
+        "tests/test_f40_the_exit_limit_is_a_wall_clock_reading.py::test_under_cheapest_wins_BOTH_passes_get_the_cheaper_window",
+        "rules/time_window.py",
+        "    if (exit_local.date(), exit_local.time()) > "
+        "(limit_local.date(), limit_local.time()):",
+        "    # PLANTED: a TRUE instant comparison, through UTC\n"
+        "    if exit_local.timestamp() > "
+        "limit_local.replace(tzinfo=exit_local.tzinfo).timestamp():",
+        "under `cheapest_wins` the second pass through the repeated hour is refused "
+        "a window CHEAPER than the hour -- 10.00 becomes 24.00",
+    ),
+    "F40/cheapest-hour-charged": (
+        "tests/test_f40_the_exit_limit_is_a_wall_clock_reading.py::test_under_cheapest_wins_BOTH_passes_get_the_cheaper_window",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "under `cheapest_wins` the night window qualifies on both passes and is "
+        "cheaper, and the hour is charged instead",
+    ),
+    "F50/partly-dead-window-refused": (
+        "tests/test_f50_the_cheaper_way_is_charged.py::test_the_contract_partly_dead_window_is_charged_where_it_fits_and_is_cheaper",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    if rule.params[\"exit_by\"] < rule.params[\"enter_by\"]:\n"
+        "        failed.append(\"PLANTED: a partly dead window treated as dead\")\n"
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "the contract's 06:00-23:00 / out by 20:00 window is treated as dead for "
+        "every entry, so the early car is charged the hour's 33.00, not 10.00",
+    ),
+    "F50/partly-dead-hour-charged": (
+        "tests/test_f50_the_cheaper_way_is_charged.py::test_the_contract_partly_dead_window_is_charged_where_it_fits_and_is_cheaper",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if True:  # PLANTED: the hour charged whatever the special costs",
+        "the contract's partly dead window qualifies and is cheaper, and the hour "
+        "is charged instead",
+    ),
+    # U7g fix 2, G5. When the time-based rate wins, every other special still
+    # says why it was not used. Three arms: the specials that did not qualify go
+    # silent (the re-gate's R10), the ones that qualified and lost go silent, and
+    # the loser's line claims the cheaper special was applied when the hour was.
+    "F50/why-not-unqualified-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "                        ledger.add(lost)\n"
+        "                    continue\n"
+        "                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):\n"
+        "                    ledger.add(line)\n",
+        "                        ledger.add(lost)\n"
+        "                    continue\n"
+        "                pass  # PLANTED: a special that did not qualify is silent\n",
+        "on the time-based way a special that did not qualify has no line, so the "
+        "breakdown frozen on the stay cannot say why the weekend rate was not given",
+    ),
+    "F50/why-not-losers-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "                        ledger.add(lost)\n",
+        "                        pass  # PLANTED: a special that lost is silent\n",
+        "on the time-based way a special that qualified and lost to a cheaper one "
+        "has no line, so a rate the driver was entitled to is simply absent",
+    ),
+    "F50/why-not-says-applied": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "totals, by_time=True)",
+        "totals, by_time=False)  # PLANTED",
+        "on the time-based way the losing special's line says the cheaper special "
+        "was applied, when the hour was charged",
+    ),
+    # U7g fix 3, G5. Re-gate 2's plant: the "why not" lines kept only when two or
+    # more specials qualify. The three-special tests above never reach the one-
+    # qualifier case and stayed green on it (receipt 289bf252).
+    "F50/why-not-one-qualifier-left-out": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "            for rule in plan.rules_for_stage(QUALIFY):\n"
+        "                if rule in qualifying:\n"
+        "                    if rule is not cheapest:\n",
+        "            for rule in (  # PLANTED: the why-not lines only when 2+ qualify\n"
+        "                plan.rules_for_stage(QUALIFY) if len(qualifying) > 1 else []\n"
+        "            ):\n"
+        "                if rule in qualifying:\n"
+        "                    if rule is not cheapest:\n",
+        "on the time-based way, when the early bird alone qualifies and loses to "
+        "the hour, every other special's line is gone, so the breakdown frozen on "
+        "the stay cannot say why the weekend rate was not given",
+    ),
+    "F49": (
+        "tests/test_f49_a_finding_names_the_stay_that_found_it.py",
+        "validator.py",
+        "replace(finding, probe=found_by))",
+        "finding)  # PLANTED: the stay that found it is dropped",
+        "a finding reaches the owner with no stay, so the sentence cannot say "
+        "which car it was about",
+    ),
     "F47": (
         "tests/test_f47_a_tax_figure_has_one_path.py",
         "cli.py",

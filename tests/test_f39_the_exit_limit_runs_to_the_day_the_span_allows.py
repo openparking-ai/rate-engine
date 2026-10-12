@@ -77,8 +77,13 @@ PLAN = {
     "timezone": "America/New_York",
     "currency": "USD",
     "space_classes": ["standard"],
+    # `stated_order` at QUALIFY: the window REPLACES the hourly rate when it
+    # qualifies, so the fee says whether it qualified. Under `cheapest_wins` a
+    # qualifying window dearer than the hourly rate is not used (U7g fix 1), and
+    # the fee could no longer tell the two outcomes apart.
     "resolution": {
-        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
+        "QUALIFY": {"mode": "stated_order", "order": ["event-night"]},
+        "ACCUMULATE": {"mode": "cheapest_wins"},
     },
     "adjust_order": None,
     "rules": [
@@ -261,3 +266,71 @@ def test_the_change_is_ONE_DIRECTIONAL_across_the_validator_probe_matrix():
         "no stay started qualifying, so this sweep could not have seen the fix at "
         "all -- it is passing on a matrix that never reaches the defect"
     )
+
+# --- U7g fix 2, G1: the same window under `cheapest_wins` ---------------------
+#
+# The fixture above moved to `stated_order` in U7g fix 1, because under
+# `cheapest_wins` its 40.00 window is dearer than the hour and is not used though
+# it qualifies. That left `cheapest_wins` with no test of this window at all. So
+# here the window is CHEAPER than the hour -- 10.00 against 3.00 an hour -- and
+# the car that leaves the same evening, at 23:45, must get it: the hour would be
+# 18.00. A bare-clock exit test refuses it (and charges 18.00); so does a
+# comparison that charges the hour.
+
+CHEAP_EVENT_PRICE = 1000
+
+
+def _cheapest_wins_plan() -> dict:
+    document = copy.deepcopy(PLAN)
+    document["resolution"] = {"QUALIFY": {"mode": "cheapest_wins"},
+                              "ACCUMULATE": {"mode": "cheapest_wins"}}
+    document["rules"][0]["effect"]["price_minor"] = CHEAP_EVENT_PRICE
+    return document
+
+
+def _codes_of(minutes: int, document: dict) -> tuple[int, list[str]]:
+    entry_at = parse_instant(SATURDAY_1830, "entry")
+    status, body = run_quote(
+        {
+            "plans": [copy.deepcopy(document)],
+            "entry_at": SATURDAY_1830,
+            "exit_at": (entry_at + timedelta(minutes=minutes)).isoformat(),
+            "space_class": "standard",
+            "currency": "USD",
+        }
+    )
+    assert status == 200, body
+    return body["fee_minor"], [ln["code"] for ln in body["breakdown"]]
+
+
+def test_the_cheapest_wins_fixture_puts_the_window_below_the_hour():
+    """The control: at 23:45 and at 00:30 the hour costs more than the window."""
+    assert CHEAP_EVENT_PRICE < TIME_BASED_2345
+    # 00:30 is six hours: 3.00 + 5 x 3.00.
+    assert CHEAP_EVENT_PRICE < 300 + 5 * 300
+
+
+@pytest.mark.guarantee("F39")
+def test_under_cheapest_wins_the_car_out_at_2345_gets_the_cheaper_window():
+    fee, codes = _codes_of(TO_2345_MINUTES, _cheapest_wins_plan())
+    assert fee == CHEAP_EVENT_PRICE, (
+        f"out at 23:45 under an after-midnight limit, charged {fee}: the window was "
+        "refused or the hour charged"
+    )
+    assert "time_window.applied" in codes and "special_used" in codes, codes
+
+
+@pytest.mark.guarantee("F39")
+def test_under_cheapest_wins_the_car_out_after_midnight_gets_it_too():
+    fee, codes = _codes_of(TO_0030_MINUTES, _cheapest_wins_plan())
+    assert fee == CHEAP_EVENT_PRICE
+    assert "time_window.applied" in codes and "special_used" in codes, codes
+
+
+@pytest.mark.guarantee("F39")
+def test_under_cheapest_wins_past_the_limit_the_hour_is_charged():
+    """The positive control: out at 03:00 is past the limit, so no window and no
+    comparison -- the hour's 27.00."""
+    fee, codes = _codes_of(PAST_LIMIT_MINUTES, _cheapest_wins_plan())
+    assert fee == TIME_BASED_PAST_LIMIT
+    assert "time_window.not_applied" in codes and "special_used" not in codes, codes
