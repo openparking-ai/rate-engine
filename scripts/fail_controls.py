@@ -870,6 +870,27 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the dearer of two qualifying specials is applied, so the driver pays more "
         "than the plan's own rule says",
     ),
+    # U7g fix 1. Two arms: the comparison skipped (the special replaces the
+    # time-based charge whatever it costs, the behaviour before the fix) and the
+    # comparison inverted (the dearer way charged). A test that only met stays
+    # where the special is cheaper would pass the first; one that only met stays
+    # where the hourly rate is cheaper would pass the second.
+    "F50/special-always-used": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special always replaces the time-based charge",
+        "a qualifying special is charged even where the time-based rate costs the "
+        "driver less",
+    ),
+    "F50/dearer-chosen": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if time_fee > special_fee:  # PLANTED: the dearer way charged",
+        "the stay is charged whichever of the special and the time-based rate costs "
+        "the driver MORE",
+    ),
     "F49": (
         "tests/test_f49_a_finding_names_the_stay_that_found_it.py",
         "validator.py",

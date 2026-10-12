@@ -2,8 +2,9 @@
 
 §8, from Gokhan: "Early bird will apply only if it meets that criteria." Miss one
 condition and the rate does not apply AT ALL -- the stay prices on the time-based
-rate. No stacking, no partial credit, no pro-rating, and not the cheaper of the
-two. An early bird missed by an hour is a full time-based day.
+rate. No stacking, no partial credit, no pro-rating. An early bird missed by an
+hour is a full time-based day. (Where it DOES qualify, the driver pays the
+cheaper of it and the time-based rate under `cheapest_wins`: F50.)
 
 The fixture is chosen so that the early-bird price and the time-based price are
 DIFFERENT for the same stay. That is not incidental: if the two happened to

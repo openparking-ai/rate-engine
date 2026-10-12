@@ -38,6 +38,20 @@ nothing could produce the code, and a registered code nothing can produce is a
 promise with no mechanism behind it -- so it was REMOVED, and a removal moves the
 number.
 
+**A special that qualifies is never dearer than the time-based rate.** Under
+`cheapest_wins` at QUALIFY, a special that qualified used to REPLACE the
+time-based charge whatever it cost: a weekday car in at 08:00 and out at 10:30
+paid a 9.00 early bird where the hour came to 7.00. The owner's rule is that the
+driver always pays the cheapest way the stay can be priced, so the stay is now
+priced through the whole pipeline twice -- with the special, and by the
+time-based rate alone, caps, surcharges and adjustments included -- and charged
+the lower; a tie keeps the special (F50). One engine line says which way was
+used: `special_used` or `time_based_used`, its `rule_id` the special, delta zero,
+and `compared_minor` what the other way would have charged -- absent when the
+time-based rate alone cannot price the stay, in which case the special is the
+only way. `stated_order` is unchanged (the special replaces), and so is grace,
+which prices a stay alone.
+
 **`validate-plan` reads the days and times of a window at every stage.** It used
 to read them at QUALIFY only. The conflict a plan can still state is two
 adjustments with no order, and an adjustment's window states its days and times
@@ -49,10 +63,12 @@ probed there (F19).
 an owner can be told which car it was about (F49). A refusal at quote time is
 unchanged: it is about the stay the caller sent, and has no `probe` key.
 
-**What a caller must do.** A plan that loaded on version 3 loads on version 4,
-and every stay it priced is priced identically. A stay version 3 refused for a
-tie is now priced. A consumer routing on finding codes stops seeing
-`CONFLICT_MULTIPLE_RULES_AT_STAGE`; no code was added.
+**What a caller must do.** A plan that loaded on version 3 loads on version 4.
+A stay version 3 refused for a tie is now priced. A stay a special priced under
+`cheapest_wins` is priced at the same fee or LESS, and its breakdown gains the
+line above; a consumer reading breakdown lines must tolerate that line and its
+`compared_minor` key, which no other line carries. A consumer routing on finding
+codes stops seeing `CONFLICT_MULTIPLE_RULES_AT_STAGE`; no code was added.
 
 ### What changed in version 3
 
@@ -241,12 +257,13 @@ made and the software ignored.
   the first that qualifies wins. It must name every rule at that stage **exactly
   once**; a rule left out would take a silent position in the order.
 
-**What `cheapest_wins` compares, stated because it is a limit.** It compares what
-the competing rules themselves charge for the stay — not the final fee. A cap or
-an adjustment downstream applies to whichever rule wins and could in principle
-bring two different bases to the same number; comparing final fees would mean
-running the whole pipeline once per candidate, and would still not be "the
-customer's fee" for the rules that lost. Two rules charging the SAME amount are a
+**What `cheapest_wins` compares, stated because it is a limit.** Between two
+competing rules at one stage, it compares what the rules themselves charge for
+the stay — not the final fee. A cap or an adjustment downstream applies to
+whichever rule wins and could in principle bring two different bases to the same
+number. Between the special that won at QUALIFY and the time-based rate alone it
+compares FINAL fees: the stay is priced through the whole pipeline both ways and
+the lower is charged, a tie keeping the special (F50). Two rules charging the SAME amount are a
 tie, and since version 4 a tie is PRICED at that amount: the driver pays the same
 whichever rule is named, so the lowest rule id is named as applied and every other
 says it charged the same (F48).
@@ -424,6 +441,7 @@ never failed is a decoration.
 | **F49** | Every `validate-plan` finding names the stay that found it: `probe`, the entry and exit of the first probe stay that produced it, and that stay produces it. A refusal at quote time carries no `probe` key. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
+| **F50** | Under `cheapest_wins` a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` still lets the special replace the time-based charge, and a stay the time-based rate alone cannot price is priced by the special. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |

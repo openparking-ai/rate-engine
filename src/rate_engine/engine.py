@@ -427,8 +427,16 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
         return findings
 
     if _qualifying(plan, stay, QUALIFY):
-        return findings  # a special takes over the base; ACCUMULATE is not consulted
+        # A special can price the stay. Whether the time-based rate could too is
+        # asked by `_the_cheaper_way`, which uses it only when it can.
+        return findings
 
+    return findings + _time_based_gaps(plan, stay)
+
+
+def _time_based_gaps(plan: Plan, stay: Stay) -> list[Finding]:
+    """Why the time-based rate ALONE cannot price this stay. Empty when it can."""
+    findings: list[Finding] = []
     accumulate = plan.rules_for_stage(ACCUMULATE)
     covering = [r for r in accumulate if r.covers(stay.space_class)]
     qualifying = _qualifying(plan, stay, ACCUMULATE)
@@ -531,6 +539,35 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     if blocking:
         raise Refused(blocking)
 
+    ledger = _priced(plan, stay, with_specials=True)
+    ledger = _the_cheaper_way(plan, stay, ledger)
+
+    fee = ledger.total_minor
+    _assert_ledger_is_the_fee(fee, ledger)
+    if fee < 0:
+        raise Refused(
+            [
+                Finding(
+                    code=CONFLICT_NEGATIVE_TOTAL,
+                    text=(
+                        f"the rules produced a negative fee ({fee}); refusing rather than "
+                        "charging a customer a negative amount"
+                    ),
+                )
+            ]
+        )
+    return Quote(
+        fee_minor=fee, currency=plan.currency, plan_version=plan.plan_version, breakdown=ledger
+    )
+
+
+def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
+    """The stay through every stage, once. `quote` is its only caller.
+
+    `with_specials=False` prices the stay by the time-based rate alone: a special
+    that qualified is left out (its comparison line speaks for it, see
+    `_the_cheaper_way`), and a special that did not qualify still says why.
+    """
     ledger = Ledger()
     entry_local = stay.entry_at.astimezone(plan.timezone)
     ledger.add(
@@ -547,6 +584,8 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     )
 
     qualified_at_qualify = _qualifying(plan, stay, QUALIFY)
+    if not with_specials:
+        qualified_at_qualify = []
     terminal = _terminal_rule(qualified_at_qualify)
 
     for stage in STAGES:
@@ -557,8 +596,17 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
             # in the ledger. See rules/grace.py.
             break
         if stage == ACCUMULATE and qualified_at_qualify:
-            # A special that qualified IS the base. Not a discount on the
-            # time-based charge and not the cheaper of the two -- it replaces it.
+            # A special that qualified IS the base on this pass. Under
+            # `cheapest_wins` the stay is priced again without it and the
+            # cheaper way charged (`_the_cheaper_way`); under `stated_order` it
+            # replaces the time-based charge.
+            continue
+
+        if stage == QUALIFY and not with_specials:
+            for rule in plan.rules_for_stage(QUALIFY):
+                if not QUALIFIERS[rule.type](rule, stay, plan):
+                    for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
+                        ledger.add(line)
             continue
 
         if stage in RESOLVING:
@@ -596,23 +644,82 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
             for line in _lines_of(rule, lines):
                 ledger.add(line)
 
-    fee = ledger.total_minor
-    _assert_ledger_is_the_fee(fee, ledger)
-    if fee < 0:
-        raise Refused(
-            [
-                Finding(
-                    code=CONFLICT_NEGATIVE_TOTAL,
-                    text=(
-                        f"the rules produced a negative fee ({fee}); refusing rather than "
-                        "charging a customer a negative amount"
-                    ),
-                )
-            ]
+    return ledger
+
+
+#: The line that says which way a stay was priced when a special qualified under
+#: `cheapest_wins`, and what the other way would have charged (`compared_minor`).
+SPECIAL_USED = "special_used"
+TIME_BASED_USED = "time_based_used"
+
+
+def _the_cheaper_way(plan: Plan, stay: Stay, with_special: Ledger) -> Ledger:
+    """The special or the time-based rate, whichever the driver pays less by.
+
+    His rule, 2026-10-11: "always cheaper goes first", and 2026-10-12, asked
+    about an early bird at 9.00 against 7.00 by the hour: the driver always pays
+    the cheapest way the stay can be priced. So under `cheapest_wins` a special
+    that qualified no longer simply REPLACES the time-based charge: the stay is
+    priced through the whole pipeline both ways -- caps, surcharges and
+    adjustments included -- and charged the lower. A tie keeps the special.
+
+    Unchanged: `stated_order` (the special replaces, as the plan says), a
+    TERMINAL rule (grace prices the stay alone, free beats everything), and a
+    stay no special qualified for. Where the time-based rate alone cannot price
+    the stay (it stops before the stay ends, or covers no rule), the special is
+    the only way, and the line says so.
+    """
+    qualified = _qualifying(plan, stay, QUALIFY)
+    if (
+        not qualified
+        or _terminal_rule(qualified) is not None
+        or plan.resolution[QUALIFY]["mode"] != "cheapest_wins"
+    ):
+        return with_special
+    from .money import format_minor
+
+    special = _winner(plan, stay, QUALIFY, qualified)
+    special_fee = with_special.total_minor
+    named = f"{special.display_name} {format_minor(special_fee, plan.currency)}"
+    mode = f"(plan resolves {QUALIFY} by cheapest_wins)"
+    if _time_based_gaps(plan, stay):
+        with_special.add(
+            Line(
+                code=SPECIAL_USED,
+                rule_id=special.id,
+                text=f"{named} used: the time-based rate alone cannot price this stay {mode}",
+                delta_minor=0,
+            )
         )
-    return Quote(
-        fee_minor=fee, currency=plan.currency, plan_version=plan.plan_version, breakdown=ledger
+        return with_special
+    time_based = _priced(plan, stay, with_specials=False)
+    time_fee = time_based.total_minor
+    by_time = format_minor(time_fee, plan.currency)
+    if time_fee < special_fee:
+        time_based.add(
+            Line(
+                code=TIME_BASED_USED,
+                rule_id=special.id,
+                text=f"{named} not used: by the time-based rate {by_time} is less {mode}",
+                delta_minor=0,
+                compared_minor=special_fee,
+            )
+        )
+        return time_based
+    with_special.add(
+        Line(
+            code=SPECIAL_USED,
+            rule_id=special.id,
+            text=(
+                f"{named} used: by the time-based rate this stay would be {by_time}"
+                + (" too" if time_fee == special_fee else "")
+                + f" {mode}"
+            ),
+            delta_minor=0,
+            compared_minor=time_fee,
+        )
     )
+    return with_special
 
 
 def _lines_of(rule, returned: object) -> list[Line]:

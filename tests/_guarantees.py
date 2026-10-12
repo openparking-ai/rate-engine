@@ -327,6 +327,15 @@ GUARANTEES: dict[str, str] = {
         "entry and exit of the first probe stay that produced it, and that stay "
         "produces it. A refusal at quote time carries no `probe` key."
     ),
+    "F50": (
+        "Under `cheapest_wins` a special that qualifies is never dearer than the "
+        "time-based rate: the stay is priced through the whole pipeline both ways -- "
+        "with the special, and by the time-based rate alone -- and charged the lower, "
+        "a tie keeping the special. The breakdown says which way was used and what the "
+        "other would have charged (`compared_minor`). Grace still prices a stay alone, "
+        "`stated_order` still lets the special replace the time-based charge, and a "
+        "stay the time-based rate alone cannot price is priced by the special."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

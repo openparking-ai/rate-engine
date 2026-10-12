@@ -58,9 +58,15 @@ class Line:
     #: Plain English, and it must describe THIS line's own delta.
     text: str
     delta_minor: int
+    #: Only on the line that says which way a stay was priced (the special or
+    #: the time-based rate): what the OTHER way would have charged. Never part
+    #: of the fee, and written to JSON only on the lines that carry it.
+    compared_minor: int | None = None
 
     def __post_init__(self) -> None:
         as_minor(self.delta_minor, f"line[{self.code}].delta_minor")
+        if self.compared_minor is not None:
+            as_minor(self.compared_minor, f"line[{self.code}].compared_minor")
 
 
 @dataclass
@@ -82,12 +88,15 @@ class Ledger:
         return sum(line.delta_minor for line in self.lines)
 
     def to_json(self) -> list[dict[str, object]]:
-        return [
-            {
+        out: list[dict[str, object]] = []
+        for line in self.lines:
+            entry: dict[str, object] = {
                 "code": line.code,
                 "rule_id": line.rule_id,
                 "text": line.text,
                 "delta_minor": line.delta_minor,
             }
-            for line in self.lines
-        ]
+            if line.compared_minor is not None:
+                entry["compared_minor"] = line.compared_minor
+            out.append(entry)
+        return out

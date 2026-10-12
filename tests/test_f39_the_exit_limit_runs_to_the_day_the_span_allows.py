@@ -77,8 +77,13 @@ PLAN = {
     "timezone": "America/New_York",
     "currency": "USD",
     "space_classes": ["standard"],
+    # `stated_order` at QUALIFY: the window REPLACES the hourly rate when it
+    # qualifies, so the fee says whether it qualified. Under `cheapest_wins` a
+    # qualifying window dearer than the hourly rate is not used (U7g fix 1), and
+    # the fee could no longer tell the two outcomes apart.
     "resolution": {
-        "QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"},
+        "QUALIFY": {"mode": "stated_order", "order": ["event-night"]},
+        "ACCUMULATE": {"mode": "cheapest_wins"},
     },
     "adjust_order": None,
     "rules": [
