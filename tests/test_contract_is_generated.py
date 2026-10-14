@@ -58,8 +58,8 @@ def test_the_committed_contract_matches_the_code():
 #: which is also the property F7 guarantees.
 ADD_A_RULE_TYPE = (
     "rules/space_surcharge.py",
-    'register("space_surcharge", SURCHARGE, build, apply)',
-    'register("space_surcharge", SURCHARGE, build, apply)\n'
+    'register("space_surcharge", SURCHARGE, build, apply, traits=(ON_THE_TIME_CHARGE,))',
+    'register("space_surcharge", SURCHARGE, build, apply, traits=(ON_THE_TIME_CHARGE,))\n'
     "from ..stages import ADJUST as _PLANTED_STAGE  # noqa: E402\n"
     'register("planted_extra", _PLANTED_STAGE, build, apply)',
 )
@@ -98,6 +98,15 @@ NARROW_A_RULE_TYPE = (
     'register("time_window", (QUALIFY,), build, apply, traits=(SPEAKS_UNQUALIFIED,))  # PLANTED',
 )
 
+#: And since the fill-rule round ADJUST has a second type, so emptying it takes
+#: both: `fill_level` moved to SURCHARGE alongside the window narrowed. The
+#: example plan has no fill rule, so nothing it renders depends on where one runs.
+NARROW_THE_FILL_RULE = (
+    "rules/fill_level.py",
+    '    "fill_level", ADJUST, build, apply,',
+    '    "fill_level", "SURCHARGE", build, apply,  # PLANTED',
+)
+
 
 @pytest.mark.guarantee("F9")
 def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
@@ -111,7 +120,7 @@ def test_the_empty_stage_note_is_derived_and_not_a_fixed_sentence():
     baseline = _render()
     assert "Every stage has at least one rule type in this version." in baseline
 
-    with planted(*NARROW_A_RULE_TYPE):
+    with planted(*NARROW_A_RULE_TYPE), planted(*NARROW_THE_FILL_RULE):
         planted_render = _render()
 
     assert "Every stage has at least one rule type in this version." not in planted_render, (

@@ -339,6 +339,33 @@ GUARANTEES: dict[str, str] = {
         "on the special's way: its own reason, or that it qualified and a cheaper "
         "special was compared instead -- never that one was applied."
     ),
+    "F51": (
+        "A fill rule prices on how full the garage was AT ENTRY. It applies at its "
+        "threshold and above and not one basis point below; it raises the charge for "
+        "the time -- the total after the base and the caps -- and nothing else; its "
+        "line says how full the garage was and by how much the charge rose, and below "
+        "the threshold says it was not raised. A stay in a class it covers with no "
+        "figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices "
+        "the same with or without the figure. Two fill rules applying to one stay are "
+        "CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a "
+        "percent or a figure out of range, not a whole number, or a bool is refused "
+        "by name."
+    ),
+    "F52": (
+        "A VIP surcharge may be a percent of the stay's time-based charge -- the "
+        "total after the base and the caps -- rounded the way the rule says, and "
+        "never of another surcharge, so two surcharges total the same in any order. "
+        "The flat form prices exactly as it did. A rule stating both forms, or a "
+        "percent out of range, is refused by name."
+    ),
+    "F53": (
+        "`validate-plan` probes the occupancy axis of every fill rule: one basis "
+        "point below each threshold, on it, and at 100% full, across every other "
+        "axis, so two fill rules colliding only when the garage is full are reported "
+        "before a stay is refused for it, and the finding names the figure that found "
+        "it. A plan with no fill rule is probed exactly as before, and a missing "
+        "figure is not reported as a gap in the plan."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

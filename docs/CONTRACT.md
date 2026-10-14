@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 4. One contract, five surfaces: `POST /v1/quote`, `POST
+Version 5. One contract, five surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, `POST /v1/validate-tax-sets`, `POST /v1/tax`, and the
 `rate-engine` CLI, which carries the same four operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
@@ -10,7 +10,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **4**
+`schema_version` **5**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -24,6 +24,31 @@ safe: **a key this engine does not understand is REJECTED and named, never
 ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
+
+### What changed in version 5
+
+**A plan may price on how full the garage was when the car came in.** A new rule
+type, `fill_level`, raises the stay's time-based charge by a stated percent when
+the garage was at least a stated percent full at entry (F51). A quote request may
+carry the figure as `occupancy_at_entry_bp`, an optional key: basis points of
+full, 0 to 10000, absent or `null` meaning the caller has none. See "The fill
+rule" below.
+
+**A VIP surcharge may be a percent.** `space_surcharge` keeps its flat
+`surcharge_minor` and gains a second form, an `amount` of kind `percent` with its
+`percent_bp`, and a `rounding`: a percent of the stay's time-based charge (F52).
+
+**`validate-plan` has a fourth axis.** A plan with a fill rule is probed one basis
+point below each threshold, on it, and at 100% full; the probe a finding names
+then carries `occupancy_at_entry_bp` too (F53). A plan with no fill rule is probed
+exactly as before.
+
+**What a caller must do.** Nothing, to keep quoting: every plan that loaded on
+version 4 loads on version 5 and every stay it priced is priced the same, whether
+or not the request carries the new key. To use a fill rule, send the figure; a
+stay in a class a fill rule covers that arrives without one is refused with
+`GAP_NO_OCCUPANCY_AT_ENTRY`. A consumer routing on finding codes meets that code
+and `CONFLICT_OVERLAPPING_FILL_RULES`.
 
 ### What changed in version 4
 
@@ -219,6 +244,7 @@ surcharge that survives it.
 | rule type | stage |
 | --- | --- |
 | `daily_max` | CAP |
+| `fill_level` | ADJUST |
 | `grace` | QUALIFY |
 | `increment` | ACCUMULATE |
 | `space_surcharge` | SURCHARGE |
@@ -347,9 +373,11 @@ cannot check its work.
 | `GAP_STAY_EXCEEDS_MAX_DURATION` | gap |
 | `GAP_NO_PLAN_IN_FORCE_AT_ENTRY` | gap |
 | `GAP_NO_TAX_SET_IN_FORCE` | gap |
+| `GAP_NO_OCCUPANCY_AT_ENTRY` | gap |
 | `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
 | `CONFLICT_NEGATIVE_TOTAL` | conflict |
 | `CONFLICT_UNORDERED_ADJUSTMENTS` | conflict |
+| `CONFLICT_OVERLAPPING_FILL_RULES` | conflict |
 | `FAULT_RULE_RETURNED_NOT_LINES` | fault |
 <!--/gen:findings-->
 
@@ -445,6 +473,9 @@ never failed is a decoration.
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F50** | Under `cheapest_wins` a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` still lets the special replace the time-based charge, and a stay the time-based rate alone cannot price is priced by the special. When the time-based rate is charged, every other special still has its line, as on the special's way: its own reason, or that it qualified and a cheaper special was compared instead -- never that one was applied. |
+| **F51** | A fill rule prices on how full the garage was AT ENTRY. It applies at its threshold and above and not one basis point below; it raises the charge for the time -- the total after the base and the caps -- and nothing else; its line says how full the garage was and by how much the charge rose, and below the threshold says it was not raised. A stay in a class it covers with no figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices the same with or without the figure. Two fill rules applying to one stay are CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a percent or a figure out of range, not a whole number, or a bool is refused by name. |
+| **F52** | A VIP surcharge may be a percent of the stay's time-based charge -- the total after the base and the caps -- rounded the way the rule says, and never of another surcharge, so two surcharges total the same in any order. The flat form prices exactly as it did. A rule stating both forms, or a percent out of range, is refused by name. |
+| **F53** | `validate-plan` probes the occupancy axis of every fill rule: one basis point below each threshold, on it, and at 100% full, across every other axis, so two fill rules colliding only when the garage is full are reported before a stay is refused for it, and the finding names the figure that found it. A plan with no fill rule is probed exactly as before, and a missing figure is not reported as a gap in the plan. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
@@ -458,12 +489,58 @@ never failed is a decoration.
 
 Named here so nobody adds them helpfully:
 
-- **No occupancy-driven rule.** Not in this version.
+- **No counting.** The engine prices on the occupancy figure it is handed and
+  counts no cars and no spaces; the caller says how full the garage was.
 - **No plan storage, no draft/approve workflow, no change log.** Round B. A plan
   arrives on the call.
 - **No forecast and no competitor comparison.** Round C.
 - **No rate import from a photograph.** Round D, and it will only ever produce a
   draft.
+
+## The fill rule
+
+**"When the garage is at least X% full, the time-based charge is Y% more."** A
+`fill_level` rule states `threshold_bp` (X, 0 to 10000), `percent_bp` (Y, 1 to
+10000) and `rounding` (`up` or `down`, no default), with the space classes it
+covers. It runs at ADJUST.
+
+**It reads how full the garage was AT ENTRY, and nothing else.** The figure is
+`occupancy_at_entry_bp` on the stay, set by the caller when the stay opened: every
+car inside against every switched-on space. The engine counts nothing. A car that
+came in when the garage was 70% full keeps that price however full the garage is
+when it leaves. The rule applies AT the threshold and above.
+
+**It raises the charge for the TIME**: the running total when SURCHARGE begins,
+after whichever base priced the stay -- the time-based rate or a special -- and
+after the caps. Not a surcharge, and not another adjustment. A VIP surcharge is
+added on top and is not raised. When another ADJUST rule also applies,
+`adjust_order` states which runs first, as for any two adjustments: a discount
+taken after the increase is a different fee from one taken before.
+
+**Its lines**, in the breakdown like every other: "Garage was 84% full at entry (at
+or above 80%): time-based charge +20% on 30.00 USD -- 6.00 USD added", and below
+the threshold, at zero, "Garage was 62% full at entry (below 80%): time-based
+charge not raised". A class the rule does not cover gets no line.
+
+**Never a guess.** A stay with no figure, in a class a fill rule covers, is
+REFUSED with `GAP_NO_OCCUPANCY_AT_ENTRY` -- never priced as if the garage were
+empty or full. A plan with no fill rule never reads the figure. Two fill rules
+that both apply to one stay are `CONFLICT_OVERLAPPING_FILL_RULES`, whatever
+`adjust_order` says: they are two answers to one question, and an order would
+charge both. A fill rule naming a class the plan does not declare does not load.
+
+**`validate-plan` does not probe "no figure".** That gap is a fact about the
+caller -- a garage that has not stated its number of spaces -- not about the
+plan, and reporting it would put a finding on every plan that carries a fill rule.
+
+## A percent VIP surcharge
+
+`space_surcharge` is a flat `surcharge_minor` per stay, or an `amount` of kind
+`percent` whose `percent_bp` is 1 to 10000, with a `rounding` of `up` or `down`
+and no default -- one form or the other, never both. The percent is taken of the same charge
+for the time the fill rule reads, so two surcharges still compose in any order
+with the same total. Its line: "Space class 'vip': 10% of the time-based charge
+30.00 USD -- 3.00 USD on top of the base".
 
 ## Grace, and what "free" means
 

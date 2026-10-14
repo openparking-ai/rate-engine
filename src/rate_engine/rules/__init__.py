@@ -125,7 +125,30 @@ TERMINAL = "terminal"
 #: was a proxy for "could this have applied to you", and it stopped being one.
 SPEAKS_UNQUALIFIED = "speaks_unqualified"
 
-TRAITS: tuple[str, ...] = (TERMINAL, SPEAKS_UNQUALIFIED)
+#: A rule of this type is handed `time_charge_minor`: the charge for the TIME,
+#: which is the running total when SURCHARGE begins -- after whichever base priced
+#: the stay (the time-based rate or a special) and after the caps, before any
+#: surcharge or adjustment. A percent VIP surcharge and the fill rule are both
+#: "a percent of the time-based charge", and handing them the RUNNING total
+#: instead would make two percent surcharges depend on which ran first, at a
+#: stage this module promises is order-independent.
+ON_THE_TIME_CHARGE = "on_the_time_charge"
+
+#: A rule of this type qualifies on how full the garage was when the car came in,
+#: so a stay it covers must carry `occupancy_at_entry_bp`. One that does not is
+#: refused with GAP_NO_OCCUPANCY_AT_ENTRY -- the engine never assumes a figure.
+#: A plan with no such rule ignores the figure entirely.
+NEEDS_OCCUPANCY = "needs_occupancy_at_entry"
+
+#: At most one rule of this type may qualify for a stay. Two fill rules on one
+#: class both raising the same charge is not an order to state -- it is two
+#: answers to "how much more when the garage is full", and the plan has to give
+#: one. Reported as CONFLICT_OVERLAPPING_FILL_RULES, whatever `adjust_order` says.
+ONE_PER_STAY = "one_per_stay"
+
+TRAITS: tuple[str, ...] = (
+    TERMINAL, SPEAKS_UNQUALIFIED, ON_THE_TIME_CHARGE, NEEDS_OCCUPANCY, ONE_PER_STAY,
+)
 
 #: type name -> the traits it declared. Every registered type has an entry, so a
 #: lookup is never a `.get` with a default that quietly means "no".

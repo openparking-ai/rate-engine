@@ -30,18 +30,30 @@ from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_NEGATIVE_TOTAL,
+    CONFLICT_OVERLAPPING_FILL_RULES,
     CONFLICT_UNORDERED_ADJUSTMENTS,
     FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
+    GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_UNDECLARED_SPACE_CLASS,
     Finding,
     Refused,
 )
+from .percent import percent_text
 from .plan import InvalidPlan, Plan
-from .rules import RULE_APPLIERS, RULE_TRAITS, SPEAKS_UNQUALIFIED, TERMINAL
+from .rules import (
+    NEEDS_OCCUPANCY,
+    ON_THE_TIME_CHARGE,
+    ONE_PER_STAY,
+    RULE_APPLIERS,
+    RULE_TRAITS,
+    SPEAKS_UNQUALIFIED,
+    TERMINAL,
+)
 from .rules import daily_max as daily_max_rule
+from .rules import fill_level as fill_level_rule
 from .rules import grace as grace_rule
 from .rules import increment as increment_rule
 from .rules import space_surcharge as space_surcharge_rule
@@ -55,6 +67,7 @@ from .stages import (
     QUALIFY,
     RESOLVING,
     STAGES,
+    SURCHARGE,
 )
 
 #: Which predicate decides whether a rule of each type qualifies for a stay.
@@ -79,6 +92,7 @@ QUALIFIERS = {
     "daily_max": daily_max_rule.qualifies,
     "weekly_max": weekly_max_rule.qualifies,
     "space_surcharge": space_surcharge_rule.qualifies,
+    "fill_level": fill_level_rule.qualifies,
 }
 
 
@@ -278,6 +292,14 @@ class Stay:
     entry_at: datetime
     exit_at: datetime
     space_class: str
+    #: How full the garage was when this car came in, in basis points of full:
+    #: 8400 is 84%. Every car inside against every switched-on space, counted by
+    #: the CALLER when the stay opened -- the engine counts nothing. None when the
+    #: caller has no figure; a plan with a fill rule covering this stay's class
+    #: then refuses it (GAP_NO_OCCUPANCY_AT_ENTRY), and a plan without one never
+    #: reads it. It is read at ENTRY and only at entry: the cars that came in
+    #: before the garage filled keep the price they came in on.
+    occupancy_at_entry_bp: int | None = None
 
     @property
     def duration_minutes(self) -> int:
@@ -324,7 +346,16 @@ class Quote:
         }
 
 
-def make_stay(entry_at: datetime, exit_at: datetime, space_class: str) -> Stay:
+#: 100% full, in basis points. A figure above it describes no garage.
+FULL_BP = 10_000
+
+
+def make_stay(
+    entry_at: datetime,
+    exit_at: datetime,
+    space_class: str,
+    occupancy_at_entry_bp: int | None = None,
+) -> Stay:
     if entry_at.tzinfo is None or exit_at.tzinfo is None:
         raise InvalidPlan(
             "entry_at and exit_at must carry a UTC offset. A naive timestamp is read in "
@@ -339,7 +370,19 @@ def make_stay(entry_at: datetime, exit_at: datetime, space_class: str) -> Stay:
         )
     if not isinstance(space_class, str) or not space_class:
         raise InvalidPlan("space_class must be a non-empty string.")
-    return Stay(entry_at=entry_at, exit_at=exit_at, space_class=space_class)
+    figure = occupancy_at_entry_bp
+    if figure is not None and (
+        isinstance(figure, bool) or not isinstance(figure, int) or not 0 <= figure <= FULL_BP
+    ):
+        raise InvalidPlan(
+            f"occupancy_at_entry_bp must be a whole number of basis points from 0 to "
+            f"{FULL_BP} (0% to 100% full), or absent; got {figure!r}. A garage with more "
+            "cars inside than spaces is sent as 10000."
+        )
+    return Stay(
+        entry_at=entry_at, exit_at=exit_at, space_class=space_class,
+        occupancy_at_entry_bp=figure,
+    )
 
 
 def select_plan(plans: list[Plan], stay: Stay) -> Plan:
@@ -433,6 +476,30 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
         # heard of. Answering that would be guessing.
         return findings
 
+    if stay.occupancy_at_entry_bp is None:
+        # Asked before anything can return early: a special qualifying does not
+        # make the figure unnecessary, because the fill rule raises whichever
+        # charge priced the time.
+        needing = tuple(
+            rule.id
+            for stage in STAGES
+            for rule in plan.rules_for_stage(stage)
+            if NEEDS_OCCUPANCY in RULE_TRAITS[rule.type] and rule.covers(stay.space_class)
+        )
+        if needing:
+            findings.append(
+                Finding(
+                    code=GAP_NO_OCCUPANCY_AT_ENTRY,
+                    text=(
+                        f"the plan prices a {stay.space_class!r} space on how full the "
+                        f"garage was when the car came in ({', '.join(needing)}), and "
+                        "this stay carries no occupancy_at_entry_bp -- nothing was "
+                        "assumed"
+                    ),
+                    rule_ids=needing,
+                )
+            )
+
     if _qualifying(plan, stay, QUALIFY):
         # A special can price the stay. Whether the time-based rate could too is
         # asked by `_the_cheaper_way`, which uses it only when it can.
@@ -503,6 +570,25 @@ def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
     findings: list[Finding] = []
     for stage in STAGES:
         qualifying = _qualifying(plan, stay, stage)
+        one_per_stay = [r for r in qualifying if ONE_PER_STAY in RULE_TRAITS[r.type]]
+        if len(one_per_stay) > 1:
+            # Not an order the plan forgot to state: two fill rules raising one
+            # charge are two answers to the same question, and an order would
+            # charge both. Reported whatever `adjust_order` says.
+            ids = tuple(r.id for r in one_per_stay)
+            findings.append(
+                Finding(
+                    code=CONFLICT_OVERLAPPING_FILL_RULES,
+                    text=(
+                        f"{len(ids)} fill rules ({', '.join(ids)}) all apply to a "
+                        f"{stay.space_class!r} space at "
+                        f"{percent_text(stay.occupancy_at_entry_bp)} full; the plan "
+                        "states "
+                        "one fill rule per space class"
+                    ),
+                    rule_ids=ids,
+                )
+            )
         if len(qualifying) > 1:
             finding = _conflict_at(plan, stay, stage, qualifying)
             if finding is not None:
@@ -594,8 +680,15 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
     if not with_specials:
         qualified_at_qualify = []
     terminal = _terminal_rule(qualified_at_qualify)
+    #: The charge for the TIME: the running total when SURCHARGE begins, after
+    #: the base (time-based rate or special) and the caps. A percent surcharge
+    #: and the fill rule are taken of this, never of the running total, so they
+    #: see the same number whatever else runs beside them. Set below.
+    time_charge = None
 
     for stage in STAGES:
+        if stage == SURCHARGE:
+            time_charge = ledger.total_minor
         if terminal is not None and stage != QUALIFY:
             # A TERMINAL rule prices the stay by itself. Free means free: no
             # time-based charge, no cap, no surcharge, no adjustment. QUALIFY has
@@ -656,10 +749,15 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             applier = RULE_APPLIERS[rule.type]
             if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
                 continue
+            given = (
+                {"time_charge_minor": time_charge}
+                if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]
+                else {}
+            )
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
-                lines = applier(rule, stay, plan, ledger.total_minor)
+                lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:
-                lines = applier(rule, stay, plan)
+                lines = applier(rule, stay, plan, **given)
             for line in _lines_of(rule, lines):
                 ledger.add(line)
 

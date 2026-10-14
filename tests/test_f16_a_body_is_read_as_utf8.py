@@ -32,12 +32,14 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 import threading
 
 import pytest
 
 from fixtures import DOWNTOWN_V2
 from rate_engine.contract import (
+    SCHEMA_VERSION,
     encode,
     run_quote,
     run_tax,
@@ -147,9 +149,35 @@ def test_CONTROL_an_empty_body_and_a_valid_request_answer_as_they_did(port):
         status, raw = _post(port, route, b"")
         assert (status, json.loads(raw)) == (
             400,
-            {"schema_version": 4, "invalid": True,
+            {"schema_version": SCHEMA_VERSION, "invalid": True,
              "error": "request must be an object, got NoneType."},
         ), route
         expected_status, expected = run(document)
         assert expected_status == 200, (route, expected)
         assert _post(port, route, _text(route).encode()) == (200, encode(expected)), route
+
+
+@pytest.mark.guarantee("F16")
+def test_a_body_over_one_megabyte_is_refused_before_it_is_read(port):
+    """A plan is a few kilobytes. A body declaring more than MAX_BODY_BYTES gets a
+    named 413 from the length alone: the test sends the headers and a handful of
+    bytes, and the answer arrives without the server waiting for the rest -- so
+    the body was never read into memory, let alone parsed."""
+    from rate_engine.service import MAX_BODY_BYTES
+
+    with socket.create_connection(("127.0.0.1", port), timeout=10) as raw:
+        raw.sendall(
+            b"POST /v1/validate-plan HTTP/1.1\r\nHost: x\r\n"
+            b"Content-Type: application/json\r\n"
+            + f"Content-Length: {MAX_BODY_BYTES + 1}\r\n\r\n".encode()
+            + b'{"plan": '
+        )
+        answer = b""
+        while b"\r\n\r\n" not in answer or not answer.rstrip().endswith(b"}"):
+            chunk = raw.recv(4096)
+            if not chunk:
+                break
+            answer += chunk
+    head, _, body = answer.partition(b"\r\n\r\n")
+    assert head.startswith(b"HTTP/1.0 413") or head.startswith(b"HTTP/1.1 413"), head
+    assert json.loads(body) == {"error": f"body larger than {MAX_BODY_BYTES} bytes"}

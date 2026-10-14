@@ -94,6 +94,19 @@ CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
 #: two of them together are not reported at all.
 CONFLICT_UNORDERED_ADJUSTMENTS = "CONFLICT_UNORDERED_ADJUSTMENTS"
 
+#: A plan carries a fill rule covering this stay's space class, and the stay
+#: arrived without `occupancy_at_entry_bp`. The rule prices on how full the
+#: garage was when the car came in, and with no figure there is nothing to read:
+#: the stay is refused rather than priced as if the garage were empty or full.
+#: A plan with no fill rule never asks for the figure.
+GAP_NO_OCCUPANCY_AT_ENTRY = "GAP_NO_OCCUPANCY_AT_ENTRY"
+
+#: Two fill rules covering one space class both qualify for a stay. They are two
+#: answers to the same question -- how much more the time costs when the garage
+#: is full -- and `adjust_order` cannot settle it, because an order would charge
+#: both. The plan states one rule per class.
+CONFLICT_OVERLAPPING_FILL_RULES = "CONFLICT_OVERLAPPING_FILL_RULES"
+
 # --- fault codes -----------------------------------------------------------
 #: A registered rule type returned something that is not a list of Lines.
 #:
@@ -112,12 +125,14 @@ GAP_CODES: tuple[str, ...] = (
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_NO_TAX_SET_IN_FORCE,
+    GAP_NO_OCCUPANCY_AT_ENTRY,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_NEGATIVE_TOTAL,
     CONFLICT_UNORDERED_ADJUSTMENTS,
+    CONFLICT_OVERLAPPING_FILL_RULES,
 )
 
 #: Faults are never produced by the validator: it probes a plan against stays and
@@ -142,7 +157,10 @@ class Finding:
     #: interesting, and None on a refusal at quote time, where the caller
     #: already holds the stay. An owner reading "nothing prices this" needs to
     #: know which car it was about: when it came in and when it left (U7g).
-    probe: tuple[str, str] | None = None
+    #: A third element, the probe's `occupancy_at_entry_bp`, only where the plan
+    #: has a fill rule and the probe therefore carried a figure: the same car at
+    #: 79% and at 80% full is two different stays to such a plan.
+    probe: tuple | None = None
 
     def __post_init__(self) -> None:
         if self.code not in ALL_CODES:
@@ -184,6 +202,8 @@ class Finding:
         # Only where it was set, so a refusal at quote time is the bytes it was.
         if self.probe is not None:
             out["probe"] = {"entry_at": self.probe[0], "exit_at": self.probe[1]}
+            if len(self.probe) > 2:
+                out["probe"]["occupancy_at_entry_bp"] = self.probe[2]
         return out
 
 

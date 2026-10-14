@@ -34,6 +34,25 @@ BASIS_POINTS_PER_WHOLE: int = 10_000
 IMPLEMENTED_ROUNDINGS: tuple[str, ...] = ("up", "down", "nearest")
 
 
+def whole_bp(value: object, label: str, low: int, high: int) -> int:
+    """A basis-point field from a plan, or refuse it by name.
+
+    A whole number from `low` to `high`, both included. A bool is refused although
+    Python calls it an int, and so is a string, a float and anything negative: the
+    field is read straight into the arithmetic below, and a value that only LOOKS
+    like a percentage is a fee nobody stated.
+    """
+    from .plan import InvalidPlan
+
+    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        raise InvalidPlan(
+            f"{label} must be a whole number of basis points from {low} to {high} "
+            f"({percent_text(low)} to {percent_text(high)}); got {value!r}. 20% is 2000 "
+            "and 12.5% is 1250."
+        )
+    return value
+
+
 def percent_text(basis_points: int) -> str:
     """2000 -> '20%', 1250 -> '12.5%'. Integer arithmetic; no float is created."""
     whole, fraction = divmod(basis_points, 100)
