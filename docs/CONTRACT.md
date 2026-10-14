@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 5. One contract, five surfaces: `POST /v1/quote`, `POST
+Version 6. One contract, five surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, `POST /v1/validate-tax-sets`, `POST /v1/tax`, and the
 `rate-engine` CLI, which carries the same four operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
@@ -10,7 +10,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **5**
+`schema_version` **6**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -24,6 +24,21 @@ safe: **a key this engine does not understand is REJECTED and named, never
 ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
+
+### What changed in version 6
+
+**A fill rule states two answers the owner gives, and a rule without them does
+not load** -- that is a plan that loaded on version 5 and does not load here, so
+the number moved. `raises_specials` says whether a charge a special priced is
+raised too; `raises_vip_extra` says whether the extra for the stay's space class
+is raised by the same percent. Both are required, each `yes` or `no` -- words,
+because no bool appears anywhere in a plan (see "Money") -- and there is no
+default: the engine does not decide for the owner what the rule
+raises (F54). Plans with no fill rule load and price exactly as on version 5.
+
+**What a caller must do.** Add both answers to every fill rule. A consumer
+reading breakdown lines meets two new line codes, `fill_level.special_not_raised`
+and `fill_level.extra_raised`; no finding code was added.
 
 ### What changed in version 5
 
@@ -476,6 +491,7 @@ never failed is a decoration.
 | **F51** | A fill rule prices on how full the garage was AT ENTRY. It applies at its threshold and above and not one basis point below; it raises the charge for the time -- the total after the base and the caps -- and nothing else; its line says how full the garage was and by how much the charge rose, and below the threshold says it was not raised. A stay in a class it covers with no figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices the same with or without the figure. Two fill rules applying to one stay are CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a percent or a figure out of range, not a whole number, or a bool is refused by name. |
 | **F52** | A VIP surcharge may be a percent of the stay's time-based charge -- the total after the base and the caps -- rounded the way the rule says, and never of another surcharge, so two surcharges total the same in any order. The flat form prices exactly as it did. A rule stating both forms, or a percent out of range, is refused by name. |
 | **F53** | `validate-plan` probes the occupancy axis of every fill rule: one basis point below each threshold, on it, and at 100% full, across every other axis, so two fill rules colliding only when the garage is full are reported before a stay is refused for it, and the finding names the figure that found it. A plan with no fill rule is probed exactly as before, and a missing figure is not reported as a gap in the plan. |
+| **F54** | A fill rule states the owner's two answers, `raises_specials` and `raises_vip_extra`, each "yes" or "no", and a rule that omits either or states anything else does not load, naming the field. `raises_specials` no leaves a charge a special priced unraised and says so; yes raises it. `raises_vip_extra` yes raises the space-class extra by the same percent on its own line; no leaves it as set. All four combinations, on each side of the threshold, price to the cent worked by hand, and flipping one answer moves the fee by exactly what that answer governs. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
@@ -511,11 +527,25 @@ came in when the garage was 70% full keeps that price however full the garage is
 when it leaves. The rule applies AT the threshold and above.
 
 **It raises the charge for the TIME**: the running total when SURCHARGE begins,
-after whichever base priced the stay -- the time-based rate or a special -- and
-after the caps. Not a surcharge, and not another adjustment. A VIP surcharge is
-added on top and is not raised. When another ADJUST rule also applies,
+after whichever base priced the stay and after the caps. When another ADJUST rule
+also applies,
 `adjust_order` states which runs first, as for any two adjustments: a discount
 taken after the increase is a different fee from one taken before.
+
+**The owner's two answers** (version 6), both required, `yes` or `no`, no default:
+
+- `raises_specials` -- `yes`: a charge a special priced is raised like any
+  other. `no`: it is not, and the line says so: "Early bird special: fill rule
+  not applied (garage was 84% full at entry, at or above 80%; this plan does not
+  raise specials)". Under `cheapest_wins` the stay is still priced both ways, so
+  the driver pays the cheaper of the unraised special and the raised time-based
+  rate.
+- `raises_vip_extra` -- `yes`: what the stay's space-class surcharge added, flat
+  or percent, is raised by the same percent, on its own line: "Space class 'vip'
+  extra +20% on 5.00 USD (garage was 84% full at entry) -- 1.00 USD added".
+  `no`: the extra stays as set.
+
+Each raised line is rounded the rule's own way, on its own.
 
 **Its lines**, in the breakdown like every other: "Garage was 84% full at entry (at
 or above 80%): time-based charge +20% on 30.00 USD -- 6.00 USD added", and below

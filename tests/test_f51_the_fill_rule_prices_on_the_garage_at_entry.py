@@ -41,6 +41,9 @@ FILL = {
     "id": "busy", "type": "fill_level", "stage": "ADJUST",
     "space_classes": ["standard", "vip"],
     "threshold_bp": 8000, "percent_bp": 2000, "rounding": "up",
+    # A1's behaviour, so every test here means what it meant; the four
+    # combinations are F54's.
+    "raises_specials": "yes", "raises_vip_extra": "no",
 }
 
 PLAN = {

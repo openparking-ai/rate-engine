@@ -146,8 +146,16 @@ NEEDS_OCCUPANCY = "needs_occupancy_at_entry"
 #: one. Reported as CONFLICT_OVERLAPPING_FILL_RULES, whatever `adjust_order` says.
 ONE_PER_STAY = "one_per_stay"
 
+#: A rule of this type is also told HOW the time was priced on this pass:
+#: `priced_by_special`, the special that priced it (None when the time-based rate
+#: did), and `extras_minor`, what SURCHARGE added for the stay's space class. The
+#: fill rule needs both to honour the owner's two answers -- raise specials or
+#: not, raise the VIP extra or not -- and no other type reads them.
+TOLD_THE_PASS = "told_the_pass"
+
 TRAITS: tuple[str, ...] = (
     TERMINAL, SPEAKS_UNQUALIFIED, ON_THE_TIME_CHARGE, NEEDS_OCCUPANCY, ONE_PER_STAY,
+    TOLD_THE_PASS,
 )
 
 #: type name -> the traits it declared. Every registered type has an entry, so a

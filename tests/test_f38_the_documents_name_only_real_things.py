@@ -123,6 +123,7 @@ def _owned_names() -> dict[str, set[str]]:
     values |= set(daily_max.DAY_BOUNDARIES) | set(weekly_max.WEEK_BOUNDARIES)
     values |= set(TAX_ROUNDINGS)
     values |= set(fill_level.ROUNDINGS) | set(space_surcharge.ROUNDINGS)
+    values |= set(fill_level.ANSWERS)
 
     # The tax functions, their keyword arguments, and the fields a tax set and a
     # tax rule carry -- read from the module, so a renamed one turns this red.

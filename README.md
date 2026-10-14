@@ -147,7 +147,8 @@ drifts.
   more." It reads how full the garage was **when the car came in**, a figure the
   caller hands in, so the cars already inside keep the price they came in on. A
   stay with no figure, under a plan that has such a rule, is refused rather than
-  priced as if the garage were empty.
+  priced as if the garage were empty. Whether it also raises a special and the
+  VIP extra is the owner's answer, stated on the rule; there is no default.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
 - **When two rules qualify at once, what that MEANS depends on the stage.** Two

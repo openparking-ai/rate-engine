@@ -192,8 +192,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 5",
-        "SCHEMA_VERSION = 6  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 6",
+        "SCHEMA_VERSION = 7  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -1095,9 +1095,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F51/running-total-raised": (
         "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
         "rules/fill_level.py",
-        '    added = percent_of_minor(time_charge_minor, percent_bp, rule.params["rounding"])',
-        '    added = percent_of_minor(running_total_minor, percent_bp, rule.params["rounding"])'
-        "  # PLANTED",
+        "        added, measure = _raised(rule, time_charge_minor, plan.currency)",
+        "        added, measure = _raised(rule, running_total_minor, plan.currency)  # PLANTED",
         "the fill rule raises the running total, so a VIP surcharge is raised with the time",
     ),
     "F51/overlap-priced": (
@@ -1172,6 +1171,78 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "                found_by += (stay.occupancy_at_entry_bp,)",
         "a fill-rule finding names the car's entry and exit but not how full the garage "
         "was, which is the only thing that made it collide",
+    ),
+    # The owner's two answers. "Omitted" is planted as a DEFAULT, which is the
+    # defect: a plan that never answered priced as if it had. "Flipped" is planted
+    # as the answer ignored both ways, and the engine forgetting who priced the
+    # time, and the extra measured as the whole running total.
+    "F54/specials-defaulted": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        '    raw = {"raises_specials": "yes", **raw}  # PLANTED: an unanswered rule defaults\n'
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        "a fill rule that never said whether it raises specials loads and raises them",
+    ),
+    "F54/vip-extra-defaulted": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        '    raw = {"raises_vip_extra": "no", **raw}  # PLANTED: an unanswered rule defaults\n'
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        "a fill rule that never said whether it raises the VIP extra loads and does not",
+    ),
+    "F54/answer-not-a-word": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "        if raw[switch] not in ANSWERS:",
+        "        if False:  # PLANTED: any value is taken as an answer",
+        "an answer that is neither yes nor no -- 1, \"true\", null -- loads and is read "
+        "as no",
+    ),
+    "F54/specials-always-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if priced_by_special is not None and not rule.params["raises_specials"]:',
+        "    if False:  # PLANTED: specials raised whatever the owner said",
+        "a charge a special priced is raised although the owner said specials are not",
+    ),
+    "F54/specials-never-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if priced_by_special is not None and not rule.params["raises_specials"]:',
+        "    if priced_by_special is not None:  # PLANTED: specials never raised",
+        "a charge a special priced is left unraised although the owner said raise it",
+    ),
+    "F54/special-not-told": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "engine.py",
+        "        _winner(plan, stay, QUALIFY, qualified_at_qualify)"
+        " if qualified_at_qualify else None",
+        "        None  # PLANTED: the fill rule is never told a special priced the time",
+        "the engine forgets that a special priced the time, so 'do not raise specials' "
+        "raises them anyway",
+    ),
+    "F54/vip-extra-ignored": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if extras_minor and rule.params["raises_vip_extra"]:',
+        "    if False:  # PLANTED: the extra is never raised",
+        "the VIP extra stays as set although the owner said raise it",
+    ),
+    "F54/vip-extra-always-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if extras_minor and rule.params["raises_vip_extra"]:',
+        "    if extras_minor:  # PLANTED: the extra raised whatever the owner said",
+        "the VIP extra is raised although the owner said leave it",
+    ),
+    "F54/extra-is-the-whole-total": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "engine.py",
+        "            extras = ledger.total_minor - time_charge",
+        "            extras = ledger.total_minor  # PLANTED: the time counted as extra",
+        "'raise the VIP extra' raises the whole running total, so the time is raised twice",
     ),
 }
 

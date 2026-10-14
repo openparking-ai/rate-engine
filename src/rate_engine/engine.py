@@ -51,6 +51,7 @@ from .rules import (
     RULE_TRAITS,
     SPEAKS_UNQUALIFIED,
     TERMINAL,
+    TOLD_THE_PASS,
 )
 from .rules import daily_max as daily_max_rule
 from .rules import fill_level as fill_level_rule
@@ -685,10 +686,18 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
     #: and the fill rule are taken of this, never of the running total, so they
     #: see the same number whatever else runs beside them. Set below.
     time_charge = None
+    #: The special that priced the time on this pass, if one did, and what
+    #: SURCHARGE added. Told to a rule that declares `TOLD_THE_PASS`.
+    priced_by_special = (
+        _winner(plan, stay, QUALIFY, qualified_at_qualify) if qualified_at_qualify else None
+    )
+    extras = 0
 
     for stage in STAGES:
         if stage == SURCHARGE:
             time_charge = ledger.total_minor
+        if stage == ADJUST:
+            extras = ledger.total_minor - time_charge
         if terminal is not None and stage != QUALIFY:
             # A TERMINAL rule prices the stay by itself. Free means free: no
             # time-based charge, no cap, no surcharge, no adjustment. QUALIFY has
@@ -754,6 +763,8 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
                 if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]
                 else {}
             )
+            if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
+                given.update(priced_by_special=priced_by_special, extras_minor=extras)
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:

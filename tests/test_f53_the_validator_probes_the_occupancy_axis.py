@@ -46,7 +46,8 @@ BASE = {
 def _fill(rule_id: str, threshold_bp: int, classes=("standard",)) -> dict:
     return {"id": rule_id, "type": "fill_level", "stage": "ADJUST",
             "space_classes": list(classes), "threshold_bp": threshold_bp,
-            "percent_bp": 1000, "rounding": "up"}
+            "percent_bp": 1000, "rounding": "up",
+            "raises_specials": "no", "raises_vip_extra": "no"}
 
 
 def _plan(*rules, **changes) -> dict:

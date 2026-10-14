@@ -37,6 +37,7 @@ FILL_PLAN = plan_with(adjust_order=None)
 FILL_PLAN["rules"].append({
     "id": "busy", "type": "fill_level", "stage": "ADJUST", "space_classes": ["standard"],
     "threshold_bp": 8000, "percent_bp": 2000, "rounding": "up",
+    "raises_specials": "no", "raises_vip_extra": "no",
 })
 
 

@@ -94,6 +94,15 @@ F52/uncapped-charge-taken
 F53/axis-missing
 F53/no-figure-probed
 F53/probe-figure-dropped
+F54/answer-not-a-word
+F54/extra-is-the-whole-total
+F54/special-not-told
+F54/specials-always-raised
+F54/specials-defaulted
+F54/specials-never-raised
+F54/vip-extra-always-raised
+F54/vip-extra-defaulted
+F54/vip-extra-ignored
 F6
 F6b/attribute-form
 F6b/imported-name-form

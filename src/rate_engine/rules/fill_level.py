@@ -10,11 +10,25 @@ engine does not count anything, it reads the figure it is handed.
 **It runs at ADJUST**, the stage stages.py has always described as the place for
 occupancy-driven multipliers, and **it raises the charge for the TIME**: the
 running total when SURCHARGE began, after whichever base priced the stay and after
-the caps (`ON_THE_TIME_CHARGE`). Not the surcharge and not another adjustment --
-"the time-based charge is Y% more" is the owner's sentence, and a VIP surcharge
-is not time. When another ADJUST rule also qualifies the plan states the order in
-`adjust_order`, as for any two adjustments: a discount taken after the increase
-is a different fee from one taken before.
+the caps (`ON_THE_TIME_CHARGE`). Not another adjustment -- when another ADJUST
+rule also qualifies the plan states the order in `adjust_order`, as for any two
+adjustments: a discount taken after the increase is a different fee from one
+taken before.
+
+**Two answers the OWNER gives, and the engine assumes neither** (2026-10-14: the
+owner decides, at rate setup for dynamic pricing). Both are required, answered
+`"yes"` or `"no"`, with no default, and a plan that omits either does not load.
+They are words and not JSON booleans because no bool appears anywhere in a plan
+(F4): a bool is an int in Python, one cent away from money.
+
+* `raises_specials` -- when a special priced the time (a window with a `flat` or
+  `rate` effect that qualified), is that charge raised too? `no`: it is not,
+  and a line says so in plain words. Under `cheapest_wins` the stay is still
+  priced both ways, so a car a special can price pays the cheaper of the unraised
+  special and the raised time-based rate.
+* `raises_vip_extra` -- is what SURCHARGE added for the stay's space class (flat
+  or percent) raised by the same percent? `yes`: it gets its own line, rounded
+  the rule's way. `no`: the extra stays as set.
 
 `threshold_bp` and the stay's figure are basis points of full: 80% is 8000. The
 rule qualifies AT the threshold and above. A stay with no figure, in a class this
@@ -34,12 +48,17 @@ from . import (
     ON_THE_TIME_CHARGE,
     ONE_PER_STAY,
     SPEAKS_UNQUALIFIED,
+    TOLD_THE_PASS,
     Rule,
     common_fields,
     register,
 )
 
-EXTRA = {"threshold_bp", "percent_bp", "rounding"}
+#: The owner's two answers. Required, and one of ANSWERS -- nothing else is one.
+SWITCHES: tuple[str, ...] = ("raises_specials", "raises_vip_extra")
+ANSWERS: tuple[str, ...] = ("yes", "no")
+
+EXTRA = {"threshold_bp", "percent_bp", "rounding", *SWITCHES}
 
 #: Which way a fraction of a minor unit goes -- the set an `adjust` effect may
 #: state, for the same reason: this is an adjustment of the fee.
@@ -53,6 +72,10 @@ MAX_INCREASE_BP = 10_000
 
 APPLIED = "fill_level.applied"
 NOT_APPLIED = "fill_level.not_applied"
+#: Qualified, but a special priced the time and the plan does not raise specials.
+SPECIAL_NOT_RAISED = "fill_level.special_not_raised"
+#: The extra for the stay's space class, raised by the same percent.
+EXTRA_RAISED = "fill_level.extra_raised"
 
 
 def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
@@ -66,10 +89,18 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
             "There is no default: a percentage of a fee lands on a fraction of a cent, "
             "and who keeps it is the owner's to say."
         )
+    for switch in SWITCHES:
+        if raw[switch] not in ANSWERS:
+            raise InvalidPlan(
+                f"{where}.{switch} must be \"yes\" or \"no\"; got {raw[switch]!r}. It is "
+                "the owner's answer and there is no default: the engine does not "
+                "decide for the owner what the fill rule raises."
+            )
     params = {
         "threshold_bp": whole_bp(raw["threshold_bp"], f"{where}.threshold_bp", 0, FULL_BP),
         "percent_bp": whole_bp(raw["percent_bp"], f"{where}.percent_bp", 1, MAX_INCREASE_BP),
         "rounding": rounding,
+        **{switch: raw[switch] == "yes" for switch in SWITCHES},
     }
     return Rule(
         id=rule_id, type="fill_level", stage=ADJUST,
@@ -86,10 +117,26 @@ def qualifies(rule: Rule, stay, plan) -> bool:
     )
 
 
+def _raised(rule: Rule, amount_minor: int, currency: str) -> tuple[int, str]:
+    """The rule's percent of an amount, and the words for it. One place, so the
+    time line and the extra line cannot round two different ways."""
+    from ..money import format_minor
+
+    percent_bp = rule.params["percent_bp"]
+    added = percent_of_minor(amount_minor, percent_bp, rule.params["rounding"])
+    measure = f"+{percent_text(percent_bp)} on {format_minor(amount_minor, currency)}"
+    if was_rounded(amount_minor, percent_bp, added):
+        measure += f" (rounded {rule.params['rounding']})"
+    return added, measure
+
+
 def apply(
     rule: Rule, stay, plan, running_total_minor: int | None = None,
-    time_charge_minor: int | None = None,
+    time_charge_minor: int | None = None, priced_by_special=None, extras_minor: int = 0,
 ) -> list[Line]:
+    """`priced_by_special` is the special that priced the time on this pass, or
+    None when the time-based rate did; `extras_minor` is what SURCHARGE added for
+    this stay. Both are handed in by the engine with the time charge."""
     from ..money import format_minor
     from ..plan import InvalidPlan
 
@@ -117,27 +164,56 @@ def apply(
                 delta_minor=0,
             )
         ]
-    percent_bp = rule.params["percent_bp"]
-    added = percent_of_minor(time_charge_minor, percent_bp, rule.params["rounding"])
-    measure = (
-        f"+{percent_text(percent_bp)} on {format_minor(time_charge_minor, plan.currency)}"
-    )
-    if was_rounded(time_charge_minor, percent_bp, added):
-        measure += f" (rounded {rule.params['rounding']})"
-    return [
-        Line(
-            code=APPLIED,
-            rule_id=rule.id,
-            text=(
-                f"{full} (at or above {percent_text(threshold)}): time-based charge "
-                f"{measure} -- {format_minor(added, plan.currency)} added"
-            ),
-            delta_minor=added,
+
+    lines: list[Line] = []
+    if priced_by_special is not None and not rule.params["raises_specials"]:
+        lines.append(
+            Line(
+                code=SPECIAL_NOT_RAISED,
+                rule_id=rule.id,
+                text=(
+                    f"{priced_by_special.display_name} special: fill rule not applied "
+                    f"(garage was {percent_text(figure)} full at entry, at or above "
+                    f"{percent_text(threshold)}; this plan does not raise specials)"
+                ),
+                delta_minor=0,
+            )
         )
-    ]
+    else:
+        added, measure = _raised(rule, time_charge_minor, plan.currency)
+        lines.append(
+            Line(
+                code=APPLIED,
+                rule_id=rule.id,
+                text=(
+                    f"{full} (at or above {percent_text(threshold)}): time-based charge "
+                    f"{measure} -- {format_minor(added, plan.currency)} added"
+                ),
+                delta_minor=added,
+            )
+        )
+
+    if extras_minor and rule.params["raises_vip_extra"]:
+        added, measure = _raised(rule, extras_minor, plan.currency)
+        lines.append(
+            Line(
+                code=EXTRA_RAISED,
+                rule_id=rule.id,
+                text=(
+                    f"Space class {stay.space_class!r} extra {measure} (garage was "
+                    f"{percent_text(figure)} full at entry) -- "
+                    f"{format_minor(added, plan.currency)} added"
+                ),
+                delta_minor=added,
+            )
+        )
+    return lines
 
 
 register(
     "fill_level", ADJUST, build, apply,
-    traits=(SPEAKS_UNQUALIFIED, ON_THE_TIME_CHARGE, NEEDS_OCCUPANCY, ONE_PER_STAY),
+    traits=(
+        SPEAKS_UNQUALIFIED, ON_THE_TIME_CHARGE, NEEDS_OCCUPANCY, ONE_PER_STAY,
+        TOLD_THE_PASS,
+    ),
 )

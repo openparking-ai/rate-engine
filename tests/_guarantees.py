@@ -366,6 +366,16 @@ GUARANTEES: dict[str, str] = {
         "it. A plan with no fill rule is probed exactly as before, and a missing "
         "figure is not reported as a gap in the plan."
     ),
+    "F54": (
+        "A fill rule states the owner's two answers, `raises_specials` and "
+        "`raises_vip_extra`, each \"yes\" or \"no\", and a rule that omits either or "
+        "states anything else does not load, naming the field. `raises_specials` "
+        "no leaves a charge a special priced unraised and says so; yes raises it. "
+        "`raises_vip_extra` yes raises the space-class extra by the same percent on "
+        "its own line; no leaves it as set. All four combinations, on each side of "
+        "the threshold, price to the cent worked by hand, and flipping one answer "
+        "moves the fee by exactly what that answer governs."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

@@ -49,7 +49,12 @@ from .validator import undecided, validate_plan
 #: request may now carry, and `space_surcharge` gained a percent form. Every plan
 #: that loaded on 4 loads on 5 and every stay it priced is priced the same, with
 #: or without the new field; a consumer routing on codes meets two it has not seen.
-SCHEMA_VERSION = 5
+#:
+#: **6 in the fill rule's follow-up: a plan that loaded on 5 may not load.** A
+#: `fill_level` rule now REQUIRES the owner's two answers, `raises_specials` and
+#: `raises_vip_extra`, and a rule written without them is refused by name. Plans
+#: with no fill rule load and price exactly as on 5.
+SCHEMA_VERSION = 6
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 
