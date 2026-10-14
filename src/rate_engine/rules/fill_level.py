@@ -10,10 +10,11 @@ engine does not count anything, it reads the figure it is handed.
 **It runs at ADJUST**, the stage stages.py has always described as the place for
 occupancy-driven multipliers, and **it raises the charge for the TIME**: the
 running total when SURCHARGE began, after whichever base priced the stay and after
-the caps (`ON_THE_TIME_CHARGE`). Not another adjustment -- when another ADJUST
-rule also qualifies the plan states the order in `adjust_order`, as for any two
-adjustments: a discount taken after the increase is a different fee from one
-taken before.
+the caps (`ON_THE_TIME_CHARGE`), **less any discount taken before it** (10-14
+20:25, "always the cheaper"): 10.00 with 20% or 2.00 off at a +20% fill rule is
+8.00 + 1.60 = 9.60. A discount is set against the time charge first, then the
+extra. So the plan loader holds every fill rule LAST in `adjust_order`: raised
+first and discounted after, a flat discount would cost the customer more.
 
 **Two answers the OWNER gives, and the engine assumes neither** (2026-10-14: the
 owner decides, at rate setup for dynamic pricing). Both are required, answered
@@ -133,10 +134,16 @@ def _raised(rule: Rule, amount_minor: int, currency: str) -> tuple[int, str]:
 def apply(
     rule: Rule, stay, plan, running_total_minor: int | None = None,
     time_charge_minor: int | None = None, priced_by_special=None, extras_minor: int = 0,
+    discounted_minor: int = 0,
 ) -> list[Line]:
     """`priced_by_special` is the special that priced the time on this pass, or
     None when the time-based rate did; `extras_minor` is what SURCHARGE added for
-    this stay. Both are handed in by the engine with the time charge."""
+    this stay. Both are handed in by the engine with the time charge.
+
+    `time_charge_minor` and `extras_minor` are what is LEFT of each after the
+    discounts that ran before this rule (`discounted_minor` in all): the fill
+    rule's percent is taken of what the customer still pays, never of the price
+    before the discount (10-14 20:25, "always the cheaper")."""
     from ..money import format_minor
     from ..plan import InvalidPlan
 
@@ -181,12 +188,13 @@ def apply(
         )
     else:
         added, measure = _raised(rule, time_charge_minor, plan.currency)
+        what = "time-based charge after discounts" if discounted_minor else "time-based charge"
         lines.append(
             Line(
                 code=APPLIED,
                 rule_id=rule.id,
                 text=(
-                    f"{full} (at or above {percent_text(threshold)}): time-based charge "
+                    f"{full} (at or above {percent_text(threshold)}): {what} "
                     f"{measure} -- {format_minor(added, plan.currency)} added"
                 ),
                 delta_minor=added,
@@ -200,7 +208,8 @@ def apply(
                 code=EXTRA_RAISED,
                 rule_id=rule.id,
                 text=(
-                    f"Space class {stay.space_class!r} extra {measure} (garage was "
+                    f"Space class {stay.space_class!r} extra"
+                    f"{' after discounts' if discounted_minor else ''} {measure} (garage was "
                     f"{percent_text(figure)} full at entry) -- "
                     f"{format_minor(added, plan.currency)} added"
                 ),

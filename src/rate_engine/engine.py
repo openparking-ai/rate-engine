@@ -754,6 +754,15 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
                         ledger.add(line)
             continue
 
+        #: What the discounts at ADJUST have taken so far on this pass. The fill
+        #: rule raises what is LEFT after them (10-14 20:25, "always the
+        #: cheaper"): a discount comes off first, and the fill rule's percent is
+        #: taken of the time charge that remains. A discount is set against the
+        #: time charge first and only then against the extra -- of the ways to
+        #: split it, the one the customer pays least by. The plan loader holds
+        #: every fill rule last in `adjust_order`, so every discount that applies
+        #: has run before it.
+        taken = 0
         for rule in _in_application_order(plan, stage, plan.rules_for_stage(stage)):
             applier = RULE_APPLIERS[rule.type]
             if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
@@ -765,12 +774,20 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             )
             if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
                 given.update(priced_by_special=priced_by_special, extras_minor=extras)
+                if stage == ADJUST:
+                    given.update(
+                        time_charge_minor=max(0, time_charge - taken),
+                        extras_minor=max(0, extras - max(0, taken - time_charge)),
+                        discounted_minor=taken,
+                    )
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:
                 lines = applier(rule, stay, plan, **given)
             for line in _lines_of(rule, lines):
                 ledger.add(line)
+                if stage == ADJUST and line.delta_minor < 0:
+                    taken += -line.delta_minor
 
     return ledger
 

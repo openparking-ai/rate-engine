@@ -342,7 +342,9 @@ GUARANTEES: dict[str, str] = {
     "F51": (
         "A fill rule prices on how full the garage was AT ENTRY. It applies at its "
         "threshold and above and not one basis point below; it raises the charge for "
-        "the time -- the total after the base and the caps -- and nothing else; its "
+        "the time -- the total after the base and the caps, less any discount taken "
+        "before it -- and nothing else, and a plan ordering it before another ADJUST "
+        "rule does not load; its "
         "line says how full the garage was and by how much the charge rose, and below "
         "the threshold says it was not raised. A stay in a class it covers with no "
         "figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices "

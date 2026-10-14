@@ -169,22 +169,93 @@ def test_it_raises_the_time_charge_and_NOT_the_vip_surcharge():
 
 
 @pytest.mark.guarantee("F51")
-def test_with_a_percent_adjustment_the_plan_states_the_order_and_the_order_decides():
-    """Members 10% off and the fill rule both apply, so `adjust_order` is required
-    and it changes the money: busy first is 16.00 + 3.20 = 19.20, less 1.92 =
-    17.28; members first is 16.00 - 1.60 = 14.40, then +3.20 of the TIME charge
-    = 17.60."""
+def test_with_a_percent_discount_it_comes_off_first_and_the_fill_rule_raises_what_is_left():
+    """Members 10% off and the fill rule both apply, so `adjust_order` is required.
+    His rule, 10-14 20:25, "always the cheaper": the discount comes off first and
+    the fill rule raises what is left -- 16.00 - 1.60 = 14.40, then +20% of 14.40,
+    2.88: 17.28. Before the fix it raised the time charge before the discount,
+    16.00 - 1.60 + 3.20 = 17.60 (gate finding F1). The fill rule anywhere but last
+    is refused by name."""
     unordered = _plan(MEMBERS)
     with pytest.raises(Refused) as caught:
         _quote(unordered, _at(THREE_HOURS, 9000))
     assert [f.code for f in caught.value.findings] == [CONFLICT_UNORDERED_ADJUSTMENTS]
 
-    busy_first = _plan(MEMBERS, adjust_order=["busy", "members"])
     members_first = _plan(MEMBERS, adjust_order=["members", "busy"])
-    assert _quote(busy_first, _at(THREE_HOURS, 9000)).fee_minor == 1728
-    assert _quote(members_first, _at(THREE_HOURS, 9000)).fee_minor == 1760
-    # Below the threshold only the discount applies, whatever the order.
-    assert _quote(busy_first, _at(THREE_HOURS, 7000)).fee_minor == 1440
+    result = _quote(members_first, _at(THREE_HOURS, 9000))
+    assert result.fee_minor == 1728
+    assert _lines(result, "fill_level.applied")[0].delta_minor == 288
+    with pytest.raises(InvalidPlan, match="fill rule"):
+        load_plan(_plan(MEMBERS, adjust_order=["busy", "members"]))
+    # Below the threshold only the discount applies.
+    assert _quote(members_first, _at(THREE_HOURS, 7000)).fee_minor == 1440
+
+
+#: The gate's F1 case: 10.00 for the hour, a 20% or a 2.00 discount, 90% full, +20%.
+GATE_HOURLY = {"id": "hourly", "type": "increment", "stage": "ACCUMULATE",
+               "space_classes": ["standard", "vip"], "first_period_minutes": 60,
+               "first_period_minor": 1000, "repeat_period_minutes": 60,
+               "repeat_period_minor": 1000, "rounding": "ceil", "max_duration_minutes": None}
+ONE_HOUR = 60
+#: 2.00 off a 10.00 hour, as a percent and as a flat amount.
+TWO_DISCOUNTS = [{"kind": "percent", "percent_bp": 2000}, {"kind": "fixed", "minor": 200}]
+
+
+def _discount(amount: dict) -> dict:
+    rule = copy.deepcopy(MEMBERS)
+    rule["id"], rule["label"] = "off", "Evening discount"
+    rule["effect"]["amount"] = amount
+    return rule
+
+
+def _gate_plan(amount: dict, *extra, fill=None) -> dict:
+    document = _plan(_discount(amount), *extra, adjust_order=["off", "busy"])
+    document["rules"][0] = copy.deepcopy(GATE_HOURLY)
+    if fill:
+        document["rules"][1].update(fill)
+    return document
+
+
+@pytest.mark.guarantee("F51")
+@pytest.mark.parametrize("amount", TWO_DISCOUNTS)
+def test_the_gates_case_a_discount_then_the_fill_rule_on_what_is_left_is_960(amount):
+    """F1: 10.00, 2.00 off (20% or flat), 90% full, +20%: 8.00 + 1.60 = 9.60, never
+    10.00. The line says what was raised: the 8.00 left after the discount."""
+    result = _quote(_gate_plan(amount), _at(ONE_HOUR, 9000))
+    assert result.fee_minor == 960
+    assert result.fee_minor == sum(ln.delta_minor for ln in result.breakdown.lines)
+    line = _lines(result, "fill_level.applied")[0]
+    assert line.delta_minor == 160
+    assert "after discounts +20% on 8.00 USD" in line.text, line.text
+    # The control: with no discount the fill rule raises the whole 10.00, and the
+    # line does not speak of a discount.
+    plain = _quote(_plan(adjust_order=None) | {"rules": [GATE_HOURLY, FILL]}, _at(ONE_HOUR, 9000))
+    assert plain.fee_minor == 1200
+    assert "after discounts" not in _lines(plain, "fill_level.applied")[0].text
+
+
+@pytest.mark.guarantee("F51")
+@pytest.mark.parametrize("amount", TWO_DISCOUNTS)
+def test_the_fill_rule_before_a_discount_is_refused_by_name(amount):
+    """Raised first and discounted after, a flat 2.00 would cost 10.00 instead of
+    9.60. No plan may state it."""
+    document = _gate_plan(amount)
+    document["adjust_order"] = ["busy", "off"]
+    with pytest.raises(InvalidPlan, match=r"adjust_order must put the fill rule \(busy\)"):
+        load_plan(document)
+
+
+@pytest.mark.guarantee("F51")
+def test_a_discount_larger_than_the_time_charge_comes_off_the_extra_and_the_rest_is_raised():
+    """VIP 5.00 extra, raised by the fill rule; 12.00 off. 15.00 - 12.00 = 3.00 is
+    all extra (the discount takes the 10.00 of time first), so the time is raised
+    by nothing and the extra by 20% of 3.00: 3.60. Raised first it would be
+    18.00 - 12.00 = 6.00."""
+    document = _gate_plan({"kind": "fixed", "minor": 1200}, VIP, fill={"raises_vip_extra": "yes"})
+    result = _quote(document, _at(ONE_HOUR, 9000, "vip"))
+    assert result.fee_minor == 360
+    assert [ln.delta_minor for ln in _lines(result, "fill_level.extra_raised")] == [60]
+    assert [ln.delta_minor for ln in _lines(result, "fill_level.applied")] == [0]
 
 
 @pytest.mark.guarantee("F51")
@@ -223,7 +294,7 @@ def test_the_rounding_is_the_rules_and_the_line_says_so():
 
 @pytest.mark.guarantee("F51")
 def test_the_breakdown_is_the_fee_with_the_rule_applied():
-    result = _quote(_plan(CAP, VIP, MEMBERS, adjust_order=["busy", "members"]),
+    result = _quote(_plan(CAP, VIP, MEMBERS, adjust_order=["members", "busy"]),
                     _at(THIRTEEN_HOURS, 9500, "vip"))
     assert result.fee_minor == sum(ln.delta_minor for ln in result.breakdown.lines)
 

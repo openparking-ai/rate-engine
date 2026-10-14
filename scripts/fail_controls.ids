@@ -82,10 +82,13 @@ F50/why-not-says-applied
 F50/why-not-unqualified-left-out
 F51/at-threshold-not-applied
 F51/below-threshold-applied
+F51/extra-before-discount
 F51/figure-unchecked
+F51/fill-before-discount-loads
 F51/no-figure-guessed
 F51/out-of-range-accepted
 F51/overlap-priced
+F51/raised-before-discount
 F51/running-total-raised
 F51/uncapped-charge-raised
 F52/rounding-ignored

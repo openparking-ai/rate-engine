@@ -356,6 +356,18 @@ def load_plan(document: object, where: str = "plan") -> Plan:
                 + (f"Not an ADJUST rule in this plan: {', '.join(extra)}. " if extra else "")
                 + "A rule left out of the order would take a silent position in it."
             )
+        # The fill rule raises what is left after every discount (10-14 20:25,
+        # "always the cheaper"): raising first and discounting after charges the
+        # customer more on a flat discount, so no plan may state it.
+        fills = [r.id for r in rules if r.type == "fill_level"]
+        tail = adjust_order[len(adjust_order) - len(fills):] if fills else []
+        if fills and sorted(tail) != sorted(fills):
+            raise InvalidPlan(
+                f"{where}.adjust_order must put the fill rule ({', '.join(sorted(fills))}) "
+                "after every other ADJUST rule. It raises what is left after the "
+                "discounts, which is always the cheaper way for the customer; raised "
+                "first and discounted after, a flat discount would cost them more."
+            )
 
     decisions = document["decisions"]
     if not isinstance(decisions, list):

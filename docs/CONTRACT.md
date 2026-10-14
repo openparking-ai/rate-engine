@@ -36,7 +36,14 @@ because no bool appears anywhere in a plan (see "Money") -- and there is no
 default: the engine does not decide for the owner what the rule
 raises (F54). Plans with no fill rule load and price exactly as on version 5.
 
-**What a caller must do.** Add both answers to every fill rule. A consumer
+**A fill rule raises what is left after a discount, and comes last.** Where a
+discount and a fill rule both apply, the discount comes off first and the fill
+rule's percent is taken of what remains (F51); a plan whose `adjust_order` puts a
+fill rule before another ADJUST rule does not load. Version 6 had not been
+released when this was settled, so it is part of version 6, not a version 7.
+
+**What a caller must do.** Add both answers to every fill rule, and list every
+fill rule last in `adjust_order`. A consumer
 reading breakdown lines meets two new line codes, `fill_level.special_not_raised`
 and `fill_level.extra_raised`; no finding code was added.
 
@@ -488,7 +495,7 @@ never failed is a decoration.
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
 | **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
 | **F50** | Under `cheapest_wins` a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` still lets the special replace the time-based charge, and a stay the time-based rate alone cannot price is priced by the special. When the time-based rate is charged, every other special still has its line, as on the special's way: its own reason, or that it qualified and a cheaper special was compared instead -- never that one was applied. |
-| **F51** | A fill rule prices on how full the garage was AT ENTRY. It applies at its threshold and above and not one basis point below; it raises the charge for the time -- the total after the base and the caps -- and nothing else; its line says how full the garage was and by how much the charge rose, and below the threshold says it was not raised. A stay in a class it covers with no figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices the same with or without the figure. Two fill rules applying to one stay are CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a percent or a figure out of range, not a whole number, or a bool is refused by name. |
+| **F51** | A fill rule prices on how full the garage was AT ENTRY. It applies at its threshold and above and not one basis point below; it raises the charge for the time -- the total after the base and the caps, less any discount taken before it -- and nothing else, and a plan ordering it before another ADJUST rule does not load; its line says how full the garage was and by how much the charge rose, and below the threshold says it was not raised. A stay in a class it covers with no figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices the same with or without the figure. Two fill rules applying to one stay are CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a percent or a figure out of range, not a whole number, or a bool is refused by name. |
 | **F52** | A VIP surcharge may be a percent of the stay's time-based charge -- the total after the base and the caps -- rounded the way the rule says, and never of another surcharge, so two surcharges total the same in any order. The flat form prices exactly as it did. A rule stating both forms, or a percent out of range, is refused by name. |
 | **F53** | `validate-plan` probes the occupancy axis of every fill rule: one basis point below each threshold, on it, and at 100% full, across every other axis, so two fill rules colliding only when the garage is full are reported before a stay is refused for it, and the finding names the figure that found it. A plan with no fill rule is probed exactly as before, and a missing figure is not reported as a gap in the plan. |
 | **F54** | A fill rule states the owner's two answers, `raises_specials` and `raises_vip_extra`, each "yes" or "no", and a rule that omits either or states anything else does not load, naming the field. `raises_specials` no leaves a charge a special priced unraised and says so; yes raises it. `raises_vip_extra` yes raises the space-class extra by the same percent on its own line; no leaves it as set. All four combinations, on each side of the threshold, price to the cent worked by hand, and flipping one answer moves the fee by exactly what that answer governs. |
@@ -527,10 +534,14 @@ came in when the garage was 70% full keeps that price however full the garage is
 when it leaves. The rule applies AT the threshold and above.
 
 **It raises the charge for the TIME**: the running total when SURCHARGE begins,
-after whichever base priced the stay and after the caps. When another ADJUST rule
-also applies,
-`adjust_order` states which runs first, as for any two adjustments: a discount
-taken after the increase is a different fee from one taken before.
+after whichever base priced the stay and after the caps, **less any discount
+taken before it**. A discount comes off first and the rule's percent is taken of
+what is left -- always the cheaper of the two orders for the driver: 10.00 with
+20% or 2.00 off at +20% is 8.00 + 1.60 = 9.60, never 10.00. A discount is set
+against the time charge first and then against the space-class extra. So a plan
+whose `adjust_order` puts a fill rule anywhere but after every other ADJUST rule
+does not load, naming the rule; the line then says "time-based charge after
+discounts +20% on 8.00 USD".
 
 **The owner's two answers** (version 6), both required, `yes` or `no`, no default:
 

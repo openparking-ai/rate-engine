@@ -1115,6 +1115,30 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a threshold or a percent above 100% loads, so a plan can state a garage fuller "
         "than full or an increase nobody can read",
     ),
+    "F51/raised-before-discount": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "                        time_charge_minor=max(0, time_charge - taken),",
+        "                        time_charge_minor=time_charge,  # PLANTED: raised before discount",
+        "the fill rule raises the time charge before the discount came off, so a "
+        "discounted car at a busy garage pays the increase on money it is not charged",
+    ),
+    "F51/extra-before-discount": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "                        extras_minor=max(0, extras - max(0, taken - time_charge)),",
+        "                        extras_minor=extras,  # PLANTED: extra raised before discount",
+        "a discount larger than the time charge is not taken off the extra before the "
+        "fill rule raises it",
+    ),
+    "F51/fill-before-discount-loads": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "plan.py",
+        "        if fills and sorted(tail) != sorted(fills):",
+        "        if False:  # PLANTED: the fill rule may come before a discount",
+        "a plan that raises first and discounts after loads, so a flat discount costs "
+        "the customer more than the cheaper order",
+    ),
     "F51/figure-unchecked": (
         "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
         "engine.py",

@@ -343,7 +343,14 @@ because no bool appears anywhere in a plan (see "Money") -- and there is no
 default: the engine does not decide for the owner what the rule
 raises (F54). Plans with no fill rule load and price exactly as on version 5.
 
-**What a caller must do.** Add both answers to every fill rule. A consumer
+**A fill rule raises what is left after a discount, and comes last.** Where a
+discount and a fill rule both apply, the discount comes off first and the fill
+rule's percent is taken of what remains (F51); a plan whose `adjust_order` puts a
+fill rule before another ADJUST rule does not load. Version 6 had not been
+released when this was settled, so it is part of version 6, not a version 7.
+
+**What a caller must do.** Add both answers to every fill rule, and list every
+fill rule last in `adjust_order`. A consumer
 reading breakdown lines meets two new line codes, `fill_level.special_not_raised`
 and `fill_level.extra_raised`; no finding code was added.
 
@@ -701,10 +708,14 @@ came in when the garage was 70% full keeps that price however full the garage is
 when it leaves. The rule applies AT the threshold and above.
 
 **It raises the charge for the TIME**: the running total when SURCHARGE begins,
-after whichever base priced the stay and after the caps. When another ADJUST rule
-also applies,
-`adjust_order` states which runs first, as for any two adjustments: a discount
-taken after the increase is a different fee from one taken before.
+after whichever base priced the stay and after the caps, **less any discount
+taken before it**. A discount comes off first and the rule's percent is taken of
+what is left -- always the cheaper of the two orders for the driver: 10.00 with
+20% or 2.00 off at +20% is 8.00 + 1.60 = 9.60, never 10.00. A discount is set
+against the time charge first and then against the space-class extra. So a plan
+whose `adjust_order` puts a fill rule anywhere but after every other ADJUST rule
+does not load, naming the rule; the line then says "time-based charge after
+discounts +20% on 8.00 USD".
 
 **The owner's two answers** (version 6), both required, `yes` or `no`, no default:
 
