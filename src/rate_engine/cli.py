@@ -83,6 +83,11 @@ def _cmd_quote(args) -> int:
         "space_class": args.space_class,
         "currency": args.currency,
     }
+    if args.occupancy_at_entry_bp is not None:
+        # Only when given, so a request without it is byte-for-byte the request
+        # this command has always built -- F6's bytes do not move for anyone
+        # who does not price on how full the garage is.
+        request["occupancy_at_entry_bp"] = args.occupancy_at_entry_bp
     status, body = run_quote(request)
     if args.json:
         _write_exact(encode(body))
@@ -226,6 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--exit", required=True, dest="exit", help="ISO 8601 with an offset")
     q.add_argument("--space-class", required=True)
     q.add_argument("--currency", required=True)
+    q.add_argument(
+        "--occupancy-at-entry-bp", type=int, default=None, dest="occupancy_at_entry_bp",
+        help="how full the garage was when the car came in, in basis points (8400 = 84%%)",
+    )
     q.add_argument("--json", action="store_true", help="the exact bytes /v1/quote returns")
     q.set_defaults(func=_cmd_quote)
 

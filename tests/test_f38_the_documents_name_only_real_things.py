@@ -95,6 +95,7 @@ def _owned_names() -> dict[str, set[str]]:
         RULE_TYPES,
         TRAITS,
         daily_max,
+        fill_level,
         grace,
         increment,
         space_surcharge,
@@ -105,10 +106,11 @@ def _owned_names() -> dict[str, set[str]]:
     from rate_engine.tax import TAX_ROUNDINGS, TAX_RULE_KEYS, TAX_SET_KEYS
     from rate_engine.wallclock import DAYS_OF_WEEK
 
-    modules = (daily_max, grace, increment, space_surcharge, time_window, weekly_max)
+    modules = (daily_max, fill_level, grace, increment, space_surcharge, time_window, weekly_max)
     fields = {"id", "type", "stage", "space_classes", "label", "order", "mode", "kind"}
     for module in modules:
         fields |= set(module.EXTRA)
+    fields |= set(space_surcharge.PERCENT_EXTRA)
     # Nested field names the rule types define inside their own objects.
     fields |= {"days", "dates", "price_minor", "percent_bp", "minor", "amount",
                "direction", "rounding"}
@@ -120,6 +122,8 @@ def _owned_names() -> dict[str, set[str]]:
     values |= set(increment.ROUNDING_MODES)
     values |= set(daily_max.DAY_BOUNDARIES) | set(weekly_max.WEEK_BOUNDARIES)
     values |= set(TAX_ROUNDINGS)
+    values |= set(fill_level.ROUNDINGS) | set(space_surcharge.ROUNDINGS)
+    values |= set(fill_level.ANSWERS)
 
     # The tax functions, their keyword arguments, and the fields a tax set and a
     # tax rule carry -- read from the module, so a renamed one turns this red.
@@ -168,7 +172,9 @@ def _response_fields() -> set[str]:
     }
     status, priced = run_quote(request)
     assert status == 200, priced
-    fields = set(request) | set(priced)
+    from rate_engine.contract import QUOTE_OPTIONAL_KEYS
+
+    fields = set(request) | set(QUOTE_OPTIONAL_KEYS) | set(priced)
     for line in priced["breakdown"]:
         fields |= set(line)
 

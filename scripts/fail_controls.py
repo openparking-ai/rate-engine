@@ -192,8 +192,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 4",
-        "SCHEMA_VERSION = 5  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 6",
+        "SCHEMA_VERSION = 7  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -1057,6 +1057,252 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    _assert_ledger_is_the_fee(fee, ledger)",
         "the fee is reached by a route other than adding a Line, which is the defect "
         "the ledger exists to make impossible",
+    ),
+    # The fill-rule round. One arm per way the money can go wrong, each required
+    # red on its own: a test that only met stays above the threshold would pass
+    # the edge plant, and one that never met a VIP space would pass the plant
+    # that raises the running total instead of the time.
+    "F51/at-threshold-not-applied": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "rules/fill_level.py",
+        '        and figure >= rule.params["threshold_bp"]',
+        '        and figure > rule.params["threshold_bp"]  # PLANTED: AT the threshold misses',
+        "a car that came in exactly at the threshold is not charged the busy rate",
+    ),
+    "F51/below-threshold-applied": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "rules/fill_level.py",
+        '        and figure >= rule.params["threshold_bp"]',
+        '        and figure >= rule.params["threshold_bp"] - 1  # PLANTED: one point early',
+        "a car that came in one basis point below the threshold is charged the busy rate",
+    ),
+    "F51/no-figure-guessed": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "    if stay.occupancy_at_entry_bp is None:",
+        "    if False:  # PLANTED: a stay with no figure is priced as if the garage were empty",
+        "a stay with no occupancy figure is priced -- as if the garage were empty -- "
+        "instead of refused by name",
+    ),
+    "F51/uncapped-charge-raised": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "        if stage == SURCHARGE:",
+        "        if stage == CAP:  # PLANTED: the time charge is read before the caps",
+        "the fill rule raises the time charge BEFORE the daily most, so a long stay is "
+        "raised by a percent of money the driver is not charged",
+    ),
+    "F51/running-total-raised": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "rules/fill_level.py",
+        "        added, measure = _raised(rule, time_charge_minor, plan.currency)",
+        "        added, measure = _raised(rule, running_total_minor, plan.currency)  # PLANTED",
+        "the fill rule raises the running total, so a VIP surcharge is raised with the time",
+    ),
+    "F51/overlap-priced": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "        if len(one_per_stay) > 1:",
+        "        if False:  # PLANTED: two fill rules on one stay both charge",
+        "two fill rules applying to one stay are both charged in `adjust_order` "
+        "instead of being refused as two answers to one question",
+    ),
+    "F51/out-of-range-accepted": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "percent.py",
+        "    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:",
+        "    if isinstance(value, bool) or not isinstance(value, int) or value < low:  # PLANTED",
+        "a threshold or a percent above 100% loads, so a plan can state a garage fuller "
+        "than full or an increase nobody can read",
+    ),
+    "F51/raised-before-discount": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "                    priced_by_special=priced_by_special, time_charge_minor=time_left,",
+        "                    priced_by_special=priced_by_special, time_charge_minor=time_charge,"
+        "  # PLANTED",
+        "the fill rule raises the time charge before the discount came off, so a "
+        "discounted car at a busy garage pays the increase on money it is not charged",
+    ),
+    "F51/extra-before-discount": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "                    extras_minor=extra_left, discounted_minor=taken,",
+        "                    extras_minor=extras, discounted_minor=taken,  # PLANTED",
+        "a discount larger than the time charge is not taken off the extra before the "
+        "fill rule raises it",
+    ),
+    "F51/fill-before-discount-loads": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "plan.py",
+        "        if fills and sorted(tail) != sorted(fills):",
+        "        if False:  # PLANTED: the fill rule may come before a discount",
+        "a plan that raises first and discounts after loads, so a flat discount costs "
+        "the customer more than the cheaper order",
+    ),
+    "F55/stated-order-charged": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie",
+        "    cheapest = priced[0]  # PLANTED: the stated order, whatever it costs",
+        "the plan's order is charged even where another order is cheaper for the driver",
+    ),
+    "F55/never-raised-first": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [",
+        "    places = [(k, TIME_FIRST), (k, PER_PART)] + [  # PLANTED: never raised first",
+        "the fill rule is never priced first, so a cent of rounding lands on the driver",
+    ),
+    "F55/never-per-part": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST)] + [  # PLANTED: no per-part split",
+        "a discount is never shared between the parts, so the raised extra carries none of it",
+    ),
+    "F55/tie-not-first": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie",
+        "    cheapest = min(reversed(priced), key=lambda p: p[0])  # PLANTED: last of a tie",
+        "a tie charges the last order rather than the first the contract names",
+    ),
+    "F55/share-rounds-against-driver": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "        extra_off = min(extras, -(-taken * extras // whole))",
+        "        extra_off = min(extras, taken * extras // whole)  # PLANTED: rounded down",
+        "the raised extra's share of a discount rounds down, a cent on the driver",
+    ),
+    "F51/figure-unchecked": (
+        "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
+        "engine.py",
+        "    if figure is not None and (",
+        "    if False and (  # PLANTED: the stay's figure is taken as it arrives",
+        "an occupancy figure that is negative, over 100%, a string or a bool reaches "
+        "the rule instead of being refused at the door",
+    ),
+    "F52/running-total-taken": (
+        "tests/test_f52_a_vip_surcharge_may_be_a_percent.py",
+        "engine.py",
+        '                {"time_charge_minor": time_charge}',
+        '                {"time_charge_minor": ledger.total_minor}  # PLANTED',
+        "a percent surcharge is taken of the running total, so two surcharges total "
+        "differently depending on which runs first",
+    ),
+    "F52/uncapped-charge-taken": (
+        "tests/test_f52_a_vip_surcharge_may_be_a_percent.py",
+        "engine.py",
+        "        if stage == SURCHARGE:",
+        "        if stage == CAP:  # PLANTED: the time charge is read before the caps",
+        "a percent VIP surcharge is a percent of the UNcapped time, so a long VIP stay "
+        "pays a percent of money the driver is not charged",
+    ),
+    "F52/rounding-ignored": (
+        "tests/test_f52_a_vip_surcharge_may_be_a_percent.py",
+        "rules/space_surcharge.py",
+        '    amount = percent_of_minor(time_charge_minor, percent_bp, rule.params["rounding"])',
+        '    amount = percent_of_minor(time_charge_minor, percent_bp, "up")  # PLANTED',
+        "a percent surcharge rounds up whatever the rule states",
+    ),
+    "F53/axis-missing": (
+        "tests/test_f53_the_validator_probes_the_occupancy_axis.py",
+        "validator.py",
+        "    if not thresholds:\n        return [None]",
+        "    if True:  # PLANTED: no occupancy axis\n        return [None]",
+        "the validator probes no occupancy figure, so two fill rules colliding near full "
+        "are reported clean and a real car is then refused",
+    ),
+    "F53/no-figure-probed": (
+        "tests/test_f53_the_validator_probes_the_occupancy_axis.py",
+        "validator.py",
+        "    return sorted(m for m in marks if 0 <= m <= FULL_BP)",
+        "    return [None] + sorted(m for m in marks if 0 <= m <= FULL_BP)  # PLANTED",
+        "a missing figure is probed and reported as a gap in the plan, so every plan "
+        "with a fill rule carries a finding and a plan store refuses all of them",
+    ),
+    "F53/probe-figure-dropped": (
+        "tests/test_f53_the_validator_probes_the_occupancy_axis.py",
+        "validator.py",
+        "            if stay.occupancy_at_entry_bp is not None:\n"
+        "                found_by += (stay.occupancy_at_entry_bp,)",
+        "            if False:  # PLANTED: the probe's figure is dropped\n"
+        "                found_by += (stay.occupancy_at_entry_bp,)",
+        "a fill-rule finding names the car's entry and exit but not how full the garage "
+        "was, which is the only thing that made it collide",
+    ),
+    # The owner's two answers. "Omitted" is planted as a DEFAULT, which is the
+    # defect: a plan that never answered priced as if it had. "Flipped" is planted
+    # as the answer ignored both ways, and the engine forgetting who priced the
+    # time, and the extra measured as the whole running total.
+    "F54/specials-defaulted": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        '    raw = {"raises_specials": "yes", **raw}  # PLANTED: an unanswered rule defaults\n'
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        "a fill rule that never said whether it raises specials loads and raises them",
+    ),
+    "F54/vip-extra-defaulted": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        '    raw = {"raises_vip_extra": "no", **raw}  # PLANTED: an unanswered rule defaults\n'
+        "    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)",
+        "a fill rule that never said whether it raises the VIP extra loads and does not",
+    ),
+    "F54/answer-not-a-word": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        "        if raw[switch] not in ANSWERS:",
+        "        if False:  # PLANTED: any value is taken as an answer",
+        "an answer that is neither yes nor no -- 1, \"true\", null -- loads and is read "
+        "as no",
+    ),
+    "F54/specials-always-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if priced_by_special is not None and not rule.params["raises_specials"]:',
+        "    if False:  # PLANTED: specials raised whatever the owner said",
+        "a charge a special priced is raised although the owner said specials are not",
+    ),
+    "F54/specials-never-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if priced_by_special is not None and not rule.params["raises_specials"]:',
+        "    if priced_by_special is not None:  # PLANTED: specials never raised",
+        "a charge a special priced is left unraised although the owner said raise it",
+    ),
+    "F54/special-not-told": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "engine.py",
+        "        _winner(plan, stay, QUALIFY, qualified_at_qualify)"
+        " if qualified_at_qualify else None",
+        "        None  # PLANTED: the fill rule is never told a special priced the time",
+        "the engine forgets that a special priced the time, so 'do not raise specials' "
+        "raises them anyway",
+    ),
+    "F54/vip-extra-ignored": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if extras_minor and rule.params["raises_vip_extra"]:',
+        "    if False:  # PLANTED: the extra is never raised",
+        "the VIP extra stays as set although the owner said raise it",
+    ),
+    "F54/vip-extra-always-raised": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "rules/fill_level.py",
+        '    if extras_minor and rule.params["raises_vip_extra"]:',
+        "    if extras_minor:  # PLANTED: the extra raised whatever the owner said",
+        "the VIP extra is raised although the owner said leave it",
+    ),
+    "F54/extra-is-the-whole-total": (
+        "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
+        "engine.py",
+        "            extras = ledger.total_minor - time_charge",
+        "            extras = ledger.total_minor  # PLANTED: the time counted as extra",
+        "'raise the VIP extra' raises the whole running total, so the time is raised twice",
     ),
 }
 

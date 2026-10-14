@@ -22,6 +22,21 @@ now: every probe used to enter on one fixed Tuesday, and two weekend rules that
 conflict with each other would have gone unreported exactly the way the two dawn
 rules did before entry became an axis. That is the same defect in a new place,
 and it is closed here rather than left for the next outside pass to find.
+
+**FOUR axes, and the fourth arrived with `fill_level`.** A fill rule qualifies on
+how full the garage was at entry, which is neither a day, a time nor a duration,
+so -- as the README requires of a rule type that qualifies on something new -- it
+brought its own axis in the same round: every declared threshold is probed one
+basis point below, ON it, and at 100% full, across every other axis. A plan with
+no fill rule is probed exactly as before, with no figure at all.
+
+**"No figure" is not a probe, and that is a decision.** A stay with no occupancy
+figure in a class a fill rule covers is refused (GAP_NO_OCCUPANCY_AT_ENTRY) --
+but that is a fact about the CALLER, a garage that has not stated its number of
+spaces, not about the plan. Probing it would report that gap for every plan that
+carries a fill rule, and a plan store that refuses any plan with a finding would
+then refuse every one of them. The refusal is held at quote time instead, by
+`tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py`.
 """
 
 from __future__ import annotations
@@ -32,6 +47,7 @@ from datetime import date, datetime, timedelta
 from .engine import Stay, find_conflicts, find_gaps
 from .findings import Finding
 from .plan import Plan
+from .rules import NEEDS_OCCUPANCY, RULE_TRAITS
 from .rules.time_window import DAY_SPAN_LIMITS
 from .stages import ACCUMULATE, STAGES
 from .wallclock import DAYS_OF_WEEK
@@ -171,6 +187,31 @@ def _duration_marks(plan: Plan, entry_minute: int) -> set[int]:
     return {m for m in marks if m >= 0}
 
 
+def _occupancy_marks(plan: Plan) -> list[int | None]:
+    """Every occupancy figure this plan makes interesting, in basis points.
+
+    One basis point below each declared threshold, ON it, and 100% full: the
+    first does not qualify, the other two do, and the last is where every fill
+    rule on a class qualifies at once -- which is what lets two of them collide.
+    A plan with no rule that reads the figure gets the one mark it always had:
+    no figure. Sorted with `None` first so probe order is deterministic.
+    """
+    from .engine import FULL_BP
+
+    thresholds = [
+        rule.params["threshold_bp"]
+        for stage in STAGES
+        for rule in plan.rules_for_stage(stage)
+        if NEEDS_OCCUPANCY in RULE_TRAITS[rule.type]
+    ]
+    if not thresholds:
+        return [None]
+    marks = {FULL_BP}
+    for threshold in thresholds:
+        marks.update({threshold - 1, threshold})
+    return sorted(m for m in marks if 0 <= m <= FULL_BP)
+
+
 def probe_stays(plan: Plan) -> list[Stay]:
     """Stays either side of every boundary this plan DECLARES.
 
@@ -193,19 +234,22 @@ def probe_stays(plan: Plan) -> list[Stay]:
     see the limit recorded there.
     """
     stays: list[Stay] = []
+    occupancy = _occupancy_marks(plan)
     for space_class in plan.space_classes:
         for day in sorted(_entry_dates(plan)):
             midnight = datetime(day.year, day.month, day.day, 0, 0, tzinfo=plan.timezone)
             for entry_minute in sorted(_entry_minutes_of_day(plan)):
                 entry_at = midnight + timedelta(minutes=entry_minute)
                 for minutes in sorted(_duration_marks(plan, entry_minute)):
-                    stays.append(
-                        Stay(
-                            entry_at=entry_at,
-                            exit_at=entry_at + timedelta(minutes=minutes),
-                            space_class=space_class,
+                    for figure in occupancy:
+                        stays.append(
+                            Stay(
+                                entry_at=entry_at,
+                                exit_at=entry_at + timedelta(minutes=minutes),
+                                space_class=space_class,
+                                occupancy_at_entry_bp=figure,
+                            )
                         )
-                    )
     return stays
 
 
@@ -223,6 +267,8 @@ def validate_plan(plan: Plan) -> list[Finding]:
             # The FIRST probe that found it, in probe order: deterministic, and
             # the stay an owner can be told about -- when it came in and left.
             found_by = (stay.entry_at.isoformat(), stay.exit_at.isoformat())
+            if stay.occupancy_at_entry_bp is not None:
+                found_by += (stay.occupancy_at_entry_bp,)
             seen.setdefault((finding.code, finding.rule_ids), replace(finding, probe=found_by))
     return [seen[key] for key in sorted(seen)]
 

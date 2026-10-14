@@ -43,19 +43,39 @@ from .validator import undecided, validate_plan
 #: priced now (F48), so `CONFLICT_MULTIPLE_RULES_AT_STAGE` had nothing left to
 #: name and went. Every plan that loaded on 3 loads on 4 and every stay it priced
 #: is priced the same; a stay 3 refused for a tie is priced.
-SCHEMA_VERSION = 4
+#:
+#: **5 in the fill-rule round: a rule type, a stay field and two finding codes
+#: were ADDED.** `fill_level` prices on `occupancy_at_entry_bp`, which a quote
+#: request may now carry, and `space_surcharge` gained a percent form. Every plan
+#: that loaded on 4 loads on 5 and every stay it priced is priced the same, with
+#: or without the new field; a consumer routing on codes meets two it has not seen.
+#:
+#: **6 in the fill rule's follow-up: a plan that loaded on 5 may not load.** A
+#: `fill_level` rule now REQUIRES the owner's two answers, `raises_specials` and
+#: `raises_vip_extra`, and a rule written without them is refused by name. Plans
+#: with no fill rule load and price exactly as on 5.
+SCHEMA_VERSION = 6
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
+
+#: Keys a quote request MAY carry. Absent and `null` mean the same thing: the
+#: caller has no figure. Optional rather than required so that every request a
+#: version-4 consumer sends is still a whole request -- a plan with no fill rule
+#: never reads it.
+QUOTE_OPTIONAL_KEYS = frozenset({"occupancy_at_entry_bp"})
 VALIDATE_REQUEST_KEYS = frozenset({"plan"})
 VALIDATE_TAX_SETS_REQUEST_KEYS = frozenset({"tax_sets"})
 TAX_REQUEST_KEYS = frozenset({"tax_sets", "subtotal_minor", "currency", "at"})
 
 
-def _require(document: object, keys: frozenset[str], where: str) -> dict:
+def _require(
+    document: object, keys: frozenset[str], where: str,
+    optional: frozenset[str] = frozenset(),
+) -> dict:
     if not isinstance(document, dict):
         raise InvalidPlan(f"{where} must be an object, got {type(document).__name__}.")
     missing = sorted(keys - set(document))
-    unknown = sorted(set(document) - keys)
+    unknown = sorted(set(document) - keys - optional)
     if missing:
         raise InvalidPlan(f"{where} is missing required field(s): {', '.join(missing)}.")
     if unknown:
@@ -75,7 +95,7 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
     than by exit. One element is the ordinary case and is fine. Nothing is stored
     -- the versions arrive on the call, and a plan STORE is round B.
     """
-    body = _require(document, QUOTE_REQUEST_KEYS, "request")
+    body = _require(document, QUOTE_REQUEST_KEYS, "request", QUOTE_OPTIONAL_KEYS)
 
     raw_plans = body["plans"]
     if not isinstance(raw_plans, list) or not raw_plans:
@@ -98,6 +118,7 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
         parse_instant(body["entry_at"], "request.entry_at"),
         parse_instant(body["exit_at"], "request.exit_at"),
         body["space_class"],
+        body.get("occupancy_at_entry_bp"),
     )
     return plans, stay
 

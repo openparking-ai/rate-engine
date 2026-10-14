@@ -30,18 +30,31 @@ from .breakdown import Ledger, Line
 from .findings import (
     CONFLICT_AMBIGUOUS_PLAN_SELECTION,
     CONFLICT_NEGATIVE_TOTAL,
+    CONFLICT_OVERLAPPING_FILL_RULES,
     CONFLICT_UNORDERED_ADJUSTMENTS,
     FAULT_RULE_RETURNED_NOT_LINES,
     GAP_NO_ACCUMULATE_RULE,
+    GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_UNDECLARED_SPACE_CLASS,
     Finding,
     Refused,
 )
+from .percent import percent_text
 from .plan import InvalidPlan, Plan
-from .rules import RULE_APPLIERS, RULE_TRAITS, SPEAKS_UNQUALIFIED, TERMINAL
+from .rules import (
+    NEEDS_OCCUPANCY,
+    ON_THE_TIME_CHARGE,
+    ONE_PER_STAY,
+    RULE_APPLIERS,
+    RULE_TRAITS,
+    SPEAKS_UNQUALIFIED,
+    TERMINAL,
+    TOLD_THE_PASS,
+)
 from .rules import daily_max as daily_max_rule
+from .rules import fill_level as fill_level_rule
 from .rules import grace as grace_rule
 from .rules import increment as increment_rule
 from .rules import space_surcharge as space_surcharge_rule
@@ -55,6 +68,7 @@ from .stages import (
     QUALIFY,
     RESOLVING,
     STAGES,
+    SURCHARGE,
 )
 
 #: Which predicate decides whether a rule of each type qualifies for a stay.
@@ -79,6 +93,7 @@ QUALIFIERS = {
     "daily_max": daily_max_rule.qualifies,
     "weekly_max": weekly_max_rule.qualifies,
     "space_surcharge": space_surcharge_rule.qualifies,
+    "fill_level": fill_level_rule.qualifies,
 }
 
 
@@ -278,6 +293,14 @@ class Stay:
     entry_at: datetime
     exit_at: datetime
     space_class: str
+    #: How full the garage was when this car came in, in basis points of full:
+    #: 8400 is 84%. Every car inside against every switched-on space, counted by
+    #: the CALLER when the stay opened -- the engine counts nothing. None when the
+    #: caller has no figure; a plan with a fill rule covering this stay's class
+    #: then refuses it (GAP_NO_OCCUPANCY_AT_ENTRY), and a plan without one never
+    #: reads it. It is read at ENTRY and only at entry: the cars that came in
+    #: before the garage filled keep the price they came in on.
+    occupancy_at_entry_bp: int | None = None
 
     @property
     def duration_minutes(self) -> int:
@@ -324,7 +347,16 @@ class Quote:
         }
 
 
-def make_stay(entry_at: datetime, exit_at: datetime, space_class: str) -> Stay:
+#: 100% full, in basis points. A figure above it describes no garage.
+FULL_BP = 10_000
+
+
+def make_stay(
+    entry_at: datetime,
+    exit_at: datetime,
+    space_class: str,
+    occupancy_at_entry_bp: int | None = None,
+) -> Stay:
     if entry_at.tzinfo is None or exit_at.tzinfo is None:
         raise InvalidPlan(
             "entry_at and exit_at must carry a UTC offset. A naive timestamp is read in "
@@ -339,7 +371,19 @@ def make_stay(entry_at: datetime, exit_at: datetime, space_class: str) -> Stay:
         )
     if not isinstance(space_class, str) or not space_class:
         raise InvalidPlan("space_class must be a non-empty string.")
-    return Stay(entry_at=entry_at, exit_at=exit_at, space_class=space_class)
+    figure = occupancy_at_entry_bp
+    if figure is not None and (
+        isinstance(figure, bool) or not isinstance(figure, int) or not 0 <= figure <= FULL_BP
+    ):
+        raise InvalidPlan(
+            f"occupancy_at_entry_bp must be a whole number of basis points from 0 to "
+            f"{FULL_BP} (0% to 100% full), or absent; got {figure!r}. A garage with more "
+            "cars inside than spaces is sent as 10000."
+        )
+    return Stay(
+        entry_at=entry_at, exit_at=exit_at, space_class=space_class,
+        occupancy_at_entry_bp=figure,
+    )
 
 
 def select_plan(plans: list[Plan], stay: Stay) -> Plan:
@@ -433,6 +477,30 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
         # heard of. Answering that would be guessing.
         return findings
 
+    if stay.occupancy_at_entry_bp is None:
+        # Asked before anything can return early: a special qualifying does not
+        # make the figure unnecessary, because the fill rule raises whichever
+        # charge priced the time.
+        needing = tuple(
+            rule.id
+            for stage in STAGES
+            for rule in plan.rules_for_stage(stage)
+            if NEEDS_OCCUPANCY in RULE_TRAITS[rule.type] and rule.covers(stay.space_class)
+        )
+        if needing:
+            findings.append(
+                Finding(
+                    code=GAP_NO_OCCUPANCY_AT_ENTRY,
+                    text=(
+                        f"the plan prices a {stay.space_class!r} space on how full the "
+                        f"garage was when the car came in ({', '.join(needing)}), and "
+                        "this stay carries no occupancy_at_entry_bp -- nothing was "
+                        "assumed"
+                    ),
+                    rule_ids=needing,
+                )
+            )
+
     if _qualifying(plan, stay, QUALIFY):
         # A special can price the stay. Whether the time-based rate could too is
         # asked by `_the_cheaper_way`, which uses it only when it can.
@@ -503,6 +571,25 @@ def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
     findings: list[Finding] = []
     for stage in STAGES:
         qualifying = _qualifying(plan, stay, stage)
+        one_per_stay = [r for r in qualifying if ONE_PER_STAY in RULE_TRAITS[r.type]]
+        if len(one_per_stay) > 1:
+            # Not an order the plan forgot to state: two fill rules raising one
+            # charge are two answers to the same question, and an order would
+            # charge both. Reported whatever `adjust_order` says.
+            ids = tuple(r.id for r in one_per_stay)
+            findings.append(
+                Finding(
+                    code=CONFLICT_OVERLAPPING_FILL_RULES,
+                    text=(
+                        f"{len(ids)} fill rules ({', '.join(ids)}) all apply to a "
+                        f"{stay.space_class!r} space at "
+                        f"{percent_text(stay.occupancy_at_entry_bp)} full; the plan "
+                        "states "
+                        "one fill rule per space class"
+                    ),
+                    rule_ids=ids,
+                )
+            )
         if len(qualifying) > 1:
             finding = _conflict_at(plan, stay, stage, qualifying)
             if finding is not None:
@@ -594,8 +681,23 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
     if not with_specials:
         qualified_at_qualify = []
     terminal = _terminal_rule(qualified_at_qualify)
+    #: The charge for the TIME: the running total when SURCHARGE begins, after
+    #: the base (time-based rate or special) and the caps. A percent surcharge
+    #: and the fill rule are taken of this, never of the running total, so they
+    #: see the same number whatever else runs beside them. Set below.
+    time_charge = None
+    #: The special that priced the time on this pass, if one did, and what
+    #: SURCHARGE added. Told to a rule that declares `TOLD_THE_PASS`.
+    priced_by_special = (
+        _winner(plan, stay, QUALIFY, qualified_at_qualify) if qualified_at_qualify else None
+    )
+    extras = 0
 
     for stage in STAGES:
+        if stage == SURCHARGE:
+            time_charge = ledger.total_minor
+        if stage == ADJUST:
+            extras = ledger.total_minor - time_charge
         if terminal is not None and stage != QUALIFY:
             # A TERMINAL rule prices the stay by itself. Free means free: no
             # time-based charge, no cap, no surcharge, no adjustment. QUALIFY has
@@ -652,18 +754,174 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
                         ledger.add(line)
             continue
 
+        if stage == ADJUST:
+            # Every ADJUST rule, the fill rule among them, in the cheapest order
+            # (`_adjusted`): with a discount and a fill rule both applying, the
+            # plan's order no longer decides the price.
+            for line in _adjusted(
+                plan, stay, ledger.total_minor, plan.rules_for_stage(stage),
+                time_charge=time_charge, extras=extras, priced_by_special=priced_by_special,
+            ):
+                ledger.add(line)
+            continue
+
         for rule in _in_application_order(plan, stage, plan.rules_for_stage(stage)):
             applier = RULE_APPLIERS[rule.type]
             if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
                 continue
+            given = (
+                {"time_charge_minor": time_charge}
+                if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]
+                else {}
+            )
+            if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
+                given.update(priced_by_special=priced_by_special, extras_minor=extras)
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
-                lines = applier(rule, stay, plan, ledger.total_minor)
+                lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:
-                lines = applier(rule, stay, plan)
+                lines = applier(rule, stay, plan, **given)
             for line in _lines_of(rule, lines):
                 ledger.add(line)
 
     return ledger
+
+
+#: The line that says in which order the discounts and the fill rule were taken.
+FILL_ORDER = "fill_level.order"
+
+#: How a discount taken before the fill rule is set against the stay's two parts.
+#: TIME_FIRST: the time charge, then the space-class extra. PER_PART: each part
+#: carries its share of the discount, in proportion to what it charged, and a
+#: part the fill rule raises takes the cent a share rounds to.
+TIME_FIRST = "time_first"
+PER_PART = "per_part"
+
+
+def _adjusted(plan, stay, total_minor, rules, *, time_charge, extras, priced_by_special):
+    """The ADJUST stage's lines, in the order that charges the driver LEAST.
+
+    His rule, 10-14 20:25, on a discount meeting the fill rule: "always the
+    cheaper" -- never a cent more than the cheapest order, rounding included.
+    The order changes the money in three ways: the fill rule raises what is left
+    after the discounts before it, a discount after it takes its share of the
+    increase too, and a discount taken before it can come off the part it raises
+    or the part it does not. Which is cheapest depends on the stay -- a special
+    that is not raised, a VIP extra that is, a rounding that lands a cent either
+    way -- so it is not argued, it is priced: every order is priced, whole, and
+    the cheapest charged, with one line saying which.
+
+    The candidates, in the order a tie is settled (the first wins): the
+    discounts first and the fill rule on what is left (set against the time
+    charge first); the fill rule first; the discounts first, each part carrying
+    its share and the fill rule raising what is left of the parts it raises;
+    then the fill rule between the discounts, at each place, both ways. The
+    discounts keep the plan's stated order among themselves. With no fill rule
+    applying, or nothing beside it, the plan's order is the only one.
+    """
+    from .money import format_minor
+
+    ordered = _in_application_order(plan, ADJUST, rules)
+    fills = [
+        r for r in ordered if r.type == "fill_level" and QUALIFIERS[r.type](r, stay, plan)
+    ]
+    others = [r for r in ordered if r not in fills]
+    beside = [r for r in others if QUALIFIERS[r.type](r, stay, plan)]
+
+    def run(order, split):
+        lines: list[Line] = []
+        running = total_minor
+        taken = 0
+        for rule in order:
+            if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
+                continue
+            given: dict = {}
+            if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]:
+                given["time_charge_minor"] = time_charge
+            if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
+                time_left, extra_left = _left_after(
+                    rule, taken, time_charge, extras, priced_by_special, split
+                )
+                given.update(
+                    priced_by_special=priced_by_special, time_charge_minor=time_left,
+                    extras_minor=extra_left, discounted_minor=taken,
+                )
+            applied = RULE_APPLIERS[rule.type](rule, stay, plan, running, **given)
+            for line in _lines_of(rule, applied):
+                lines.append(line)
+                running += line.delta_minor
+                if line.delta_minor < 0:
+                    taken += -line.delta_minor
+        return lines, running
+
+    if len(fills) != 1 or not beside:
+        return run(ordered, TIME_FIRST)[0]
+
+    fill = fills[0]
+    k = len(others)
+    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [
+        (at, split) for at in range(1, k) for split in (TIME_FIRST, PER_PART)
+    ]
+    priced = []
+    for at, split in places:
+        order = others[:at] + [fill] + others[at:]
+        lines, total = run(order, split)
+        priced.append((total, at, split, lines))
+    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie
+    total, at, split, lines = cheapest
+    if at == 0:
+        how = "the fill rule first, then the discounts"
+    elif at == k:
+        how = (
+            "the discounts first, then the fill rule on what is left"
+            if split == TIME_FIRST
+            else "the discounts first, each part its share, then the fill rule on what is left"
+        )
+    else:
+        how = (
+            f"the fill rule after {', '.join(r.id for r in others[:at])} and before "
+            f"{', '.join(r.id for r in others[at:])}"
+        )
+    dearer = sorted({p[0] for p in priced if p[0] != total})
+    other = (
+        f"; another order would charge {', '.join(format_minor(t, plan.currency) for t in dearer)}"
+        if dearer
+        else "; every order charges the same"
+    )
+    return lines + [
+        Line(
+            code=FILL_ORDER,
+            rule_id=fill.id,
+            text=f"Discounts and the fill rule taken in the cheapest order: {how}{other}",
+            delta_minor=0,
+        )
+    ]
+
+
+def _left_after(fill, taken, time_charge, extras, priced_by_special, split):
+    """What is left of the time charge and of the extra after `taken` came off.
+
+    TIME_FIRST sets the discount against the time charge, then the extra.
+    PER_PART gives each part its share, in proportion to what it charged; when
+    only one of the two is raised by this fill rule on this pass -- the time
+    unless a special priced it and specials are not raised; the extra when it
+    is raised -- the raised part's share is rounded UP and the other part takes
+    the rest, so a cent of rounding never lands on the driver.
+    """
+    if split == TIME_FIRST or not time_charge or not extras:
+        time_off = min(time_charge, taken)
+        return time_charge - time_off, max(0, extras - (taken - time_off))
+    raises_time = priced_by_special is None or fill.params["raises_specials"]
+    raises_extra = fill.params["raises_vip_extra"]
+    whole = time_charge + extras
+    taken = min(taken, whole)
+    if raises_extra and not raises_time:
+        extra_off = min(extras, -(-taken * extras // whole))
+        time_off = taken - extra_off
+    else:
+        share = -(-taken * time_charge // whole) if raises_time else taken * time_charge // whole
+        time_off = min(time_charge, share)
+        extra_off = taken - time_off
+    return time_charge - time_off, extras - extra_off
 
 
 #: The line that says which way a stay was priced when a special qualified under

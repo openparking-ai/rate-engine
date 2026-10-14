@@ -63,7 +63,9 @@ time, every probe entered at 07:00, so two rules that both qualified only for an
 early entry never overlapped in any probe and a plan reported clean would then
 refuse a real stay. The second time, every probe entered on the same Tuesday: the
 day became a thing a rule could qualify on, so the day became an axis in the same
-round rather than in the outside pass after it.
+round rather than in the outside pass after it. The fill rule qualifies on how full
+the garage was at entry, so that is an axis too: each threshold one basis point
+below, on it, and at 100% full.
 
 ## Install and run
 
@@ -139,7 +141,14 @@ drifts.
   minute over and it prices from entry on the ordinary rate. There is no default
   — "usually ten minutes" is an observation about other people's garages.
 - **Space-class surcharges.** This module prices a *space*, not a garage: a VIP
-  area and a reserved spot are the same mechanism.
+  area and a reserved spot are the same mechanism. A surcharge is a flat amount
+  per stay or a percent of the stay's time-based charge.
+- **A fill rule.** "When the garage is at least 80% full, the time costs 20%
+  more." It reads how full the garage was **when the car came in**, a figure the
+  caller hands in, so the cars already inside keep the price they came in on. A
+  stay with no figure, under a plan that has such a rule, is refused rather than
+  priced as if the garage were empty. Whether it also raises a special and the
+  VIP extra is the owner's answer, stated on the rule; there is no default.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
 - **When two rules qualify at once, what that MEANS depends on the stage.** Two

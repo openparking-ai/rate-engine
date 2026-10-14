@@ -339,6 +339,56 @@ GUARANTEES: dict[str, str] = {
         "on the special's way: its own reason, or that it qualified and a cheaper "
         "special was compared instead -- never that one was applied."
     ),
+    "F51": (
+        "A fill rule prices on how full the garage was AT ENTRY. It applies at its "
+        "threshold and above and not one basis point below; it raises the charge for "
+        "the time -- the total after the base and the caps, less any discount taken "
+        "before it -- and nothing else, and a plan ordering it before another ADJUST "
+        "rule does not load; its "
+        "line says how full the garage was and by how much the charge rose, and below "
+        "the threshold says it was not raised. A stay in a class it covers with no "
+        "figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices "
+        "the same with or without the figure. Two fill rules applying to one stay are "
+        "CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a "
+        "percent or a figure out of range, not a whole number, or a bool is refused "
+        "by name."
+    ),
+    "F52": (
+        "A VIP surcharge may be a percent of the stay's time-based charge -- the "
+        "total after the base and the caps -- rounded the way the rule says, and "
+        "never of another surcharge, so two surcharges total the same in any order. "
+        "The flat form prices exactly as it did. A rule stating both forms, or a "
+        "percent out of range, is refused by name."
+    ),
+    "F53": (
+        "`validate-plan` probes the occupancy axis of every fill rule: one basis "
+        "point below each threshold, on it, and at 100% full, across every other "
+        "axis, so two fill rules colliding only when the garage is full are reported "
+        "before a stay is refused for it, and the finding names the figure that found "
+        "it. A plan with no fill rule is probed exactly as before, and a missing "
+        "figure is not reported as a gap in the plan."
+    ),
+    "F54": (
+        "A fill rule states the owner's two answers, `raises_specials` and "
+        "`raises_vip_extra`, each \"yes\" or \"no\", and a rule that omits either or "
+        "states anything else does not load, naming the field. `raises_specials` "
+        "no leaves a charge a special priced unraised and says so; yes raises it. "
+        "`raises_vip_extra` yes raises the space-class extra by the same percent on "
+        "its own line; no leaves it as set. All four combinations, on each side of "
+        "the threshold, price to the cent worked by hand, and flipping one answer "
+        "moves the fee by exactly what that answer governs."
+    ),
+    "F55": (
+        "Where a discount and a fill rule both apply, the driver pays the CHEAPEST "
+        "order, to the cent after rounding: the discounts first and the fill rule on "
+        "what is left; the fill rule first; the discounts first with each part (time "
+        "charge, space-class extra) carrying its share; and the fill rule between "
+        "discounts. The plan's stated order does not decide the price. A tie charges "
+        "the first of those, and one line says which order was charged and what the "
+        "others would have charged. Every pair of the owner's two answers, a percent "
+        "and a flat discount, each side of the threshold, prices to the cent worked "
+        "by hand."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

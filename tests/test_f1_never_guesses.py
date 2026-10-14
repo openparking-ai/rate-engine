@@ -16,10 +16,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from fixtures import loaded, stay, with_rule_field, without_rule
+from fixtures import loaded, plan_with, stay, with_rule_field, without_rule
 from rate_engine.engine import quote
 from rate_engine.findings import (
     GAP_NO_ACCUMULATE_RULE,
+    GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_STAY_EXCEEDS_MAX_DURATION,
@@ -30,6 +31,14 @@ from rate_engine.tax import load_tax_sets, tax_lines
 from rate_engine.validator import validate_plan
 
 LATE = "2026-03-03T09:14:00-05:00"
+
+#: The reference plan with a fill rule on its standard spaces: 80% full, +20%.
+FILL_PLAN = plan_with(adjust_order=None)
+FILL_PLAN["rules"].append({
+    "id": "busy", "type": "fill_level", "stage": "ADJUST", "space_classes": ["standard"],
+    "threshold_bp": 8000, "percent_bp": 2000, "rounding": "up",
+    "raises_specials": "no", "raises_vip_extra": "no",
+})
 
 
 @pytest.mark.guarantee("F1")
@@ -81,6 +90,11 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
                   at=datetime(2025, 6, 1, tzinfo=UTC))
     reached.add(e.value.findings[0].code)
 
+    # The occupancy gap: a plan with a fill rule, and a stay with no figure.
+    with pytest.raises(Refused) as e:
+        quote([loaded(FILL_PLAN)], stay(LATE, 120))
+    reached.add(e.value.findings[0].code)
+
     from rate_engine.findings import GAP_CODES
 
     assert reached == set(GAP_CODES), (
@@ -92,6 +106,7 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
         GAP_NO_ACCUMULATE_RULE,
         GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
         GAP_NO_TAX_SET_IN_FORCE,
+        GAP_NO_OCCUPANCY_AT_ENTRY,
     }
 
 
