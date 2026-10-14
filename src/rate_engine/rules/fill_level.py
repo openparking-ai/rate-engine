@@ -12,9 +12,11 @@ occupancy-driven multipliers, and **it raises the charge for the TIME**: the
 running total when SURCHARGE began, after whichever base priced the stay and after
 the caps (`ON_THE_TIME_CHARGE`), **less any discount taken before it** (10-14
 20:25, "always the cheaper"): 10.00 with 20% or 2.00 off at a +20% fill rule is
-8.00 + 1.60 = 9.60. A discount is set against the time charge first, then the
-extra. So the plan loader holds every fill rule LAST in `adjust_order`: raised
-first and discounted after, a flat discount would cost the customer more.
+8.00 + 1.60 = 9.60. Which order and which split of the discount between the
+time charge and the extra is not argued here: the engine prices every order and
+charges the cheapest, to the cent (`engine._adjusted`, F55), and this rule is
+told what is left of each part on the order being priced. The plan loader still
+holds every fill rule LAST in `adjust_order`.
 
 **Two answers the OWNER gives, and the engine assumes neither** (2026-10-14: the
 owner decides, at rate setup for dynamic pricing). Both are required, answered

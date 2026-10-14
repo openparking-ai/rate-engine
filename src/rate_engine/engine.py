@@ -754,15 +754,17 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
                         ledger.add(line)
             continue
 
-        #: What the discounts at ADJUST have taken so far on this pass. The fill
-        #: rule raises what is LEFT after them (10-14 20:25, "always the
-        #: cheaper"): a discount comes off first, and the fill rule's percent is
-        #: taken of the time charge that remains. A discount is set against the
-        #: time charge first and only then against the extra -- of the ways to
-        #: split it, the one the customer pays least by. The plan loader holds
-        #: every fill rule last in `adjust_order`, so every discount that applies
-        #: has run before it.
-        taken = 0
+        if stage == ADJUST:
+            # Every ADJUST rule, the fill rule among them, in the cheapest order
+            # (`_adjusted`): with a discount and a fill rule both applying, the
+            # plan's order no longer decides the price.
+            for line in _adjusted(
+                plan, stay, ledger.total_minor, plan.rules_for_stage(stage),
+                time_charge=time_charge, extras=extras, priced_by_special=priced_by_special,
+            ):
+                ledger.add(line)
+            continue
+
         for rule in _in_application_order(plan, stage, plan.rules_for_stage(stage)):
             applier = RULE_APPLIERS[rule.type]
             if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
@@ -774,22 +776,152 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             )
             if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
                 given.update(priced_by_special=priced_by_special, extras_minor=extras)
-                if stage == ADJUST:
-                    given.update(
-                        time_charge_minor=max(0, time_charge - taken),
-                        extras_minor=max(0, extras - max(0, taken - time_charge)),
-                        discounted_minor=taken,
-                    )
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:
                 lines = applier(rule, stay, plan, **given)
             for line in _lines_of(rule, lines):
                 ledger.add(line)
-                if stage == ADJUST and line.delta_minor < 0:
-                    taken += -line.delta_minor
 
     return ledger
+
+
+#: The line that says in which order the discounts and the fill rule were taken.
+FILL_ORDER = "fill_level.order"
+
+#: How a discount taken before the fill rule is set against the stay's two parts.
+#: TIME_FIRST: the time charge, then the space-class extra. PER_PART: each part
+#: carries its share of the discount, in proportion to what it charged, and a
+#: part the fill rule raises takes the cent a share rounds to.
+TIME_FIRST = "time_first"
+PER_PART = "per_part"
+
+
+def _adjusted(plan, stay, total_minor, rules, *, time_charge, extras, priced_by_special):
+    """The ADJUST stage's lines, in the order that charges the driver LEAST.
+
+    His rule, 10-14 20:25, on a discount meeting the fill rule: "always the
+    cheaper" -- never a cent more than the cheapest order, rounding included.
+    The order changes the money in three ways: the fill rule raises what is left
+    after the discounts before it, a discount after it takes its share of the
+    increase too, and a discount taken before it can come off the part it raises
+    or the part it does not. Which is cheapest depends on the stay -- a special
+    that is not raised, a VIP extra that is, a rounding that lands a cent either
+    way -- so it is not argued, it is priced: every order is priced, whole, and
+    the cheapest charged, with one line saying which.
+
+    The candidates, in the order a tie is settled (the first wins): the
+    discounts first and the fill rule on what is left (set against the time
+    charge first); the fill rule first; the discounts first, each part carrying
+    its share and the fill rule raising what is left of the parts it raises;
+    then the fill rule between the discounts, at each place, both ways. The
+    discounts keep the plan's stated order among themselves. With no fill rule
+    applying, or nothing beside it, the plan's order is the only one.
+    """
+    from .money import format_minor
+
+    ordered = _in_application_order(plan, ADJUST, rules)
+    fills = [
+        r for r in ordered if r.type == "fill_level" and QUALIFIERS[r.type](r, stay, plan)
+    ]
+    others = [r for r in ordered if r not in fills]
+    beside = [r for r in others if QUALIFIERS[r.type](r, stay, plan)]
+
+    def run(order, split):
+        lines: list[Line] = []
+        running = total_minor
+        taken = 0
+        for rule in order:
+            if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
+                continue
+            given: dict = {}
+            if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]:
+                given["time_charge_minor"] = time_charge
+            if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
+                time_left, extra_left = _left_after(
+                    rule, taken, time_charge, extras, priced_by_special, split
+                )
+                given.update(
+                    priced_by_special=priced_by_special, time_charge_minor=time_left,
+                    extras_minor=extra_left, discounted_minor=taken,
+                )
+            applied = RULE_APPLIERS[rule.type](rule, stay, plan, running, **given)
+            for line in _lines_of(rule, applied):
+                lines.append(line)
+                running += line.delta_minor
+                if line.delta_minor < 0:
+                    taken += -line.delta_minor
+        return lines, running
+
+    if len(fills) != 1 or not beside:
+        return run(ordered, TIME_FIRST)[0]
+
+    fill = fills[0]
+    k = len(others)
+    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [
+        (at, split) for at in range(1, k) for split in (TIME_FIRST, PER_PART)
+    ]
+    priced = []
+    for at, split in places:
+        order = others[:at] + [fill] + others[at:]
+        lines, total = run(order, split)
+        priced.append((total, at, split, lines))
+    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie
+    total, at, split, lines = cheapest
+    if at == 0:
+        how = "the fill rule first, then the discounts"
+    elif at == k:
+        how = (
+            "the discounts first, then the fill rule on what is left"
+            if split == TIME_FIRST
+            else "the discounts first, each part its share, then the fill rule on what is left"
+        )
+    else:
+        how = (
+            f"the fill rule after {', '.join(r.id for r in others[:at])} and before "
+            f"{', '.join(r.id for r in others[at:])}"
+        )
+    dearer = sorted({p[0] for p in priced if p[0] != total})
+    other = (
+        f"; another order would charge {', '.join(format_minor(t, plan.currency) for t in dearer)}"
+        if dearer
+        else "; every order charges the same"
+    )
+    return lines + [
+        Line(
+            code=FILL_ORDER,
+            rule_id=fill.id,
+            text=f"Discounts and the fill rule taken in the cheapest order: {how}{other}",
+            delta_minor=0,
+        )
+    ]
+
+
+def _left_after(fill, taken, time_charge, extras, priced_by_special, split):
+    """What is left of the time charge and of the extra after `taken` came off.
+
+    TIME_FIRST sets the discount against the time charge, then the extra.
+    PER_PART gives each part its share, in proportion to what it charged; when
+    only one of the two is raised by this fill rule on this pass -- the time
+    unless a special priced it and specials are not raised; the extra when it
+    is raised -- the raised part's share is rounded UP and the other part takes
+    the rest, so a cent of rounding never lands on the driver.
+    """
+    if split == TIME_FIRST or not time_charge or not extras:
+        time_off = min(time_charge, taken)
+        return time_charge - time_off, max(0, extras - (taken - time_off))
+    raises_time = priced_by_special is None or fill.params["raises_specials"]
+    raises_extra = fill.params["raises_vip_extra"]
+    whole = time_charge + extras
+    taken = min(taken, whole)
+    if raises_extra and not raises_time:
+        extra_off = min(extras, -(-taken * extras // whole))
+        time_off = taken - extra_off
+    else:
+        share = -(-taken * time_charge // whole) if raises_time else taken * time_charge // whole
+        time_off = min(time_charge, share)
+        extra_off = taken - time_off
+    return time_charge - time_off, extras - extra_off
 
 
 #: The line that says which way a stay was priced when a special qualified under

@@ -36,16 +36,16 @@ because no bool appears anywhere in a plan (see "Money") -- and there is no
 default: the engine does not decide for the owner what the rule
 raises (F54). Plans with no fill rule load and price exactly as on version 5.
 
-**A fill rule raises what is left after a discount, and comes last.** Where a
-discount and a fill rule both apply, the discount comes off first and the fill
-rule's percent is taken of what remains (F51); a plan whose `adjust_order` puts a
-fill rule before another ADJUST rule does not load. Version 6 had not been
-released when this was settled, so it is part of version 6, not a version 7.
+**A discount and a fill rule: the cheapest order.** Where both apply, every order
+is priced and the cheapest charged, to the cent after rounding (F55); the line
+`fill_level.order` says which. A plan whose `adjust_order` puts a fill rule
+before another ADJUST rule does not load. Version 6 had not been released when
+this was settled, so it is part of version 6, not a version 7.
 
 **What a caller must do.** Add both answers to every fill rule, and list every
 fill rule last in `adjust_order`. A consumer
-reading breakdown lines meets two new line codes, `fill_level.special_not_raised`
-and `fill_level.extra_raised`; no finding code was added.
+reading breakdown lines meets three new line codes, `fill_level.special_not_raised`,
+`fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
 ### What changed in version 5
 
@@ -499,6 +499,7 @@ never failed is a decoration.
 | **F52** | A VIP surcharge may be a percent of the stay's time-based charge -- the total after the base and the caps -- rounded the way the rule says, and never of another surcharge, so two surcharges total the same in any order. The flat form prices exactly as it did. A rule stating both forms, or a percent out of range, is refused by name. |
 | **F53** | `validate-plan` probes the occupancy axis of every fill rule: one basis point below each threshold, on it, and at 100% full, across every other axis, so two fill rules colliding only when the garage is full are reported before a stay is refused for it, and the finding names the figure that found it. A plan with no fill rule is probed exactly as before, and a missing figure is not reported as a gap in the plan. |
 | **F54** | A fill rule states the owner's two answers, `raises_specials` and `raises_vip_extra`, each "yes" or "no", and a rule that omits either or states anything else does not load, naming the field. `raises_specials` no leaves a charge a special priced unraised and says so; yes raises it. `raises_vip_extra` yes raises the space-class extra by the same percent on its own line; no leaves it as set. All four combinations, on each side of the threshold, price to the cent worked by hand, and flipping one answer moves the fee by exactly what that answer governs. |
+| **F55** | Where a discount and a fill rule both apply, the driver pays the CHEAPEST order, to the cent after rounding: the discounts first and the fill rule on what is left; the fill rule first; the discounts first with each part (time charge, space-class extra) carrying its share; and the fill rule between discounts. The plan's stated order does not decide the price. A tie charges the first of those, and one line says which order was charged and what the others would have charged. Every pair of the owner's two answers, a percent and a flat discount, each side of the threshold, prices to the cent worked by hand. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
@@ -534,14 +535,25 @@ came in when the garage was 70% full keeps that price however full the garage is
 when it leaves. The rule applies AT the threshold and above.
 
 **It raises the charge for the TIME**: the running total when SURCHARGE begins,
-after whichever base priced the stay and after the caps, **less any discount
-taken before it**. A discount comes off first and the rule's percent is taken of
-what is left -- always the cheaper of the two orders for the driver: 10.00 with
-20% or 2.00 off at +20% is 8.00 + 1.60 = 9.60, never 10.00. A discount is set
-against the time charge first and then against the space-class extra. So a plan
-whose `adjust_order` puts a fill rule anywhere but after every other ADJUST rule
-does not load, naming the rule; the line then says "time-based charge after
-discounts +20% on 8.00 USD".
+after whichever base priced the stay and after the caps, less any discount
+taken before it.
+
+**With a discount, the driver pays the cheapest order** (F55). Where a discount
+and a fill rule both apply, the engine prices every order and charges the
+cheapest, to the cent after rounding: the discounts first and the fill rule on
+what is left, the discount set against the time charge first; the fill rule
+first, the discounts on the raised total; the discounts first with each part
+(time charge, space-class extra) carrying its share in proportion, the raised
+part's share rounded up; and, with more than one discount, the fill rule between
+them. The discounts keep the plan's order among themselves. A tie charges the
+first of those. One line, `fill_level.order`, at zero, says which order was
+charged and what the others would have charged: "Discounts and the fill rule
+taken in the cheapest order: the fill rule first, then the discounts; another
+order would charge 16.38 USD". 10.00 with 20% or 2.00 off at +20% is 9.60.
+A plan whose `adjust_order` puts a fill rule anywhere but after every other
+ADJUST rule still does not load, naming the rule: the price no longer depends on
+it, and a plan that reads as "raise, then discount" would say something the
+engine does not do.
 
 **The owner's two answers** (version 6), both required, `yes` or `no`, no default:
 

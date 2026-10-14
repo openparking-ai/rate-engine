@@ -378,6 +378,17 @@ GUARANTEES: dict[str, str] = {
         "the threshold, price to the cent worked by hand, and flipping one answer "
         "moves the fee by exactly what that answer governs."
     ),
+    "F55": (
+        "Where a discount and a fill rule both apply, the driver pays the CHEAPEST "
+        "order, to the cent after rounding: the discounts first and the fill rule on "
+        "what is left; the fill rule first; the discounts first with each part (time "
+        "charge, space-class extra) carrying its share; and the fill rule between "
+        "discounts. The plan's stated order does not decide the price. A tie charges "
+        "the first of those, and one line says which order was charged and what the "
+        "others would have charged. Every pair of the owner's two answers, a percent "
+        "and a flat discount, each side of the threshold, prices to the cent worked "
+        "by hand."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

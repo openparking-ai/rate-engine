@@ -1118,16 +1118,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F51/raised-before-discount": (
         "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
         "engine.py",
-        "                        time_charge_minor=max(0, time_charge - taken),",
-        "                        time_charge_minor=time_charge,  # PLANTED: raised before discount",
+        "                    priced_by_special=priced_by_special, time_charge_minor=time_left,",
+        "                    priced_by_special=priced_by_special, time_charge_minor=time_charge,"
+        "  # PLANTED",
         "the fill rule raises the time charge before the discount came off, so a "
         "discounted car at a busy garage pays the increase on money it is not charged",
     ),
     "F51/extra-before-discount": (
         "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
         "engine.py",
-        "                        extras_minor=max(0, extras - max(0, taken - time_charge)),",
-        "                        extras_minor=extras,  # PLANTED: extra raised before discount",
+        "                    extras_minor=extra_left, discounted_minor=taken,",
+        "                    extras_minor=extras, discounted_minor=taken,  # PLANTED",
         "a discount larger than the time charge is not taken off the extra before the "
         "fill rule raises it",
     ),
@@ -1138,6 +1139,41 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "        if False:  # PLANTED: the fill rule may come before a discount",
         "a plan that raises first and discounts after loads, so a flat discount costs "
         "the customer more than the cheaper order",
+    ),
+    "F55/stated-order-charged": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie",
+        "    cheapest = priced[0]  # PLANTED: the stated order, whatever it costs",
+        "the plan's order is charged even where another order is cheaper for the driver",
+    ),
+    "F55/never-raised-first": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [",
+        "    places = [(k, TIME_FIRST), (k, PER_PART)] + [  # PLANTED: never raised first",
+        "the fill rule is never priced first, so a cent of rounding lands on the driver",
+    ),
+    "F55/never-per-part": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST), (k, PER_PART)] + [",
+        "    places = [(k, TIME_FIRST), (0, TIME_FIRST)] + [  # PLANTED: no per-part split",
+        "a discount is never shared between the parts, so the raised extra carries none of it",
+    ),
+    "F55/tie-not-first": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "    cheapest = min(priced, key=lambda p: p[0])  # min() keeps the first of a tie",
+        "    cheapest = min(reversed(priced), key=lambda p: p[0])  # PLANTED: last of a tie",
+        "a tie charges the last order rather than the first the contract names",
+    ),
+    "F55/share-rounds-against-driver": (
+        "tests/test_f55_a_discount_and_the_fill_rule_charge_the_cheapest_order.py",
+        "engine.py",
+        "        extra_off = min(extras, -(-taken * extras // whole))",
+        "        extra_off = min(extras, taken * extras // whole)  # PLANTED: rounded down",
+        "the raised extra's share of a discount rounds down, a cent on the driver",
     ),
     "F51/figure-unchecked": (
         "tests/test_f51_the_fill_rule_prices_on_the_garage_at_entry.py",
