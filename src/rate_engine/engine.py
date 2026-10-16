@@ -229,9 +229,10 @@ def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
     **This no longer decides which rule is charged (F63).** It used to: two
     specials, or two time-based rates, were compared on what the rules
     themselves charged, and a cap or an adjustment downstream could make the
-    dearer rule the cheaper stay -- a 100.00 flat special and a 1.00-an-hour
-    weekend rate over two days, at 30.00 a day, come to 30.00 and 48.00 once the
-    cap has run. The car pays the cheapest (Gokhan, 2026-10-16), so every way is
+    dearer rule the cheaper stay -- over two days a rate of 100.00 for the first
+    hour and 0.50 an hour after charges 123.50 and one of 2.00 an hour 96.00, and
+    at 30.00 a day they come to 42.00 and 60.00 once the cap has run. The car
+    pays the cheapest (Gokhan, 2026-10-16), so every way is
     priced through the whole pipeline and the FEES are compared
     (`_the_cheapest_way`). What a rule itself charges is still what its line
     says it "qualified at", and it settles which of two ways that come to the
@@ -322,9 +323,10 @@ def _resolved_line(
 
     **Where the rules' own charges do not say why, the whole stay does** (F63).
     The ways are compared on the fee, caps and all, so the winner's own charge
-    can be the higher one: "Event rate 100.00 USD applied instead" beside a 48.00
-    weekend rate is true only because, at 30.00 a day, the event rate's stay
-    comes to 30.00 and the weekend rate's to 48.00 -- so the line says both.
+    can be the higher one: "Front-loaded rate 123.50 USD applied instead" beside
+    a 96.00 weekend rate is true only because, at 30.00 a day, the front-loaded
+    rate's stay comes to 42.00 and the weekend rate's to 60.00 -- so the line
+    says both.
 
     `by_time`: the stay was charged by the time-based rate, which was less than
     the cheapest special too (`_the_cheapest_way`). The winner was then NOT

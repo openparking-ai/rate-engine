@@ -154,8 +154,12 @@ F62/limit-copied
 F62/no-limit
 F62/not-published
 F62/wrong-code
-F63/flat-capped-at-the-max-times-the-days
+F63/covered-past-its-limit
+F63/flat-owed-at-entry
+F63/no-limit
+F63/one-price-not-capped
 F63/rules-own-charges-decide
+F63/special-over-a-cheaper-hour
 F63/stated-order-decides
 F63/tie-named-by-id-alone
 F63/whole-stay-not-said

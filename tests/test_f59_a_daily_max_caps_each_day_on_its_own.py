@@ -20,11 +20,11 @@ $8 the first hour and $4 an hour after, $30 a day, New York, as in F56:
   after the last one.
 * A weekly max caps each week the same way -- by the plan's own week, from the
   day it names -- after the daily max for each of its days.
-* A flat special is owed in full when the car comes in, so it is capped on the
-  day of entry: the owner's later decision (2026-10-16, the cheapest price
-  always wins), pinned in F63. This file pinned the reading before it -- one
-  price, capped at the max times the days the car was in -- and that reading is
-  now what a rule type that says nothing about its accrual gets (F56).
+* A flat special is one price for the stay it covers, so it is not split by
+  the day: it is held to the max times the days the car is in, and compared
+  whole with the time-based rate (the owner's decision, 2026-10-17: compare
+  whole-stay alternatives), pinned in F63. A rule type that says nothing about
+  its accrual is capped the same way (F56).
 
 The caps learn how the time was charged from the engine (`charged_by`, the
 `told_the_base` trait), and the engine checks that what the base says it charged

@@ -40,11 +40,10 @@ lines, and works from the base rather than the running total, so the two caps
 still compose in either order. And like a day, a week the car is in for no time
 is not a week it touched: an exit at exactly the start of a week adds no cap.
 
-A flat special is owed in full when the car comes in, so it falls in the week
-of entry and is capped there (F63). A type that does not say how its charge
-builds up is one price with nothing to split by the week, so it is capped as
-before: each week is allowed the weekly max, or the daily max times the days
-the car is in that week where that is lower.
+A type that does not say how its charge builds up is one price with nothing to
+split by the week, so it is capped as before: each week is allowed the weekly
+max, or the daily max times the days the car is in that week where that is
+lower. A flat special is one: one price for the stay it covers (F63).
 
 **A long stay is priced in the memory of a short one (F61).** The weeks are found
 as they are walked, each week's days are found from the week's own start rather

@@ -139,10 +139,16 @@ drifts.
   the start of each day, and each day pays the time charged in it, or the
   maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first
   hour, $4 an hour after and $30 a day is $30 + $4, not $30 twice. A week is
-  capped the same way, after the daily maximum for each of its days. A flat
-  special is owed in full when the car comes in, so a maximum caps it on that
-  day: a $50 Friday-to-Sunday flat with a $30 daily maximum is $30. The work of
-  capping grows with the number of days in the stay; the memory does not.
+  capped the same way, after the daily maximum for each of its days. **A flat
+  special is one price for the stay it covers**, never split by the day: it is
+  held to the maximum for each day and week the car is in, and compared with
+  the normal price for the same stay — each calendar day capped by the daily
+  maximum, each week by the weekly maximum — and the cheaper is charged. With a
+  $50 Friday-to-Sunday flat, a $30 daily maximum and an hourly rate that reaches
+  $30 within a day, Saturday only pays $30 and all weekend (Friday 18:00 to
+  Sunday 18:00) pays $50. A stay that runs past a special's exit limit is not
+  covered by it, so the time-based rate prices it. The work of capping grows
+  with the number of days in the stay; the memory does not.
   **Two caps are not a conflict** — they are two ceilings, and the lower one
   wins whichever is applied first.
 - **The longest stay priced is 90 days.** A stay longer than 90 days of 24

@@ -398,8 +398,10 @@ max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
 period starts, and does not start again at midnight, so those fifteen minutes
 are the stay's sixteenth hour at 4, not a new first hour at 8. A 23- or 25-hour
-day is one day. A flat special is owed in full when the car comes in, so it is
-capped on the day of entry (F63, below). This only lowers a fee. The cap lines
+day is one day. A flat special is one price for the stay it covers, so it is
+not split by the day: it is held, as before, to the max times the days the car
+is in, and compared whole with the time-based rate (F63, below). This only
+lowers a fee. The cap lines
 list what each day or week paid when one paid less than the max; no line code
 or finding code was added. A rule type that prices the time now says, when it
 registers, how its charge builds up over the stay, and the engine checks that
@@ -431,23 +433,31 @@ Version 6 had not been released, so it is part of version 6.
 
 **The cheapest price always wins (F63).** The garage owner's rule, 2026-10-16:
 when more than one price could apply to the same time, the car pays the
-cheapest. Three places changed, and each only lowers a fee:
+cheapest; and, 2026-10-17, what is compared is the whole stay each way would
+charge. Two places changed, and each only lowers a fee:
 
-- A flat special is owed in full when the car comes in, so a daily or weekly max
-  caps it on the day of entry: a 50 Friday-to-Sunday flat with a 30 daily max is
-  30, where the max times the three days, 90, let the 50 stand. Of every way a
-  flat price could be split into days, all of it on one is the cheapest, for
-  every cap at once.
 - Two specials, or two time-based rates, that qualify for one stay are compared
   on the whole FEE -- each priced through every stage, caps, surcharges and
-  adjustments included -- not on what the rules themselves charge. A 100 flat
-  and a 1-an-hour weekend rate over two days, at 30 a day, come to 30 and 48:
-  the flat is charged, and the losing rule's line gives both figures.
+  adjustments included -- not on what the rules themselves charge. Over two
+  days, a rate of 100 the first hour and 0.50 an hour after charges 123.50 and
+  one of 2 an hour 96; at 30 a day they come to 42 and 60. The first is
+  charged, and the losing rule's line gives both figures.
 - `stated_order` no longer charges a dearer rule. Under either mode the cheapest
   way is charged, the time-based rate included; the stated order names one of
   two ways that charge the same, as `cheapest_wins` names the lowest rule id. A
   stay a special qualified for under it gains the `special_used` or
   `time_based_used` line.
+
+**A flat special is one price for the stay it covers**, as before. A daily or
+weekly max does not split it by the day: it holds it to the max for each day and
+week the car is in, and the engine charges the cheaper of it and the normal
+price for the same stay, each calendar day capped by the daily max and each week
+by the weekly max. With a 50 Friday-to-Sunday flat, a 30 daily max and an hourly
+rate that reaches 30 within a day, Saturday only is 30, and Friday 18:00 to
+Sunday 18:00 is 50, where by the hour it is 28 + 30 + 30 = 88. The stay a special
+covers is the stay it qualifies for: a window is all of its conditions or
+nothing, so a stay that runs past a special's exit limit is priced by the
+time-based rate, as before.
 
 Not changed, because nothing there is a choice between prices: a surcharge, a
 fixed increase and a tax are added; the caps already leave the lowest ceiling

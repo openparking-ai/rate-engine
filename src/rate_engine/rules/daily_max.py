@@ -33,12 +33,14 @@ the same way.
 How the charge is split is the base's to say, not this file's: the engine hands
 a cap `charged_by` (the `told_the_base` trait), what the base charges for the
 stay's first so many minutes. A time-based rate charges a period on the day the
-period starts, and does not start again at midnight. A flat special is owed in
-full from the minute the car comes in, so all of it falls on the day of entry
-and is capped there (F63: the cheapest price always wins). A type that does not
+period starts, and does not start again at midnight. A type that does not
 say how its charge builds up -- `charged_by` None -- is capped as one price for
 the stay, at the max times the days the car is in: the cap cannot know where
-its charge fell.
+its charge fell. A flat special is one: one price for the stay it covers, never
+split by the day (F63, Gokhan 2026-10-17). A $50 flat is held to $30 on a
+Saturday alone and stands over Friday to Sunday, where the three days allow
+$90; the engine then charges the cheaper of it and the time-based rate's whole
+stay.
 
 **A day the car is in for no time is not a day it touched.** An exit at exactly
 local midnight ends on the date before, so Monday 09:00 to Tuesday 00:00 is one

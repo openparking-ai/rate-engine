@@ -215,9 +215,9 @@ def test_400_ways_are_each_priced_once_and_nothing_is_asked_per_pair(mode):
     for cap in counts["caps"]:
         assert counts["applied"][cap] == counts["passes"] == 401
 
-    # And the answer is the cheapest way's (F63): a flat owed at entry and
-    # capped on that day at 30.00, against the hour's 1300.00 over 13 weeks.
-    assert result.fee_minor == 3000
+    # And the answer is the cheapest way's (F63): the lowest flat, one price for
+    # the stay, 1000.00, against the hour's 1300.00 over 13 weeks.
+    assert result.fee_minor == 100_000
     codes = Counter(line.code for line in result.breakdown.lines)
     # The other 299 specials say they lost; the one line comparing the time-based
     # way says what it would have charged; the 100 weekend specials say why not.
@@ -270,5 +270,5 @@ def test_400_qualifying_specials_are_priced_within_a_fixed_time_budget():
     took = time.perf_counter() - started
 
     assert took < TIME_BUDGET_SECONDS, f"{took:.2f} s for 400 qualifying specials"
-    assert result.fee_minor == 3000
+    assert result.fee_minor == 100_000
     assert sum(1 for line in result.breakdown.lines if line.code == "resolved") == 399

@@ -27,10 +27,10 @@ type that does not say how its charge builds up -- one registered with no
 accrual, as a type written against the earlier `register` signature is -- is
 capped at the max times the days and weeks the car is in. That is the path where
 COUNTING the days decides the money, so the boundaries are measured there as well
-as on the lines a time-based stay prints. A `time_window` flat special took this
-path until F63, which owes it in full at entry and caps it on that day (Gokhan,
-2026-10-16: the cheapest price always wins), so the path is reached here through
-a type this file registers for the purpose and removes afterwards.
+as on the lines a time-based stay prints. A `time_window` flat special takes
+this path too (F63: one price for the stay it covers); the path is reached here
+through a type this file registers for the purpose and removes afterwards, so
+these boundaries are measured on the cap's own path whatever a flat special does.
 
 `scripts/fail_controls.py` puts back the exit's own date, the week start at the
 exit, a rolling day counted past the week's end, and the week capped by the

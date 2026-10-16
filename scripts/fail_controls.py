@@ -1637,19 +1637,66 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "the engine's limit is refused under the plan's own ceiling code, so a door "
         "routing on codes tells the owner to change a rule no rule can change",
     ),
-    # The cheapest price always wins (F63, Gokhan 2026-10-16). The first arm puts
-    # back the flat special capped at the max times the days; the second compares
-    # the ways on what the rules charge rather than on the fee; the third lets the
-    # stated order choose between specials; the fourth drops the whole stay from
-    # the losing line; the fifth names a tie at one fee by rule id alone.
-    "F63/flat-capped-at-the-max-times-the-days": (
-        "tests/test_f63_the_cheapest_price_always_wins.py",
+    # The cheapest price always wins (F63, Gokhan 2026-10-16), comparing whole-stay
+    # alternatives (2026-10-17). The first five arms each break one part of the
+    # flat special's rule, against the one test that holds it: the whole special
+    # owed and capped on the day of entry (the reading the 10-17 decision
+    # corrects, which made the full weekend 30.00); a flat price no cap holds; a
+    # special charged over a cheaper hour; a special that covers a stay past its
+    # exit limit; and the 90-day limit taken out. The rest compare the ways on
+    # what the rules charge rather than on the fee, let the stated order choose
+    # between specials, drop the whole stay from the losing line, and name a tie
+    # at one fee by rule id alone.
+    #
+    # Retired: F63/flat-capped-at-the-max-times-the-days. Its plant, a flat
+    # special as one price capped at the max times the days the car is in, is
+    # now the decided behaviour; F63/flat-owed-at-entry is its inverse.
+    "F63/flat-owed-at-entry": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::test_all_weekend_pays_50",
         "rules/time_window.py",
-        '    if effect["kind"] == "flat":\n'
-        '        return _owed_at_entry(effect["price_minor"])\n',
-        "    pass  # PLANTED: a flat special is one price for the stay again\n",
-        "a 50.00 Friday-to-Sunday flat with a 30.00 daily max is capped at the max "
-        "times the three days, and the driver pays 50.00, not 30.00",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        "    return None\n",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        '    if effect["kind"] == "flat":  # PLANTED: owed and capped on the day of entry\n'
+        '        return lambda minutes, price=effect["price_minor"]: price\n'
+        "    return None\n",
+        "a 50.00 Friday-to-Sunday flat with a 30.00 daily max is owed in full on the "
+        "Friday and capped there, so the whole weekend pays 30.00, not 50.00",
+    ),
+    "F63/one-price-not-capped": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::test_saturday_only_pays_30",
+        "rules/daily_max.py",
+        "        ceiling = most * caps\n",
+        "        ceiling = max(running_total_minor, most * caps)  # PLANTED: never capped\n",
+        "a flat special is one price that no daily max holds, so with no time-based "
+        "rate in the plan a Saturday alone pays 50.00, not the day's 30.00",
+    ),
+    "F63/special-over-a-cheaper-hour": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_a_stay_inside_the_span_whose_normal_price_is_lower_pays_the_normal_price",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special is charged over a cheaper hour",
+        "a two-hour Saturday stay inside the weekend flat's span pays the flat held "
+        "to the day's max, 30.00, where by the hour it is 12.00",
+    ),
+    "F63/covered-past-its-limit": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_a_stay_that_starts_inside_the_span_and_runs_past_it_is_priced_by_the_hour",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    exit_side = None  # PLANTED: a stay past the exit limit is still covered\n",
+        "a stay that leaves an hour after the weekend flat's 20:00 limit is still "
+        "given the flat, 50.00, where the time-based rate prices it at 60.00",
+    ),
+    "F63/no-limit": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_the_90_day_limit_comes_before_any_special",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n        return None\n",
+        "    return None  # PLANTED: no stay is too long\n",
+        "a stay a minute past 90 days is priced by the cheapest special instead of "
+        "refused for its length",
     ),
     "F63/rules-own-charges-decide": (
         "tests/test_f63_the_cheapest_price_always_wins.py",
@@ -1671,8 +1718,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "engine.py",
         "    if own[winner.id] >= own[rule.id]:\n",
         "    if False:  # PLANTED: the losing line does not say what the stay comes to\n",
-        "the line says the 100.00 event applied instead of a 48.00 weekend rate, and "
-        "not that the event's stay comes to 30.00 -- a receipt that reads backwards",
+        "the line says the 123.50 front-loaded rate applied instead of a 96.00 "
+        "weekend rate, and not that its stay comes to 42.00 -- a receipt that reads "
+        "backwards",
     ),
     "F63/tie-named-by-id-alone": (
         "tests/test_f63_the_cheapest_price_always_wins.py",

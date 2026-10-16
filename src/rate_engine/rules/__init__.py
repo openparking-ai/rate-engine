@@ -188,8 +188,8 @@ RULE_APPLIERS: dict[str, Callable[..., Any]] = {}
 #: the `charged_by` function `TOLD_THE_BASE` describes -- minutes into the stay
 #: to what the rule charges for that many minutes -- or None when the type does
 #: not say. Every registered type has an entry, so a lookup is never a `.get`
-#: with a default. A flat price says too: all of it from the first minute
-#: (`time_window`, F63).
+#: with a default. A flat special says None on purpose: it is one price for the
+#: stay it covers, never split by the day (`time_window`, F63).
 #:
 #: **None is the safe answer, not the precise one.** A cap handed None caps the
 #: whole charge at the daily max times the days the car is in, which is what a

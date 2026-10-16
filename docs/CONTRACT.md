@@ -60,8 +60,10 @@ max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
 period starts, and does not start again at midnight, so those fifteen minutes
 are the stay's sixteenth hour at 4, not a new first hour at 8. A 23- or 25-hour
-day is one day. A flat special is owed in full when the car comes in, so it is
-capped on the day of entry (F63, below). This only lowers a fee. The cap lines
+day is one day. A flat special is one price for the stay it covers, so it is
+not split by the day: it is held, as before, to the max times the days the car
+is in, and compared whole with the time-based rate (F63, below). This only
+lowers a fee. The cap lines
 list what each day or week paid when one paid less than the max; no line code
 or finding code was added. A rule type that prices the time now says, when it
 registers, how its charge builds up over the stay, and the engine checks that
@@ -93,23 +95,31 @@ Version 6 had not been released, so it is part of version 6.
 
 **The cheapest price always wins (F63).** The garage owner's rule, 2026-10-16:
 when more than one price could apply to the same time, the car pays the
-cheapest. Three places changed, and each only lowers a fee:
+cheapest; and, 2026-10-17, what is compared is the whole stay each way would
+charge. Two places changed, and each only lowers a fee:
 
-- A flat special is owed in full when the car comes in, so a daily or weekly max
-  caps it on the day of entry: a 50 Friday-to-Sunday flat with a 30 daily max is
-  30, where the max times the three days, 90, let the 50 stand. Of every way a
-  flat price could be split into days, all of it on one is the cheapest, for
-  every cap at once.
 - Two specials, or two time-based rates, that qualify for one stay are compared
   on the whole FEE -- each priced through every stage, caps, surcharges and
-  adjustments included -- not on what the rules themselves charge. A 100 flat
-  and a 1-an-hour weekend rate over two days, at 30 a day, come to 30 and 48:
-  the flat is charged, and the losing rule's line gives both figures.
+  adjustments included -- not on what the rules themselves charge. Over two
+  days, a rate of 100 the first hour and 0.50 an hour after charges 123.50 and
+  one of 2 an hour 96; at 30 a day they come to 42 and 60. The first is
+  charged, and the losing rule's line gives both figures.
 - `stated_order` no longer charges a dearer rule. Under either mode the cheapest
   way is charged, the time-based rate included; the stated order names one of
   two ways that charge the same, as `cheapest_wins` names the lowest rule id. A
   stay a special qualified for under it gains the `special_used` or
   `time_based_used` line.
+
+**A flat special is one price for the stay it covers**, as before. A daily or
+weekly max does not split it by the day: it holds it to the max for each day and
+week the car is in, and the engine charges the cheaper of it and the normal
+price for the same stay, each calendar day capped by the daily max and each week
+by the weekly max. With a 50 Friday-to-Sunday flat, a 30 daily max and an hourly
+rate that reaches 30 within a day, Saturday only is 30, and Friday 18:00 to
+Sunday 18:00 is 50, where by the hour it is 28 + 30 + 30 = 88. The stay a special
+covers is the stay it qualifies for: a window is all of its conditions or
+nothing, so a stay that runs past a special's exit limit is priced by the
+time-based rate, as before.
 
 Not changed, because nothing there is a choice between prices: a surcharge, a
 fixed increase and a tax are added; the caps already leave the lowest ceiling
@@ -657,12 +667,12 @@ never failed is a decoration.
 | **F56** | A cap counts only the days and weeks the car is in for more than zero time: an exit at exactly local midnight, at a 24-hour mark or at the start of a week adds no day or week, and one minute past it does. A week holds only its own days, so it costs no more than the daily max for the days the car is in it: at 30 a day and 100 a week, seven days and an hour is 100 + 4 by the hour and 100 + 30 for a flat price, not 100 twice. The two caps still compose in either order. |
 | **F57** | A fixed discount takes off at most what the stay costs when it is taken, and never less than nothing. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge, rather than refused as a negative fee; a discount smaller than the charge is taken in full. A fixed increase is added in full, so a fixed discount listed before it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the other way round 2. A fixed discount never adds money: on a total at or below zero it takes off nothing. The 150% discount that once took a total there no longer loads (F60). |
 | **F58** | The HTTP door reads a request body only within a bound. A negative Content-Length is a named 400 rather than a read to the end of the connection, and every connection carries a socket timeout, so a caller that stops part-way through a body is disconnected rather than holding a thread. |
-| **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, or each 24 hours from entry under `rolling_24h`, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special is owed in full at entry and is capped on that day (F63); a rule type that does not say how its charge builds up is capped as one price, at the max times the days the car is in. What a base says it charged is checked against its lines on every quote. |
+| **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, or each 24 hours from entry under `rolling_24h`, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special, one price for the stay it covers, is capped as one price at the max times the days the car is in (F63), as is a rule type that does not say how its charge builds up. What a base says it charged is checked against its lines on every quote. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F60** | A percent discount can never exceed 100%. A `time_window` discount whose `percent_bp` is above 10000 does not load: `validate-plan`, `quote` and the HTTP door answer 400 with the code INVALID_PERCENT_DISCOUNT_OVER_100 beside a sentence naming the field, so no plan carrying one is saved and no stay is priced on it. 10000 loads and makes the stay free. A percent increase over 100% still loads, a fixed discount larger than the charge is F57's, and every other load refusal carries no code. |
 | **F61** | A long stay is priced in the memory of a short one. A cap finds the stay's days and weeks as it walks them and lists none of them, each day's or week's amount goes into a running tally, the base remembers only its last few answers, and a cap's line spells out a bounded number of runs of equal amounts, then says how many more there were and what they came to. The work still grows with the stay, by a step a day: ten years take ten times the work of one, and a century no more a day than a year. The engine refuses a stay longer than 90 days before any of this work (F62); these are measured with that limit lifted, so they hold for the caps whatever it is set to. |
 | **F62** | The longest stay the engine prices is 90 days of 24 hours, entry to exit (Gokhan, 2026-10-16). Exactly 90 days is priced; 90 days and one second is REFUSED with GAP_STAY_LONGER_THAN_MAX_STAY, a 422 naming the limit, at every door -- before the plan is read, before a day of the stay is walked and before a base is asked what it charged, so a stay of about ten thousand years is refused with no more work than one of 90 days and a second. It is elapsed time, so a clock change does not move it. The limit is one constant, `MAX_STAY_DAYS`, read at every use, and `validate-plan` answers it as `max_stay_minutes` for a rate setup to show. |
-| **F63** | The cheapest price always wins (Gokhan, 2026-10-16): where more than one price could apply to the same time, the car pays the cheapest. A flat special is owed in full at entry and capped on that day, so a 50 Friday-to-Sunday flat with a 30 daily max is 30, and a weekly max caps it the same way. Two specials, or two time-based rates, are compared on the whole fee, caps and all -- a 100 flat beats a 1-an-hour weekend rate that comes to 48 over two days at 30 a day -- and the losing line gives both figures where the rules' own prices do not say why. Under `stated_order` the cheapest way is charged too, the time-based rate included. On every stay swept, the fee is the least of the fees each way charges on its own. Additive rules are not made a choice: a surcharge and a fixed increase are still added in full. |
+| **F63** | The cheapest price always wins (Gokhan, 2026-10-16): where more than one price could apply to the same time, the car pays the cheapest, and whole-stay alternatives are compared (2026-10-17). A flat special is one price for the stay it covers, held to the max for each day and week the car is in, and is compared with the time-based rate's whole stay, each calendar day capped by the daily max and each week by the weekly max: with a 50 Friday-to-Sunday flat, a 30 daily max and an hourly rate that reaches 30 within a day, Saturday only is 30 and Friday 18:00 to Sunday 18:00 is 50. A stay past a special's exit limit is not covered by it. Two specials, or two time-based rates, are compared on the whole fee, caps and all -- a rate of 100 the first hour and 0.50 after beats one of 2 an hour over two days at 30 a day, 42 against 60 -- and the losing line gives both figures where the rules' own prices do not say why. Under `stated_order` the cheapest way is charged too, the time-based rate included. On every stay swept, the fee is the least of the fees each way charges on its own. Additive rules are not made a choice: a surcharge and a fixed increase are still added in full. |
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. No limit is set on the rules a plan may hold or the ways a stay may have. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |

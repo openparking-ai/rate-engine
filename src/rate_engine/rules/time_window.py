@@ -883,30 +883,30 @@ def accrual(rule: Rule, stay, plan):
     by `increment`'s own periods and a cap splits it by the day like any other.
     An `adjust` effect never prices the time.
 
-    **A `flat` effect is owed in full from the minute the car comes in** (F63),
-    so a cap finds all of it on the day of entry and caps it there. Gokhan,
-    2026-10-16: the cheapest price always wins, and "a $50 Friday-to-Sunday flat
-    special with a $30 daily max pays the cheaper of the two" -- 30.00. It was
-    one price with no day it was charged in, capped at the max times the days
-    the car was in: 90.00 for those three days, so the 50.00 stood. Of every way
-    a flat price could be put into days, all of it on one day is the cheapest,
-    for every cap at once: a split pays each day its share or the max, which
-    adds up to no less than the price or the max paid once. That is why this,
-    and not a share a day, is the reading the decision gives. A period of a
-    time-based rate is owed the same way, from the minute it starts.
+    **A `flat` effect is one price for the stay it covers, and says None** (F63).
+    Gokhan, 2026-10-17: the cheapest price wins by comparing whole-stay
+    alternatives. A special spanning several days is one price for the stay; it
+    is compared with the normal price for the whole stay -- each calendar day
+    capped by the daily max, each week by the weekly max -- and the cheaper is
+    charged. With a $50 Friday-to-Sunday flat, a $30 daily max and an hourly
+    rate that reaches $30 within a day ($8 the first hour, $4 an hour after):
+    Saturday only pays $30, and Friday 18:00 to Sunday 18:00 pays $50, where by
+    the hour it is 28 + 30 + 30 = 88.
+
+    So no minute of the stay builds up to a flat price, and no cap splits it by
+    the day. A cap handed None holds it to the max for each day and week the car
+    is in -- Saturday alone, 30.00; the three days, 90.00, so the 50.00 stands --
+    and the engine compares that whole-stay figure with the time-based rate's
+    (`_the_cheapest_way`). On one day that is the day's max, as before. The
+    stay a flat covers is the stay it qualified for: all of its conditions, the
+    exit limit among them, or none (§8). A reading that owed the whole price on
+    the day of entry and capped it there made the full weekend 30.00 -- the
+    whole special capped at one day -- and the decision corrects it.
     """
     effect = rule.params["effect"]
     if effect["kind"] == "rate":
         return increment.charged_by(effect["rate"], rule.id, plan.currency)
-    if effect["kind"] == "flat":
-        return _owed_at_entry(effect["price_minor"])
     return None
-
-
-def _owed_at_entry(price_minor: int):
-    """A flat price as a charge that builds up over the stay: all of it from the
-    first minute, nothing after, so its parts add up to the price exactly."""
-    return lambda minutes: price_minor
 
 
 # SPEAKS_UNQUALIFIED, and it is the reason the trait exists.
