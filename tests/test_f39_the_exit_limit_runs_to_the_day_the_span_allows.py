@@ -58,7 +58,11 @@ from rate_engine.rules.time_window import DAY_SPAN_LIMITS
 from rate_engine.validator import probe_stays
 from rate_engine.wallclock import local_minute
 
-EVENT_PRICE = 4000
+#: The story above is told at $40. The fixture's window is 5.00, below every
+#: hourly total a stay below reaches (6.00 and up), because the cheapest way is
+#: charged under either mode (F63): only a window cheaper than the hour is
+#: charged where it qualifies, and only then does the fee say whether it did.
+EVENT_PRICE = 500
 #: In at 18:30 on the event date. Every stay below starts here.
 SATURDAY_1830 = "2026-10-17T18:30:00-04:00"
 
@@ -77,10 +81,11 @@ PLAN = {
     "timezone": "America/New_York",
     "currency": "USD",
     "space_classes": ["standard"],
-    # `stated_order` at QUALIFY: the window REPLACES the hourly rate when it
-    # qualifies, so the fee says whether it qualified. Under `cheapest_wins` a
-    # qualifying window dearer than the hourly rate is not used (U7g fix 1), and
-    # the fee could no longer tell the two outcomes apart.
+    # `stated_order` at QUALIFY. It used to let the window REPLACE the hourly
+    # rate whatever it cost, which is how this fixture's fee said whether the
+    # window qualified. Under either mode the cheapest way is charged now
+    # (F63), so the window is priced below the hour (EVENT_PRICE) and the fee
+    # says it the same way. The mode is kept so a stated order is exercised.
     "resolution": {
         "QUALIFY": {"mode": "stated_order", "order": ["event-night"]},
         "ACCUMULATE": {"mode": "cheapest_wins"},
@@ -120,8 +125,10 @@ def _fee(minutes: int, *, plan: dict | None = None) -> tuple[int, str]:
 
 def test_the_fixture_can_tell_the_outcomes_apart():
     """The control on the fixture. The window price and every hourly total below
-    must differ, or the table passes without measuring anything."""
+    must differ, or the table passes without measuring anything -- and the window
+    must be the cheaper way wherever it qualifies, or it is not charged there."""
     assert len({EVENT_PRICE, TIME_BASED_2000, TIME_BASED_2345, TIME_BASED_PAST_LIMIT}) == 4
+    assert EVENT_PRICE < min(TIME_BASED_2000, TIME_BASED_2345, TIME_BASED_PAST_LIMIT)
 
 
 @pytest.mark.guarantee("F39")
@@ -270,8 +277,10 @@ def test_the_change_is_ONE_DIRECTIONAL_across_the_validator_probe_matrix():
 # --- U7g fix 2, G1: the same window under `cheapest_wins` ---------------------
 #
 # The fixture above moved to `stated_order` in U7g fix 1, because under
-# `cheapest_wins` its 40.00 window is dearer than the hour and is not used though
-# it qualifies. That left `cheapest_wins` with no test of this window at all. So
+# `cheapest_wins` its 40.00 window was dearer than the hour and is not used though
+# it qualifies. That left `cheapest_wins` with no test of this window at all.
+# (Since F63 the fixture above prices its window below the hour, so it is charged
+# under either mode; this section stays as the `cheapest_wins` plan of it.) So
 # here the window is CHEAPER than the hour -- 10.00 against 3.00 an hour -- and
 # the car that leaves the same evening, at 23:45, must get it: the hour would be
 # 18.00. A bare-clock exit test refuses it (and charges 18.00); so does a

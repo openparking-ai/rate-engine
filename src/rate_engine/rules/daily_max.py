@@ -33,9 +33,12 @@ the same way.
 How the charge is split is the base's to say, not this file's: the engine hands
 a cap `charged_by` (the `told_the_base` trait), what the base charges for the
 stay's first so many minutes. A time-based rate charges a period on the day the
-period starts, and does not start again at midnight. A flat special is one
-price for the whole stay with nothing to split, so it is capped as it always
-was: at the max times the days the car is in.
+period starts, and does not start again at midnight. A flat special is owed in
+full from the minute the car comes in, so all of it falls on the day of entry
+and is capped there (F63: the cheapest price always wins). A type that does not
+say how its charge builds up -- `charged_by` None -- is capped as one price for
+the stay, at the max times the days the car is in: the cap cannot know where
+its charge fell.
 
 **A day the car is in for no time is not a day it touched.** An exit at exactly
 local midnight ends on the date before, so Monday 09:00 to Tuesday 00:00 is one
@@ -50,7 +53,9 @@ than a list, and the cap's line spells out at most `RUNS_SPELLED_OUT` runs of
 equal amounts, then says how many more there were and what they came to. As
 first written this listed every day of the stay, once for each daily cap and
 again inside the weekly cap, so a quote's memory grew with the stay as well as
-its time. This version sets no limit on how long a stay may be.
+its time. The engine refuses a stay longer than 90 days before a cap is asked
+(F62), so no cap walks more than 90 days. A quote still caps the stay once for
+each way of pricing it (F63, F64).
 """
 
 from __future__ import annotations

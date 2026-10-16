@@ -21,7 +21,7 @@ import textwrap
 from typing import Any
 
 from .breakdown import Ledger
-from .engine import Quote, Stay, make_stay, quote
+from .engine import Quote, Stay, make_stay, max_stay_minutes, quote
 from .findings import Refused
 from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
@@ -218,6 +218,12 @@ def validate_response(plan) -> dict[str, Any]:
     from. The membership test itself is NOT re-implemented here: `undecided()`
     owns the rule that a decision matches on CODE, and a second copy of that rule
     at a second site is exactly the drift findings.py exists to prevent.
+
+    **`max_stay_minutes` is the longest stay the engine prices** -- the same for
+    every plan, so it is not a finding about this one -- read from
+    `engine.MAX_STAY_DAYS` at every call (F62). It rides on the answer a rate
+    setup already asks for, so the setup can show the owner that a longer stay
+    is refused, GAP_STAY_LONGER_THAN_MAX_STAY, and needs an operator.
     """
     findings = validate_plan(plan)
     outstanding_codes = {f.code for f in undecided(plan)}
@@ -227,6 +233,7 @@ def validate_response(plan) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "plan_version": plan.plan_version,
+        "max_stay_minutes": max_stay_minutes(),
         "findings": serialized,
         "gaps": sum(1 for f in findings if f.is_gap),
         "conflicts": sum(1 for f in findings if not f.is_gap),

@@ -801,12 +801,14 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
     """
     from ..plan import InvalidPlan
 
-    failed = _failures(rule, stay, plan)
-    if not failed and not rule.covers(stay.space_class):
-        # The class is said only when it is the only reason. A window for another
-        # class that failed on its times already has a line, and that line is
-        # what such a receipt has always carried; this one replaces "applied".
+    if not rule.covers(stay.space_class):
+        # The class first, and alone. A window for another class is one the stay
+        # could never get, so its times are no reason: a VIP car told it came in
+        # after an early bird's entry limit reads that it was late for a special
+        # it was never eligible for. Whatever its times, the line names the class.
         failed = [_class_failure(rule, stay)]
+    else:
+        failed = _failures(rule, stay, plan)
     if failed:
         # The consequence differs by effect, and saying the wrong one would be a
         # sentence that is false on a receipt. A base that did not apply means the
@@ -879,15 +881,32 @@ def accrual(rule: Rule, stay, plan):
 
     A `rate` effect is a time-based rate, priced by `increment`, so it builds up
     by `increment`'s own periods and a cap splits it by the day like any other.
-    A `flat` effect is one price for the whole stay: no minute of the stay builds
-    up to it, so there is nothing to split by the day, and a cap compares the
-    price with the daily max times the days the car is in, as it always has.
     An `adjust` effect never prices the time.
+
+    **A `flat` effect is owed in full from the minute the car comes in** (F63),
+    so a cap finds all of it on the day of entry and caps it there. Gokhan,
+    2026-10-16: the cheapest price always wins, and "a $50 Friday-to-Sunday flat
+    special with a $30 daily max pays the cheaper of the two" -- 30.00. It was
+    one price with no day it was charged in, capped at the max times the days
+    the car was in: 90.00 for those three days, so the 50.00 stood. Of every way
+    a flat price could be put into days, all of it on one day is the cheapest,
+    for every cap at once: a split pays each day its share or the max, which
+    adds up to no less than the price or the max paid once. That is why this,
+    and not a share a day, is the reading the decision gives. A period of a
+    time-based rate is owed the same way, from the minute it starts.
     """
     effect = rule.params["effect"]
     if effect["kind"] == "rate":
         return increment.charged_by(effect["rate"], rule.id, plan.currency)
+    if effect["kind"] == "flat":
+        return _owed_at_entry(effect["price_minor"])
     return None
+
+
+def _owed_at_entry(price_minor: int):
+    """A flat price as a charge that builds up over the stay: all of it from the
+    first minute, nothing after, so its parts add up to the price exactly."""
+    return lambda minutes: price_minor
 
 
 # SPEAKS_UNQUALIFIED, and it is the reason the trait exists.

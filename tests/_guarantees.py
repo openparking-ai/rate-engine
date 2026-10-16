@@ -158,9 +158,9 @@ GUARANTEES: dict[str, str] = {
     "F22c": (
         "A special for another space class charges nothing. A QUALIFY rule that does "
         "not cover the stay's class did not qualify, whatever its times, so it adds "
-        "no money and gets its not-applied line at zero, which names the class only "
-        "where the class is its only reason; the fee is what the plan without it "
-        "charges."
+        "no money and gets its not-applied line at zero, naming the class as the "
+        "reason -- never a time for a special the stay could never get; the fee is "
+        "what the plan without it charges."
     ),
     "F23": (
         "The production invariant that the fee IS the ledger's sum is itself "
@@ -241,10 +241,12 @@ GUARANTEES: dict[str, str] = {
         "as the fixed amount then 20% off."
     ),
     "F36": (
-        "The resolution modes DECIDE. Two windows qualifying on one stay resolve to "
-        "the cheaper under `cheapest_wins` and to the stated one under "
-        "`stated_order`, on the SAME stay -- and the rules that lost still appear, "
-        "each naming the winner, both prices and the mode that chose."
+        "The resolution modes decide which rule is NAMED, never the money. Two "
+        "windows qualifying on one stay are charged the cheaper under either mode "
+        "(F63); where they charge the same, `cheapest_wins` names the lowest rule id "
+        "and `stated_order` the first in its order, on the SAME stay, and reversing "
+        "the order reverses the name -- and the rules that lost still appear, each "
+        "naming the winner, both prices and the mode."
     ),
     "F38": (
         "Every identifier the published documents name in backticks is one the "
@@ -335,12 +337,13 @@ GUARANTEES: dict[str, str] = {
         "produces it. A refusal at quote time carries no `probe` key."
     ),
     "F50": (
-        "Under `cheapest_wins` a special that qualifies is never dearer than the "
-        "time-based rate: the stay is priced through the whole pipeline both ways -- "
-        "with the special, and by the time-based rate alone -- and charged the lower, "
-        "a tie keeping the special. The breakdown says which way was used and what the "
-        "other would have charged (`compared_minor`). Grace still prices a stay alone, "
-        "`stated_order` still lets the special replace the time-based charge, and a "
+        "Under either resolution mode a special that qualifies is never dearer than "
+        "the time-based rate: the stay is priced through the whole pipeline both ways "
+        "-- with the special, and by the time-based rate alone -- and charged the "
+        "lower, a tie keeping the special. The breakdown says which way was used and "
+        "what the other would have charged (`compared_minor`). Grace still prices a "
+        "stay alone, `stated_order` no longer lets a dearer special replace the "
+        "time-based charge (F63), and a "
         "stay the time-based rate alone cannot price is priced by the special. When "
         "the time-based rate is charged, every other special still has its line, as "
         "on the special's way: its own reason, or that it qualified and a cheaper "
@@ -433,8 +436,9 @@ GUARANTEES: dict[str, str] = {
         "caps each of the plan's weeks the same way, after the daily max for each of "
         "its days. The caps compose in either order, the answer is the same on every "
         "run and in every server zone, and no fee is higher than the max times the "
-        "days touched. A flat special is one price for the stay and is capped as "
-        "before, at the max times the days the car is in. What a base says it "
+        "days touched. A flat special is owed in full at entry and is capped on that "
+        "day (F63); a rule type that does not say how its charge builds up is capped "
+        "as one price, at the max times the days the car is in. What a base says it "
         "charged is checked against its lines on every quote."
     ),
     "F60": (
@@ -453,8 +457,44 @@ GUARANTEES: dict[str, str] = {
         "answers, and a cap's line spells out a bounded number of runs of equal "
         "amounts, then says how many more there were and what they came to. The work "
         "still grows with the stay, by a step a day: ten years take ten times the work "
-        "of one, and a century no more a day than a year. This version sets no limit "
-        "on how long a stay may be."
+        "of one, and a century no more a day than a year. The engine refuses a stay "
+        "longer than 90 days before any of this work (F62); these are measured with "
+        "that limit lifted, so they hold for the caps whatever it is set to."
+    ),
+    "F62": (
+        "The longest stay the engine prices is 90 days of 24 hours, entry to exit "
+        "(Gokhan, 2026-10-16). Exactly 90 days is priced; 90 days and one second is "
+        "REFUSED with GAP_STAY_LONGER_THAN_MAX_STAY, a 422 naming the limit, at every "
+        "door -- before the plan is read, before a day of the stay is walked and "
+        "before a base is asked what it charged, so a stay of about ten thousand "
+        "years is refused with no more work than one of 90 days and a second. It is "
+        "elapsed time, so a clock change does not move it. The limit is one constant, "
+        "`MAX_STAY_DAYS`, read at every use, and `validate-plan` answers it as "
+        "`max_stay_minutes` for a rate setup to show."
+    ),
+    "F63": (
+        "The cheapest price always wins (Gokhan, 2026-10-16): where more than one "
+        "price could apply to the same time, the car pays the cheapest. A flat special "
+        "is owed in full at entry and capped on that day, so a 50 Friday-to-Sunday "
+        "flat with a 30 daily max is 30, and a weekly max caps it the same way. Two "
+        "specials, or two time-based rates, are compared on the whole fee, caps and "
+        "all -- a 100 flat beats a 1-an-hour weekend rate that comes to 48 over two "
+        "days at 30 a day -- and the losing line gives both figures where the rules' "
+        "own prices do not say why. Under `stated_order` the cheapest way is charged "
+        "too, the time-based rate included. On every stay swept, the fee is the least "
+        "of the fees each way charges on its own. Additive rules are not made a "
+        "choice: a surcharge and a fixed increase are still added in full."
+    ),
+    "F64": (
+        "A quote prices each way once, and asks nothing again per way or per pair. "
+        "With N ways that qualify -- specials and time-based rates -- the stay goes "
+        "through the pipeline N + 1 times (once, with one way), which is F63 itself. "
+        "Beside that, each rule is asked once a quote whether it qualifies, a rule is "
+        "found by its id and two rules are never compared field by field, a special "
+        "that did not qualify is asked for its line once, and a way at most three "
+        "times. 400 qualifying specials beside 400 that do not, on a 90-day stay with "
+        "a daily and a weekly max, are priced within a fixed time budget. No limit is "
+        "set on the rules a plan may hold or the ways a stay may have."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

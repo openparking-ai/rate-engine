@@ -30,7 +30,11 @@ What this file pins:
   runs and the rest add up to the figure on the line.
 * **The fee.** A century's stay prices exactly as it did before this change.
 
-This version sets no limit on how long a stay may be.
+**The engine now refuses a stay longer than 90 days (F62)**, before any of this
+work is done. This file LIFTS that limit, for its own tests only, and measures
+the caps on stays far past it: the properties below hold for the caps whatever
+the limit is set to, and the limit is not what keeps them true. F62 measures
+the limit.
 
 `scripts/fail_controls.py` puts back each part of the cost -- every minute the
 base was asked about remembered, the days of the stay listed, each week's days
@@ -49,6 +53,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from rate_engine import engine
 from rate_engine.contract import run_quote
 from rate_engine.engine import make_stay
 from rate_engine.plan import load_plan, parse_instant
@@ -80,6 +85,15 @@ CAPS = {
          "week_boundary": "rolling_7d", "week_starts_on": None},
     ],
 }
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _the_engines_limit_lifted():
+    """The caps measured on stays past the engine's 90-day limit (F62): lifted
+    to about 2,700 years for this module, and put back after it."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(engine, "MAX_STAY_DAYS", 1_000_000)
+        yield
 
 
 def _plan(*rules: dict) -> dict:

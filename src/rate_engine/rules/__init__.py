@@ -157,8 +157,8 @@ TOLD_THE_PASS = "told_the_pass"
 #: up over the stay on this pass. It is a function of a number of minutes into
 #: the stay, returning what the base that priced the time (the time-based rate
 #: or a special) charges for the stay's first that many minutes -- or None when
-#: the base is one price for the whole stay, which no minute of the stay builds
-#: up to. The daily and weekly caps need it to cap each day and each week on its
+#: the base's type does not say how its charge builds up. The daily and weekly
+#: caps need it to cap each day and each week on its
 #: own (F59): a cap that sees only the running total cannot tell which day the
 #: money was charged in.
 TOLD_THE_BASE = "told_the_base"
@@ -186,9 +186,10 @@ RULE_APPLIERS: dict[str, Callable[..., Any]] = {}
 #: type name -> how a rule of this type that prices the time builds its charge
 #: up over the stay, or None. Called as `accrual(rule, stay, plan)`, it returns
 #: the `charged_by` function `TOLD_THE_BASE` describes -- minutes into the stay
-#: to what the rule charges for that many minutes -- or None when the rule is
-#: one price for the whole stay. Every registered type has an entry, so a lookup
-#: is never a `.get` with a default.
+#: to what the rule charges for that many minutes -- or None when the type does
+#: not say. Every registered type has an entry, so a lookup is never a `.get`
+#: with a default. A flat price says too: all of it from the first minute
+#: (`time_window`, F63).
 #:
 #: **None is the safe answer, not the precise one.** A cap handed None caps the
 #: whole charge at the daily max times the days the car is in, which is what a
@@ -220,9 +221,9 @@ def register(
     exactly as it did.
 
     `accrual` is how a type that prices the time says how its charge builds up
-    over the stay (see `RULE_ACCRUALS`). It defaults to None, the answer for a
-    type that is one price for the whole stay, so a type registered against the
-    earlier signature is capped exactly as it was.
+    over the stay (see `RULE_ACCRUALS`). It defaults to None, which a cap reads
+    as one price for the whole stay, so a type registered against the earlier
+    signature is capped exactly as it was.
     """
     stages = (stage,) if isinstance(stage, str) else tuple(stage)
     if not stages:

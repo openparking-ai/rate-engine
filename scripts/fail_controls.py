@@ -152,16 +152,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # conflict. A control whose fixture cannot reach it reports green from an
     # unmodified measurement. This one plants what F7 actually guards: the
     # REGISTRY leaking into a plan that never named the new type.
+    # Re-anchored in F64, when a pass began to read the quote's own answer to
+    # which rules qualify. The defect is unchanged: the registry leaks.
     "F7": (
         "tests/test_f7_new_rule_type.py",
         "engine.py",
-        "    qualified_at_qualify = _qualifying(plan, stay, QUALIFY)",
+        "    qualified_at_qualify = qualified.at(QUALIFY)",
         "    for _registered in sorted(RULE_APPLIERS):  # PLANTED: the registry leaks\n"
         "        ledger.add(\n"
         "            Line(code='registry.note', rule_id=None,\n"
         "                 text=f'rule type available: {_registered}', delta_minor=0)\n"
         "        )\n"
-        "    qualified_at_qualify = _qualifying(plan, stay, QUALIFY)",
+        "    qualified_at_qualify = qualified.at(QUALIFY)",
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
@@ -240,14 +242,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "owner recorded, so decisions[] is write-only again and `undecided()` is "
         "back to being called by nothing",
     ),
+    # Re-anchored in F64 (the quote's `qualified` is handed to both); the defect
+    # is unchanged.
     "F12b": (
         "tests/test_f12_a_decision_is_not_a_price.py",
         "engine.py",
-        "    blocking = find_gaps(plan, stay) + find_conflicts(plan, stay)",
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)",
         "    _decided = {d['code'] for d in plan.decisions}  # PLANTED\n"
         "    blocking = [\n"
         "        f\n"
-        "        for f in find_gaps(plan, stay) + find_conflicts(plan, stay)\n"
+        "        for f in find_gaps(plan, stay, qualified)\n"
+        "        + find_conflicts(plan, stay, qualified)\n"
         "        if f.code not in _decided\n"
         "    ]  # PLANTED: a free-text note now prices a stay",
         "an entry in decisions[] suppresses the finding it names, so a gap an owner "
@@ -629,13 +634,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # A special for another space class. The engine asks every QUALIFY rule for
     # its lines, and the appliers did not ask the class, so a VIP-only special a
     # standard stay met on every time said "applied" and added its price. Each
-    # applier's check is taken out on its own, the sweep is shown seeing each on
-    # its own, and the inverse -- the class said where a time had already failed,
-    # which changes a line every such receipt carried -- is red too.
+    # applier's check is taken out on its own, and the sweep is shown seeing each
+    # on its own. And the class is the reason whatever the times: the old order,
+    # a time or the minutes said before the class -- a VIP car told it was late
+    # for an early bird it could never get -- is red too, for each applier.
+    # Re-anchored when the class moved first; the first four defects are unchanged.
     "F22c": (
         "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
         "rules/time_window.py",
-        "    if not failed and not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class):\n",
         "    if False:  # PLANTED: a window does not ask the stay's class\n",
         "a window for VIP spaces met on every time by a standard stay says "
         "'applied' and adds its price beside the time-based rate, or stops the "
@@ -649,27 +656,29 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a grace for VIP spaces tells a five-minute standard stay there is no "
         "charge and nothing further is added, on a receipt that charges it",
     ),
-    "F22c/class-said-over-the-times": (
+    "F22c/times-said-over-the-class": (
         "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
         "rules/time_window.py",
-        "    if not failed and not rule.covers(stay.space_class):\n",
-        "    if not rule.covers(stay.space_class):  # PLANTED: the class replaces the times\n",
-        "a window for another class that failed on its times names the class "
-        "instead, so a line every such receipt carried changes",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class) and not _failures(rule, stay, plan):"
+        "  # PLANTED\n",
+        "a window for another class that the stay also missed on a time gives the "
+        "time as its reason, so a VIP car reads that it came in too late for an "
+        "early bird it could never get",
     ),
-    "F22c/class-said-over-the-minutes": (
+    "F22c/minutes-said-over-the-class": (
         "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
         "rules/grace.py",
-        "    if minutes > allowed:\n",
-        "    if minutes > allowed and rule.covers(stay.space_class):  # PLANTED\n",
-        "a grace for another class that the stay ran over names the class "
-        "instead, so a line every such receipt carried changes",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class) and minutes <= allowed:  # PLANTED\n",
+        "a grace for another class that the stay ran over gives the minutes as its "
+        "reason, so the stay is told by how much it missed a grace it could never have",
     ),
     "F22c/sweep-window": (
         "tests/test_f22c_a_special_for_another_class_charges_nothing.py::"
         "test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP",
         "rules/time_window.py",
-        "    if not failed and not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class):\n",
         "    if False:  # PLANTED: a window does not ask the stay's class\n",
         "the sweep alone does not see a window for another class adding its "
         "price, which is how every earlier sweep missed it",
@@ -919,11 +928,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "two specials charging the same amount are refused again, so a plan whose "
         "every stay has one answer cannot be stored",
     ),
+    # Re-anchored in F63, when the ways began to be ranked on the whole fee
+    # (`_cheapest`). THE PLANTED DEFECT IS UNCHANGED: the dearer one is chosen.
     "F48/dearer-chosen": (
         "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
         "engine.py",
-        "    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))",
-        "    return max(qualifying, key=lambda rule: (totals[rule.id], rule.id))  # PLANTED",
+        "    return min(rules, key=lambda rule: _rank(plan, rule, compared))",
+        "    return max(rules, key=lambda rule: _rank(plan, rule, compared))  # PLANTED",
         "the dearer of two qualifying specials is applied, so the driver pays more "
         "than the plan's own rule says",
     ),
@@ -1011,12 +1022,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # says why it was not used. Three arms: the specials that did not qualify go
     # silent (the re-gate's R10), the ones that qualified and lost go silent, and
     # the loser's line claims the cheaper special was applied when the hour was.
+    # Re-anchored in F64 (a special that did not qualify is asked for its line
+    # once a quote, `qualified.why_not`); the defect is unchanged.
     "F50/why-not-unqualified-left-out": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
         "                        ledger.add(lost)\n"
         "                    continue\n"
-        "                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):\n"
+        "                for line in qualified.why_not(rule):\n"
         "                    ledger.add(line)\n",
         "                        ledger.add(lost)\n"
         "                    continue\n"
@@ -1035,8 +1048,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F50/why-not-says-applied": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
-        "totals, by_time=True)",
-        "totals, by_time=False)  # PLANTED",
+        # Re-anchored in F63 (`compared` replaced `totals`); the defect is unchanged.
+        "rule, cheapest, QUALIFY, plan, compared, by_time=True",
+        "rule, cheapest, QUALIFY, plan, compared, by_time=False  # PLANTED",
         "on the time-based way the losing special's line says the cheaper special "
         "was applied, when the hour was charged",
     ),
@@ -1046,14 +1060,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F50/why-not-one-qualifier-left-out": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
-        "            for rule in plan.rules_for_stage(QUALIFY):\n"
-        "                if rule in qualifying:\n"
-        "                    if rule is not cheapest:\n",
+        # Re-anchored in F63 (the qualifying specials are named once, at the top
+        # of the pass) and in F64 (a rule is found by its id); the defect is
+        # unchanged.
+        "            for rule in qualified.rules(QUALIFY):\n"
+        "                if qualified.has(rule):\n"
+        "                    if compared is not None and rule is not cheapest:\n",
         "            for rule in (  # PLANTED: the why-not lines only when 2+ qualify\n"
-        "                plan.rules_for_stage(QUALIFY) if len(qualifying) > 1 else []\n"
+        "                qualified.rules(QUALIFY) if len(qualified_at_qualify) > 1 else []\n"
         "            ):\n"
-        "                if rule in qualifying:\n"
-        "                    if rule is not cheapest:\n",
+        "                if qualified.has(rule):\n"
+        "                    if compared is not None and rule is not cheapest:\n",
         "on the time-based way, when the early bird alone qualifies and loses to "
         "the hour, every other special's line is gone, so the breakdown frozen on "
         "the stay cannot say why the weekend rate was not given",
@@ -1331,12 +1348,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if priced_by_special is not None:  # PLANTED: specials never raised",
         "a charge a special priced is left unraised although the owner said raise it",
     ),
+    # Re-anchored in F63, when the special that prices a pass became the pass's
+    # own base. The defect is unchanged.
     "F54/special-not-told": (
         "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
         "engine.py",
-        "        _winner(plan, stay, QUALIFY, qualified_at_qualify)"
-        " if qualified_at_qualify else None",
-        "        None  # PLANTED: the fill rule is never told a special priced the time",
+        "    priced_by_special = base if by_a_special else None",
+        "    priced_by_special = None  # PLANTED: the fill rule is never told a special priced",
         "the engine forgets that a special priced the time, so 'do not raise specials' "
         "raises them anyway",
     ),
@@ -1452,22 +1470,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a week holding one hour is allowed the whole weekly max, so the time in it "
         "is not what it pays",
     ),
-    "F59/flat-split-by-the-day": (
-        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
-        "rules/time_window.py",
-        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
-        "    return None",
-        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
-        '    return lambda minutes: effect["price_minor"]  # PLANTED: charged on the entry day',
-        "a flat special is charged on the day the car came in and capped there, so a "
-        "three-day 50.00 special is cut to one day's 30.00",
-    ),
+    # Re-anchored in F63, when `_charged_by` began to be handed the pass's base.
+    # The defect is unchanged: the caps are told the time-based rate, or nothing.
     "F59/base-is-the-time-based-rate": (
         "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
         "engine.py",
-        "    base = priced_by_special\n    if base is None:",
-        "    base = None  # PLANTED: the caps are always told the time-based rate\n"
-        "    if base is None:",
+        "    accrual = RULE_ACCRUALS[base.type]\n",
+        "    # PLANTED: the caps are always told the time-based rate\n"
+        "    base = next(iter(_qualifying(plan, stay, ACCUMULATE)), None)\n"
+        "    if base is None:\n"
+        "        return None\n"
+        "    accrual = RULE_ACCRUALS[base.type]\n",
         "the caps are told how the time-based rate would have charged even when a "
         "special priced the stay, so a weekend rate is capped as if it were one price",
     ),
@@ -1538,6 +1551,189 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "RUNS_SPELLED_OUT = 10**9  # PLANTED: every run spelled out",
         "a cap's line spells out every run of equal amounts, so a long stay whose "
         "days alternate has a line as long as the stay",
+    ),
+    # The longest stay priced (F62, Gokhan 2026-10-16): 90 days. The first arm
+    # removes the limit; the second refuses 90 days itself; the third asks it
+    # only after the stay is priced, which brings back the cost it bounds (the
+    # tests stop the walk at a budget, so the arm is red in a moment); the
+    # fourth copies the number instead of reading the constant; the fifth stops
+    # publishing it; the sixth refuses with the plan's code instead of its own.
+    "F62/no-limit": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n        return None\n",
+        "    return None  # PLANTED: no stay is too long\n",
+        "a stay of any length is priced, so a caller hands the engine ten thousand "
+        "years and a thread walks them for as long as the caps take",
+    ),
+    "F62/90-days-refused": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n",
+        "    if stay.duration_minutes < limit:  # PLANTED: 90 days itself refused\n",
+        "a stay of exactly 90 days, which the decision prices, is refused",
+    ),
+    # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
+    # unchanged.
+    "F62/after-the-work": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    too_long = _longer_than_priced(stay)\n"
+        "    if too_long is not None:\n"
+        "        # First of all, before a plan is read or a day walked (F62).\n"
+        "        raise Refused([too_long])\n"
+        "    plan = select_plan(plans, stay)\n"
+        "    # Which rules qualify, asked once for the whole quote (`_Qualified`).\n"
+        "    qualified = _Qualified(plan, stay)\n"
+        "\n"
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
+        "    if blocking:\n"
+        "        raise Refused(blocking)\n"
+        "\n"
+        "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
+        "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
+        "    qualified = _Qualified(plan, stay)\n"
+        "\n"
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
+        "    if blocking:\n"
+        "        raise Refused(blocking)\n"
+        "\n"
+        "    ledger = _the_cheapest_way(plan, stay, qualified)\n"
+        "    too_long = _longer_than_priced(stay)\n"
+        "    if too_long is not None:\n"
+        "        raise Refused([too_long])\n",
+        "the stay is refused for its length only after it has been priced, so ten "
+        "thousand years are walked a day at a time before the refusal comes",
+    ),
+    "F62/limit-copied": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    limit = max_stay_minutes()\n",
+        "    limit = 129600  # PLANTED: a copy of the number, not the constant\n",
+        "the limit is a second copy of the number, so changing the one constant "
+        "changes what is published and not what is refused",
+    ),
+    "F62/not-published": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "contract.py",
+        '        "max_stay_minutes": max_stay_minutes(),\n',
+        "        # PLANTED: the limit is not published\n",
+        "`validate-plan` no longer answers the limit, so a rate setup cannot show the "
+        "owner which stays will need an operator",
+    ),
+    "F62/cli-not-told": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "cli.py",
+        "    print(limit)\n",
+        "    pass  # PLANTED: the limit is not shown beside the findings\n",
+        "`rate-engine validate-plan` lists a plan's findings and not the longest stay "
+        "priced, so an owner checking rates with a gap open is not told the limit",
+    ),
+    "F62/wrong-code": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "        code=GAP_STAY_LONGER_THAN_MAX_STAY,\n",
+        "        code=GAP_STAY_EXCEEDS_MAX_DURATION,  # PLANTED: the plan's code\n",
+        "the engine's limit is refused under the plan's own ceiling code, so a door "
+        "routing on codes tells the owner to change a rule no rule can change",
+    ),
+    # The cheapest price always wins (F63, Gokhan 2026-10-16). The first arm puts
+    # back the flat special capped at the max times the days; the second compares
+    # the ways on what the rules charge rather than on the fee; the third lets the
+    # stated order choose between specials; the fourth drops the whole stay from
+    # the losing line; the fifth names a tie at one fee by rule id alone.
+    "F63/flat-capped-at-the-max-times-the-days": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "rules/time_window.py",
+        '    if effect["kind"] == "flat":\n'
+        '        return _owed_at_entry(effect["price_minor"])\n',
+        "    pass  # PLANTED: a flat special is one price for the stay again\n",
+        "a 50.00 Friday-to-Sunday flat with a 30.00 daily max is capped at the max "
+        "times the three days, and the driver pays 50.00, not 30.00",
+    ),
+    "F63/rules-own-charges-decide": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    return (compared.fees[rule.id], compared.own[rule.id], named)\n",
+        "    return (compared.own[rule.id], compared.fees[rule.id], named)  # PLANTED\n",
+        "two ways are compared on what the rules charge, so where a cap makes the "
+        "dearer rule the cheaper stay, the driver pays the dearer stay",
+    ),
+    "F63/stated-order-decides": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        '        named = settings["order"].index(rule.id)\n',
+        '        return (settings["order"].index(rule.id),)  # PLANTED: the order chooses\n',
+        "under `stated_order` the first rule named is charged, the dearer included",
+    ),
+    "F63/whole-stay-not-said": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    if own[winner.id] >= own[rule.id]:\n",
+        "    if False:  # PLANTED: the losing line does not say what the stay comes to\n",
+        "the line says the 100.00 event applied instead of a 48.00 weekend rate, and "
+        "not that the event's stay comes to 30.00 -- a receipt that reads backwards",
+    ),
+    "F63/tie-named-by-id-alone": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    return (compared.fees[rule.id], compared.own[rule.id], named)\n",
+        "    return (compared.fees[rule.id], named)  # PLANTED: a tie named by id alone\n",
+        "two ways a cap brings to one fee are named by rule id, so the receipt names "
+        "the 50.00 flat where the 40.00 one charged less itself",
+    ),
+    # The work budget (F64). The first arm puts back what the review measured:
+    # every lookup asks the stage's rules again and finds the rule by comparing
+    # whole rules. The second finds it by comparing whole rules alone; the third
+    # asks a special that did not qualify for its line on every pass. The fourth
+    # runs the time budget on its own against the first, so the budget is shown
+    # to be a measurement too, not only the counters.
+    "F64": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in _qualifying(self._plan, self._stay, rule.stage)  # PLANTED\n",
+        "every pass asks each rule again whether it qualifies and finds it by "
+        "comparing whole rules, so the work of a quote grows with the cube of its "
+        "ways: 800 any-day specials take tens of seconds a stay",
+    ),
+    "F64/compared-whole": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in self._at[rule.stage]  # PLANTED: found by comparing whole rules\n",
+        "a rule is found among those that qualify by comparing it with each of them "
+        "field by field, so every pass does work in the square of the ways",
+    ),
+    "F64/why-not-every-pass": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        if rule.id not in self._why_not:\n",
+        "        if True:  # PLANTED: a special that did not qualify is asked on every pass\n",
+        "a special that did not qualify is asked for its line again on every pass, "
+        "so beside 400 ways each is asked 401 times, once a pass",
+    ),
+    "F64/time-budget": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py::"
+        "test_400_qualifying_specials_are_priced_within_a_fixed_time_budget",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in _qualifying(self._plan, self._stay, rule.stage)  # PLANTED\n",
+        "the time budget alone does not see a quote whose work grows with the cube "
+        "of its ways",
+    ),
+    # And the special against the time-based rate under `stated_order` (F50,
+    # F63): the early return the old comparison made for that mode, put back.
+    # The planted call passes `qualified` since F64; the defect is unchanged.
+    "F50/stated-order-replaces": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:\n",
+        '    if plan.resolution[QUALIFY]["mode"] == "stated_order":  # PLANTED\n'
+        "        return _priced(plan, stay, special, qualified, compared)\n"
+        "    if time_fee < special_fee:\n",
+        "under `stated_order` a qualifying special replaces the time-based charge "
+        "whatever it costs, so a 9.00 early bird is charged against 7.00 by the hour",
     ),
     # A percent discount can never exceed 100% (F60, Gokhan 2026-10-16).
     "F60/over-100-loads": (

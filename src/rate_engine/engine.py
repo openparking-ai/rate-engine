@@ -37,6 +37,7 @@ from .findings import (
     GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_STAY_EXCEEDS_MAX_DURATION,
+    GAP_STAY_LONGER_THAN_MAX_STAY,
     GAP_UNDECLARED_SPACE_CLASS,
     Finding,
     Refused,
@@ -99,6 +100,69 @@ QUALIFIERS = {
 }
 
 
+class _Qualified:
+    """Which of the plan's rules qualify for this stay: asked ONCE a quote.
+
+    Whether a rule qualifies is a matter of the rule, the stay and the plan, and
+    never of which way the stay is being priced. So `quote` makes one of these
+    and hands it to the gaps, the conflicts and every pass of `_the_cheapest_way`.
+    Each stage is asked about when it is first needed, and then remembered: its
+    rules in plan order, the ones that qualify, and their ids.
+
+    **Why it exists.** Since the cheapest price always wins (F63), every way of
+    pricing a stay is priced through the whole pipeline. Each of those passes
+    asked every rule again whether it qualified, and found it in the answer with
+    `rule in [...]`, which compares two rules field by field. The work of a quote
+    then grew with the cube of the ways that qualified: 800 any-day specials took
+    26.9 s a stay. Now a rule is asked once, and is found by its id, which
+    `load_plan` holds unique across the plan.
+
+    The same goes for the line a special that did NOT qualify gives on every pass
+    ("Early bird NOT applied: ..."). Its applier is a pure function of the rule,
+    the stay and the plan, so it is asked for that line once (`why_not`), and
+    every pass carries the same line.
+    """
+
+    def __init__(self, plan: Plan, stay: Stay) -> None:
+        self._plan = plan
+        self._stay = stay
+        self._rules: dict[str, tuple] = {}
+        self._at: dict[str, tuple] = {}
+        self._ids: dict[str, frozenset[str]] = {}
+        self._why_not: dict[str, list[Line]] = {}
+
+    def rules(self, stage: str) -> tuple:
+        """The plan's rules at `stage`, in plan order, qualified or not."""
+        if stage not in self._rules:
+            self._rules[stage] = self._plan.rules_for_stage(stage)
+        return self._rules[stage]
+
+    def at(self, stage: str) -> tuple:
+        """The rules at `stage` that qualify for the stay, in plan order."""
+        if stage not in self._at:
+            found = tuple(_qualifying(self._plan, self._stay, stage))
+            self._at[stage] = found
+            self._ids[stage] = frozenset(rule.id for rule in found)
+        return self._at[stage]
+
+    def has(self, rule) -> bool:
+        """Whether `rule` qualifies for the stay. By its id: never by comparing
+        whole rules."""
+        ids = self._ids.get(rule.stage)
+        if ids is None:
+            self.at(rule.stage)
+            ids = self._ids[rule.stage]
+        return rule.id in ids
+
+    def why_not(self, rule) -> list[Line]:
+        """The lines of a special that did not qualify, asked of it once a quote."""
+        if rule.id not in self._why_not:
+            self._why_not[rule.id] = _lines_of(
+                rule, RULE_APPLIERS[rule.type](rule, self._stay, self._plan)
+            )
+        return self._why_not[rule.id]
+
+
 def _terminal_rule(qualified: list):
     """The rule that prices this stay ALONE, if one of them said so. Else None.
 
@@ -154,7 +218,7 @@ def _in_application_order(plan: Plan, stage: str, rules):
 
 
 def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
-    """What each competing rule would charge for this stay, by rule id.
+    """What each competing rule ITSELF charges for this stay, by rule id.
 
     Asked of the RULES rather than computed from their fields: a rule's only
     channel to the fee is a list of Lines, so the honest way to find out what one
@@ -162,12 +226,16 @@ def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
     stay type-agnostic -- a flat price and a whole time-based rate are compared
     by the same code, and a rule type added later is comparable the day it exists.
 
-    **What this compares, stated because it is a limit.** It is what the
-    COMPETING RULES themselves charge, not the final fee: a cap or an adjustment
-    downstream applies to whichever wins, and could in principle bring two
-    different bases to the same number. Comparing final fees would mean running
-    the whole pipeline once per candidate, and would still not be the customer's
-    fee for the rules that lost. See docs/CONTRACT.md.
+    **This no longer decides which rule is charged (F63).** It used to: two
+    specials, or two time-based rates, were compared on what the rules
+    themselves charged, and a cap or an adjustment downstream could make the
+    dearer rule the cheaper stay -- a 100.00 flat special and a 1.00-an-hour
+    weekend rate over two days, at 30.00 a day, come to 30.00 and 48.00 once the
+    cap has run. The car pays the cheapest (Gokhan, 2026-10-16), so every way is
+    priced through the whole pipeline and the FEES are compared
+    (`_the_cheapest_way`). What a rule itself charges is still what its line
+    says it "qualified at", and it settles which of two ways that come to the
+    same fee is named.
     """
     totals: dict[str, int] = {}
     for rule in rules:
@@ -176,53 +244,69 @@ def _candidate_totals(rules, stay: Stay, plan: Plan) -> dict[str, int]:
     return totals
 
 
-def _charged_the_same(plan: Plan, stage: str, rule, winner, totals: dict[str, int]) -> bool:
-    """Whether a rule that lost under `cheapest_wins` charged what the winner did.
+#: The line a rule that qualified and lost is given, naming the rule charged.
+RESOLVED = "resolved"
 
-    **A tie at the cheapest amount is a price, not a conflict.** His rule, 2026-10-11:
-    "always cheaper goes first". Two specials that both charge 12.00 USD leave the
-    driver paying 12.00 USD whichever one is named, so there is nothing for an owner
-    to decide and nothing for the engine to guess -- the money is the same either
-    way. Until U7g this was refused as a conflict, which made the plan store reject
-    a plan whose every stay had one answer.
 
-    The NAME on the receipt still has to be one rule, and it is the lowest rule id:
-    stated by the operator, stable, and never the caller's array position. This
-    only decides which line says "applied" and which says "charged the same".
+@dataclass(frozen=True)
+class _Compared:
+    """What each way of pricing the stay came to, by the rule that priced the time.
+
+    `fees`: the whole stay priced through every stage with that rule as its base
+    -- caps, surcharges and adjustments included. `own`: what the rule itself
+    charged (`_candidate_totals`). Both keyed by rule id.
     """
-    return (
-        plan.resolution[stage]["mode"] == "cheapest_wins"
-        and totals.get(rule.id) is not None
-        and totals[rule.id] == totals.get(winner.id)
-    )
+
+    fees: dict[str, int]
+    own: dict[str, int]
 
 
-def _winner(plan: Plan, stay: Stay, stage: str, qualifying: list):
-    """Which of several qualifying rules APPLIES at a resolving stage.
+def _rank(plan: Plan, rule, compared: _Compared):
+    """Where one way of pricing the stay stands against the others at its stage.
 
-    Terminality first, because it is a property of the rule type and beats
-    anything the plan says. Then the plan's own mode. Under `cheapest_wins` the
-    lowest charge wins, and a tie at that charge goes to the lowest rule id: the
-    driver pays the same amount either way, so the id only decides which rule the
-    receipt names (see `_charged_the_same`). Nothing here is a guess about money.
+    **The lowest fee first, under either mode** (F63). Gokhan, 2026-10-16: when
+    more than one price could apply to the same time, the car pays the
+    cheapest. Between two ways that come to the same fee, the one whose own
+    charge is lower is named; and between two that charge the same in both, the
+    plan's mode names one -- the lowest rule id under `cheapest_wins`, the first
+    in the order under `stated_order`. The mode decides a NAME, never the money.
+    `stated_order` used to choose the rule outright, the dearer one included,
+    and a plan could make a driver pay more than another rule it qualified for.
     """
-    if not qualifying:
-        return None
-    terminal = _terminal_rule(qualifying)
-    if terminal is not None:
-        return terminal
-    if len(qualifying) == 1:
-        return qualifying[0]
+    stage = rule.stage
     settings = plan.resolution[stage]
     if settings["mode"] == "stated_order":
-        position = {rule_id: index for index, rule_id in enumerate(settings["order"])}
-        return min(qualifying, key=lambda rule: position[rule.id])
-    totals = _candidate_totals(qualifying, stay, plan)
-    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))
+        named = settings["order"].index(rule.id)
+    else:
+        named = rule.id
+    return (compared.fees[rule.id], compared.own[rule.id], named)
+
+
+def _cheapest(plan: Plan, rules, compared: _Compared):
+    """The way of pricing the stay, of `rules` (all at one stage), that charges
+    the driver least, by `_rank`. None when there are none."""
+    if not rules:
+        return None
+    return min(rules, key=lambda rule: _rank(plan, rule, compared))
+
+
+def _mode_clause(plan: Plan, stage: str) -> str:
+    """The parenthesis a resolution line ends with: how the plan resolves `stage`.
+
+    Under `cheapest_wins` it is the sentence it always was. Under `stated_order`
+    it says what the order does now, because it no longer chooses the price.
+    """
+    mode = plan.resolution[stage]["mode"]
+    if mode == "stated_order":
+        return (
+            f"(plan resolves {stage} by stated_order: the cheapest is charged, and the "
+            "order names one of two that charge the same)"
+        )
+    return f"(plan resolves {stage} by {mode})"
 
 
 def _resolved_line(
-    rule, winner, stage: str, plan: Plan, totals: dict[str, int], by_time: bool = False
+    rule, winner, stage: str, plan: Plan, compared: _Compared, by_time: bool = False
 ) -> Line:
     """A rule that qualified and lost, said out loud, with the reason.
 
@@ -232,41 +316,52 @@ def _resolved_line(
     leave a breakdown in which a rate the customer was entitled to is simply
     absent.
 
-    A loser that charged the SAME as the winner says so: "charged the same" is
-    the true reason it was not named, and "applied instead" alone would read as
-    if one of them had been cheaper.
+    A loser that charged the SAME as the winner -- itself, and for the whole
+    stay -- says so: "charged the same" is the true reason it was not named, and
+    "applied instead" alone would read as if one of them had been cheaper.
+
+    **Where the rules' own charges do not say why, the whole stay does** (F63).
+    The ways are compared on the fee, caps and all, so the winner's own charge
+    can be the higher one: "Event rate 100.00 USD applied instead" beside a 48.00
+    weekend rate is true only because, at 30.00 a day, the event rate's stay
+    comes to 30.00 and the weekend rate's to 48.00 -- so the line says both.
 
     `by_time`: the stay was charged by the time-based rate, which was less than
-    the cheapest special too (`_the_cheaper_way`). The winner was then NOT
+    the cheapest special too (`_the_cheapest_way`). The winner was then NOT
     applied, so the line says it was the cheaper special, never "applied instead".
     """
     from .money import format_minor
 
-    if _charged_the_same(plan, stage, rule, winner, totals):
+    own, fees = compared.own, compared.fees
+    mode = _mode_clause(plan, stage)
+    if own[rule.id] == own[winner.id] and fees[rule.id] == fees[winner.id]:
+        because = (
+            "the plan's stated order puts it first"
+            if plan.resolution[stage]["mode"] == "stated_order"
+            else "its rule id comes first"
+        )
         return Line(
-            code="resolved",
+            code=RESOLVED,
             rule_id=rule.id,
             text=(
                 f"{rule.display_name} qualified at "
-                f"{format_minor(totals[rule.id], plan.currency)} and charged the same as "
-                f"{winner.display_name}, which is named because its rule id comes first "
-                f"(plan resolves {stage} by {plan.resolution[stage]['mode']})"
+                f"{format_minor(own[rule.id], plan.currency)} and charged the same as "
+                f"{winner.display_name}, which is named because {because} {mode}"
             ),
             delta_minor=0,
         )
-    return Line(
-        code="resolved",
-        rule_id=rule.id,
-        text=(
-            f"{rule.display_name} qualified at "
-            f"{format_minor(totals[rule.id], plan.currency)} -- "
-            f"{winner.display_name} {format_minor(totals[winner.id], plan.currency)} "
-            + ("was the cheaper special" if by_time else "applied instead")
-            + f" (plan resolves {stage} by "
-            f"{plan.resolution[stage]['mode']})"
-        ),
-        delta_minor=0,
+    text = (
+        f"{rule.display_name} qualified at {format_minor(own[rule.id], plan.currency)} -- "
+        f"{winner.display_name} {format_minor(own[winner.id], plan.currency)} "
+        + ("was the cheaper special" if by_time else "applied instead")
     )
+    if own[winner.id] >= own[rule.id]:
+        text += (
+            ": with the rest of the plan this stay comes to "
+            f"{format_minor(fees[winner.id], plan.currency)} by {winner.display_name} and "
+            f"{format_minor(fees[rule.id], plan.currency)} by {rule.display_name}"
+        )
+    return Line(code=RESOLVED, rule_id=rule.id, text=f"{text} {mode}", delta_minor=0)
 
 
 def _superseded_line(rule, terminal) -> Line:
@@ -359,6 +454,61 @@ class Quote:
 
 #: 100% full, in basis points. A figure above it describes no garage.
 FULL_BP = 10_000
+
+#: **The longest stay this engine prices: 90 days, entry to exit** (Gokhan,
+#: 2026-10-16). Days of 24 hours of elapsed time, so a clock change does not
+#: move it: a stay of 90 days to the second is priced, and one second more is
+#: refused with GAP_STAY_LONGER_THAN_MAX_STAY -- a car that has been in that long
+#: needs an operator, not a number. THE one place the limit is stated.
+#: `validate-plan` publishes it as `max_stay_minutes` (`max_stay_minutes()`), so
+#: a rate setup can show the owner what the engine will and will not price.
+#:
+#: It also bounds the days a quote walks. Capping each day on its own (F59)
+#: walks the stay a day at a time, so a quote's time grew with the days in the
+#: stay -- a stay running to the year 9999 took fifteen seconds of CPU -- and
+#: the limit is checked before the plan is even read (F62). It does not bound
+#: the rest: a quote prices the stay once for each way of pricing it, so its
+#: work also grows with the ways the plan offers (F64).
+MAX_STAY_DAYS = 90
+
+#: Minutes in a day of 24 hours.
+MINUTES_IN_A_DAY = 24 * 60
+
+
+def max_stay_minutes() -> int:
+    """The longest stay priced, in the whole minutes `Stay.duration_minutes`
+    counts: `MAX_STAY_DAYS` of 24 hours. Read from the constant at every call,
+    never copied, so there is one number to change."""
+    return MAX_STAY_DAYS * MINUTES_IN_A_DAY
+
+
+def _longer_than_priced(stay: Stay) -> Finding | None:
+    """The refusal for a stay longer than this engine prices, or None.
+
+    Read from the two instants and nothing else -- no plan, no zone, no rule --
+    so `quote` asks it FIRST, and ten thousand years are refused as quickly as
+    ninety days and a second: no day of the stay is walked, no base is asked
+    what it charged, and no plan is selected (F62). The comparison reads
+    `duration_minutes`, as every duration comparison does (F20); a part-minute
+    is a minute, so 90 days and one second is over the limit and 90 days is not.
+
+    **A gap no rule can close, and `validate-plan` does not report it.** It is
+    not a property of the plan: every plan stops at the same 90 days. It is a
+    refusal of the ordinary kind -- 422, the code, nothing guessed -- so a door
+    that closes a stay unpriced on a refusal closes this one unpriced too, and
+    an operator prices it.
+    """
+    limit = max_stay_minutes()
+    if stay.duration_minutes <= limit:
+        return None
+    return Finding(
+        code=GAP_STAY_LONGER_THAN_MAX_STAY,
+        text=(
+            f"this engine prices a stay of at most {MAX_STAY_DAYS} days ({limit} minutes) "
+            f"from entry to exit, and this one is {stay.duration_minutes} minutes: it was "
+            "not priced and nothing was guessed -- an operator prices it"
+        ),
+    )
 
 
 def make_stay(
@@ -464,12 +614,14 @@ def _qualifying(plan: Plan, stay: Stay, stage: str):
     return out
 
 
-def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
+def find_gaps(plan: Plan, stay: Stay, qualified: _Qualified | None = None) -> list[Finding]:
     """Every reason this plan cannot price this stay, keyed by identifier.
 
     Called by the engine before it prices anything and by the validator over a
     matrix of stays. ONE function, so the sentence an owner reads in
-    `validate-plan` and the sentence in a refusal cannot drift.
+    `validate-plan` and the sentence in a refusal cannot drift. `qualified` is
+    the quote's own answer to which rules qualify (`_Qualified`); the validator
+    passes none and one is made here.
     """
     findings: list[Finding] = []
 
@@ -486,6 +638,8 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
         # Everything below asks which rules cover a class the plan has never
         # heard of. Answering that would be guessing.
         return findings
+    if qualified is None:
+        qualified = _Qualified(plan, stay)
 
     if stay.occupancy_at_entry_bp is None:
         # Asked before anything can return early: a special qualifying does not
@@ -511,20 +665,20 @@ def find_gaps(plan: Plan, stay: Stay) -> list[Finding]:
                 )
             )
 
-    if _qualifying(plan, stay, QUALIFY):
+    if qualified.at(QUALIFY):
         # A special can price the stay. Whether the time-based rate could too is
-        # asked by `_the_cheaper_way`, which uses it only when it can.
+        # asked by `_the_cheapest_way`, which uses it only when it can.
         return findings
 
-    return findings + _time_based_gaps(plan, stay)
+    return findings + _time_based_gaps(plan, stay, qualified)
 
 
-def _time_based_gaps(plan: Plan, stay: Stay) -> list[Finding]:
+def _time_based_gaps(plan: Plan, stay: Stay, qualified: _Qualified) -> list[Finding]:
     """Why the time-based rate ALONE cannot price this stay. Empty when it can."""
     findings: list[Finding] = []
-    accumulate = plan.rules_for_stage(ACCUMULATE)
+    accumulate = qualified.rules(ACCUMULATE)
     covering = [r for r in accumulate if r.covers(stay.space_class)]
-    qualifying = _qualifying(plan, stay, ACCUMULATE)
+    qualifying = qualified.at(ACCUMULATE)
 
     if not covering:
         findings.append(
@@ -557,7 +711,7 @@ def _time_based_gaps(plan: Plan, stay: Stay) -> list[Finding]:
     return findings
 
 
-def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
+def find_conflicts(plan: Plan, stay: Stay, qualified: _Qualified | None = None) -> list[Finding]:
     """More than one rule qualifying at one stage -- and it means three things.
 
     **This function used to report a conflict whenever more than one rule
@@ -569,18 +723,23 @@ def find_conflicts(plan: Plan, stay: Stay) -> list[Finding]:
 
     So the answer is per CATEGORY, and stages.py holds which is which:
 
-    * RESOLVING -- a genuine either/or, and the plan always settles it: a
-      TERMINAL rule wins outright, `stated_order` names every rule, and
-      `cheapest_wins` takes the lowest charge -- a tie there is the same money
-      whichever rule is named, so since U7g it is priced, not refused.
+    * RESOLVING -- a genuine either/or, and it is always settled: a TERMINAL
+      rule wins outright, and otherwise the cheapest way is charged under either
+      mode (F63) -- a tie there is the same money whichever rule is named, so
+      since U7g it is priced, not refused, and the plan's mode names the rule.
     * COMPOSING, ORDER-INDEPENDENT -- both apply and the total is the same
       either way. Nothing to report and nothing to decide.
     * COMPOSING, ORDER-DEPENDENT -- both apply and the order changes the money,
       so the PLAN must state the order and a plan that has not is refused.
+
+    `qualified` is the quote's own answer to which rules qualify, as for
+    `find_gaps`; the validator passes none.
     """
+    if qualified is None:
+        qualified = _Qualified(plan, stay)
     findings: list[Finding] = []
     for stage in STAGES:
-        qualifying = _qualifying(plan, stay, stage)
+        qualifying = qualified.at(stage)
         one_per_stay = [r for r in qualifying if ONE_PER_STAY in RULE_TRAITS[r.type]]
         if len(one_per_stay) > 1:
             # Not an order the plan forgot to state: two fill rules raising one
@@ -612,11 +771,10 @@ def _conflict_at(plan: Plan, stay: Stay, stage: str, qualifying: list) -> Findin
     ids = tuple(r.id for r in qualifying)
     if stage in RESOLVING:
         # Never a conflict. A TERMINAL rule wins outright by what its type is; else
-        # the plan's mode settles it -- `stated_order` names every rule at load,
-        # and `cheapest_wins` takes the lowest charge, a tie at that charge being
-        # the same money whichever rule is named (see `_charged_the_same`). This
-        # is the whole of W4 and of U7g: the field an owner was made to fill in
-        # decides, and the engine has nothing left to refuse here.
+        # the cheapest way is charged, under either mode (F63), and a tie at that
+        # fee is the same money whichever rule is named -- the plan's mode names
+        # it (see `_rank`). W4, U7g and F63 between them: the engine has nothing
+        # left to refuse here.
         return None
     if stage in COMPOSING_ORDER_DEPENDENT and plan.adjust_order is None:
         return Finding(
@@ -637,14 +795,19 @@ def _conflict_at(plan: Plan, stay: Stay, stage: str, qualifying: list) -> Findin
 
 def quote(plans: list[Plan], stay: Stay) -> Quote:
     """Price a stay, or refuse and name what is missing. The only pricing path."""
+    too_long = _longer_than_priced(stay)
+    if too_long is not None:
+        # First of all, before a plan is read or a day walked (F62).
+        raise Refused([too_long])
     plan = select_plan(plans, stay)
+    # Which rules qualify, asked once for the whole quote (`_Qualified`).
+    qualified = _Qualified(plan, stay)
 
-    blocking = find_gaps(plan, stay) + find_conflicts(plan, stay)
+    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)
     if blocking:
         raise Refused(blocking)
 
-    ledger = _priced(plan, stay, with_specials=True)
-    ledger = _the_cheaper_way(plan, stay, ledger)
+    ledger = _the_cheapest_way(plan, stay, qualified)
 
     fee = ledger.total_minor
     _assert_ledger_is_the_fee(fee, ledger)
@@ -665,12 +828,21 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     )
 
 
-def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
-    """The stay through every stage, once. `quote` is its only caller.
+def _priced(
+    plan: Plan, stay: Stay, base, qualified: _Qualified, compared: _Compared | None = None
+) -> Ledger:
+    """The stay through every stage, once, with `base` pricing the time.
 
-    `with_specials=False` prices the stay by the time-based rate alone: a special
-    that qualified is left out (its comparison line speaks for it, see
-    `_the_cheaper_way`), and a special that did not qualify still says why.
+    `base` is one way the stay can be priced: a special that qualified, a
+    time-based rate that qualified, or a TERMINAL rule that prices the stay
+    alone. `_the_cheapest_way` is the only caller. It prices each way once to
+    learn its fee, with `compared` None -- the rules that lost get no line yet,
+    and a line at zero moves no fee -- and then the cheapest way again with
+    `compared`, so every rule that qualified and lost says what it charged, and
+    why it was not used, on the receipt that is frozen on the stay.
+
+    Which rules qualify is `qualified`, the quote's own, asked once for every
+    pass: a pass asks no rule whether it qualifies, and finds a rule by its id.
     """
     ledger = Ledger()
     entry_local = stay.entry_at.astimezone(plan.timezone)
@@ -687,10 +859,10 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
         )
     )
 
-    qualified_at_qualify = _qualifying(plan, stay, QUALIFY)
-    if not with_specials:
-        qualified_at_qualify = []
-    terminal = _terminal_rule(qualified_at_qualify)
+    qualified_at_qualify = qualified.at(QUALIFY)
+    terminal = _terminal_rule([base])
+    #: Whether a special prices the time on this pass, or the time-based rate.
+    by_a_special = base.stage == QUALIFY
     #: The charge for the TIME: the running total when SURCHARGE begins, after
     #: the base (time-based rate or special) and the caps. A percent surcharge
     #: and the fill rule are taken of this, never of the running total, so they
@@ -698,9 +870,7 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
     time_charge = None
     #: The special that priced the time on this pass, if one did, and what
     #: SURCHARGE added. Told to a rule that declares `TOLD_THE_PASS`.
-    priced_by_special = (
-        _winner(plan, stay, QUALIFY, qualified_at_qualify) if qualified_at_qualify else None
-    )
+    priced_by_special = base if by_a_special else None
     extras = 0
     #: How the charge for the time built up over the stay on this pass, told to
     #: a rule that declares `TOLD_THE_BASE` (the caps). Set when CAP begins.
@@ -708,7 +878,7 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
 
     for stage in STAGES:
         if stage == CAP and terminal is None:
-            charged_by = _charged_by(plan, stay, priced_by_special, ledger.total_minor)
+            charged_by = _charged_by(plan, stay, base, ledger.total_minor)
         if stage == SURCHARGE:
             time_charge = ledger.total_minor
         if stage == ADJUST:
@@ -719,54 +889,64 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             # already run, so its lines -- including every `superseded` one -- are
             # in the ledger. See rules/grace.py.
             break
-        if stage == ACCUMULATE and qualified_at_qualify:
-            # A special that qualified IS the base on this pass. Under
-            # `cheapest_wins` the stay is priced again without it and the
-            # cheaper way charged (`_the_cheaper_way`); under `stated_order` it
-            # replaces the time-based charge.
+        if stage == ACCUMULATE and by_a_special:
+            # A special prices the time on this pass, so no time-based rate does.
+            # The comparison line says what the time-based rate would have
+            # charged (`_the_cheapest_way`).
             continue
 
-        if stage == QUALIFY and not with_specials:
-            # Every special still says why it was not used, as on the special's
-            # way: one that did not qualify gives its own reason, one that
-            # qualified and lost to a cheaper special says so. The cheapest
-            # special's own line is the comparison line `_the_cheaper_way` adds.
-            # These are frozen on every closed stay and read in a dispute.
-            qualifying = _qualifying(plan, stay, QUALIFY)
-            cheapest = _winner(plan, stay, QUALIFY, qualifying)
-            totals = _candidate_totals(qualifying, stay, plan) if len(qualifying) > 1 else {}
-            for rule in plan.rules_for_stage(QUALIFY):
-                if rule in qualifying:
-                    if rule is not cheapest:
-                        lost = _resolved_line(rule, cheapest, QUALIFY, plan, totals, by_time=True)
+        if stage == QUALIFY and not by_a_special:
+            # The time-based way. Every special still says why it was not used,
+            # as on the special's way: one that did not qualify gives its own
+            # reason, one that qualified and lost to a cheaper special says so.
+            # The cheapest special's own line is the comparison line
+            # `_the_cheapest_way` adds. These are frozen on every closed stay
+            # and read in a dispute.
+            cheapest = (
+                _cheapest(plan, qualified_at_qualify, compared) if compared is not None else None
+            )
+            for rule in qualified.rules(QUALIFY):
+                if qualified.has(rule):
+                    if compared is not None and rule is not cheapest:
+                        lost = _resolved_line(
+                            rule, cheapest, QUALIFY, plan, compared, by_time=True
+                        )
                         ledger.add(lost)
                     continue
-                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
+                for line in qualified.why_not(rule):
                     ledger.add(line)
             continue
 
-        if stage in RESOLVING:
-            # ONE of the qualifying rules applies, and the plan says which. The
-            # rest are not dropped: each gets a line naming the winner, the two
-            # prices, and the mode that chose -- which is the answer to the
-            # question an attendant is asked at the counter.
-            qualifying = _qualifying(plan, stay, stage)
-            winner = _winner(plan, stay, stage, qualifying)
-            totals = _candidate_totals(qualifying, stay, plan) if len(qualifying) > 1 else {}
-            for rule in plan.rules_for_stage(stage):
-                if rule in qualifying and rule is not winner:
-                    ledger.add(
-                        _superseded_line(rule, winner)
-                        if terminal is not None
-                        else _resolved_line(rule, winner, stage, plan, totals)
-                    )
-                    continue
-                # A QUALIFY rule speaks either way -- a special that did not apply
-                # is the line an operator most wants to read. Elsewhere, a rule
-                # that did not qualify is silent.
-                if rule is winner or stage == QUALIFY:
+        if stage == QUALIFY:
+            # A special's way, or a TERMINAL rule's. The base's own lines; each
+            # other special that qualified says it lost, naming the base, the
+            # prices and the mode -- the answer to the question an attendant is
+            # asked at the counter -- or that a terminal rule priced the stay
+            # alone; one that did not qualify gives its own reason.
+            for rule in qualified.rules(QUALIFY):
+                if rule is base:
                     for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
                         ledger.add(line)
+                elif qualified.has(rule):
+                    if terminal is not None:
+                        ledger.add(_superseded_line(rule, terminal))
+                    elif compared is not None:
+                        ledger.add(_resolved_line(rule, base, QUALIFY, plan, compared))
+                else:
+                    for line in qualified.why_not(rule):
+                        ledger.add(line)
+            continue
+
+        if stage == ACCUMULATE:
+            # The time-based rate that is the base on this pass, and each other
+            # one that qualified, saying it lost. One that did not qualify is
+            # silent: outside QUALIFY, a rule that did not apply says nothing.
+            for rule in qualified.rules(ACCUMULATE):
+                if rule is base:
+                    for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):
+                        ledger.add(line)
+                elif compared is not None and qualified.has(rule):
+                    ledger.add(_resolved_line(rule, base, ACCUMULATE, plan, compared))
             continue
 
         if stage == ADJUST:
@@ -774,15 +954,16 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             # (`_adjusted`): with a discount and a fill rule both applying, the
             # plan's order no longer decides the price.
             for line in _adjusted(
-                plan, stay, ledger.total_minor, plan.rules_for_stage(stage),
+                plan, stay, ledger.total_minor, qualified.rules(stage),
                 time_charge=time_charge, extras=extras, priced_by_special=priced_by_special,
+                qualified=qualified,
             ):
                 ledger.add(line)
             continue
 
-        for rule in _in_application_order(plan, stage, plan.rules_for_stage(stage)):
+        for rule in _in_application_order(plan, stage, qualified.rules(stage)):
             applier = RULE_APPLIERS[rule.type]
-            if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
+            if not qualified.has(rule) and not _speaks_anyway(rule, stay):
                 continue
             given = (
                 {"time_charge_minor": time_charge}
@@ -803,15 +984,15 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
     return ledger
 
 
-def _charged_by(plan: Plan, stay: Stay, priced_by_special, base_minor: int):
+def _charged_by(plan: Plan, stay: Stay, base, base_minor: int):
     """How the charge for the time built up over the stay on this pass, or None.
 
     The caps cap each day and each week on its own (F59), so they need more than
     the running total: they need to know which day each part of it was charged
-    in. The rule that priced the time on this pass -- the special, or the
-    time-based rate the plan's mode chose -- says, through the accrual its type
-    registered: a function of minutes into the stay, or None for one price for
-    the whole stay. The engine does not know any type's arithmetic; it asks.
+    in. The rule that priced the time on this pass -- `base`, the special or the
+    time-based rate -- says, through the accrual its type registered: a function
+    of minutes into the stay, or None when its type does not say. The engine
+    does not know any type's arithmetic; it asks.
 
     **And it is checked against the ledger, on every quote.** What the base
     charges for the whole stay must be exactly what its lines added to the
@@ -819,11 +1000,6 @@ def _charged_by(plan: Plan, stay: Stay, priced_by_special, base_minor: int):
     the caps split a charge that is not the one on the receipt -- so a mismatch
     stops the quote, as `_assert_ledger_is_the_fee` does, rather than capping it.
     """
-    base = priced_by_special
-    if base is None:
-        base = _winner(plan, stay, ACCUMULATE, _qualifying(plan, stay, ACCUMULATE))
-    if base is None:
-        return None
     accrual = RULE_ACCRUALS[base.type]
     charged_by = accrual(base, stay, plan) if accrual is not None else None
     if charged_by is not None and charged_by(stay.duration_minutes) != base_minor:
@@ -847,7 +1023,9 @@ TIME_FIRST = "time_first"
 PER_PART = "per_part"
 
 
-def _adjusted(plan, stay, total_minor, rules, *, time_charge, extras, priced_by_special):
+def _adjusted(
+    plan, stay, total_minor, rules, *, time_charge, extras, priced_by_special, qualified
+):
     """The ADJUST stage's lines, in the order that charges the driver LEAST.
 
     His rule, 10-14 20:25, on a discount meeting the fill rule: "always the
@@ -867,22 +1045,24 @@ def _adjusted(plan, stay, total_minor, rules, *, time_charge, extras, priced_by_
     then the fill rule between the discounts, at each place, both ways. The
     discounts keep the plan's stated order among themselves. With no fill rule
     applying, or nothing beside it, the plan's order is the only one.
+
+    Which rules qualify is the quote's own answer (`_Qualified`), so pricing an
+    order asks no rule again whether it qualifies.
     """
     from .money import format_minor
 
     ordered = _in_application_order(plan, ADJUST, rules)
-    fills = [
-        r for r in ordered if r.type == "fill_level" and QUALIFIERS[r.type](r, stay, plan)
-    ]
-    others = [r for r in ordered if r not in fills]
-    beside = [r for r in others if QUALIFIERS[r.type](r, stay, plan)]
+    fills = [r for r in ordered if r.type == "fill_level" and qualified.has(r)]
+    fill_ids = {r.id for r in fills}
+    others = [r for r in ordered if r.id not in fill_ids]
+    beside = [r for r in others if qualified.has(r)]
 
     def run(order, split):
         lines: list[Line] = []
         running = total_minor
         taken = 0
         for rule in order:
-            if not QUALIFIERS[rule.type](rule, stay, plan) and not _speaks_anyway(rule, stay):
+            if not qualified.has(rule) and not _speaks_anyway(rule, stay):
                 continue
             given: dict = {}
             if ON_THE_TIME_CHARGE in RULE_TRAITS[rule.type]:
@@ -974,56 +1154,85 @@ def _left_after(fill, taken, time_charge, extras, priced_by_special, split):
     return time_charge - time_off, extras - extra_off
 
 
-#: The line that says which way a stay was priced when a special qualified under
-#: `cheapest_wins`, and what the other way would have charged (`compared_minor`).
+#: The line that says which way a stay was priced when a special qualified, and
+#: what the other way would have charged (`compared_minor`).
 SPECIAL_USED = "special_used"
 TIME_BASED_USED = "time_based_used"
 
 
-def _the_cheaper_way(plan: Plan, stay: Stay, with_special: Ledger) -> Ledger:
-    """The special or the time-based rate, whichever the driver pays less by.
+def _the_cheapest_way(plan: Plan, stay: Stay, qualified: _Qualified) -> Ledger:
+    """The stay priced the way that charges the driver LEAST, and said so.
 
-    His rule, 2026-10-11: "always cheaper goes first", and 2026-10-12, asked
-    about an early bird at 9.00 against 7.00 by the hour: the driver always pays
-    the cheapest way the stay can be priced. So under `cheapest_wins` a special
-    that qualified no longer simply REPLACES the time-based charge: the stay is
-    priced through the whole pipeline both ways -- caps, surcharges and
-    adjustments included -- and charged the lower. A tie keeps the special.
+    His rule, 2026-10-11: "always cheaper goes first"; 2026-10-12, asked about
+    an early bird at 9.00 against 7.00 by the hour: the driver always pays the
+    cheapest way the stay can be priced; and 2026-10-16, for every case: **when
+    more than one price could apply to the same time, the car pays the
+    cheapest** (F50, F63).
 
-    Unchanged: `stated_order` (the special replaces, as the plan says), a
-    TERMINAL rule (grace prices the stay alone, free beats everything), and a
-    stay no special qualified for. Where the time-based rate alone cannot price
-    the stay (it stops before the stay ends, or covers no rule), the special is
-    the only way, and the line says so.
+    The ways a stay can be priced: each special that qualified, and each
+    time-based rate that qualified -- those only where the time-based rate alone
+    can price the stay. Each way is priced through the WHOLE pipeline, caps,
+    surcharges and adjustments included, and the lowest fee is charged. A
+    special keeps a tie with the time-based rate, as before; between two
+    specials, or two time-based rates, see `_rank`.
+
+    **What this replaced.** Two specials, or two time-based rates, were chosen
+    between on what the RULES charged, and only the special that won was
+    compared with the time-based rate on the fee; a cap can make the rule that
+    charges more the cheaper stay. And under `stated_order` the plan's order
+    chose outright, so a special replaced the time-based charge, and a dearer
+    special a cheaper one, whatever the driver then paid. Both modes now charge
+    the cheapest; the mode names one of two ways that charge the same.
+
+    Unchanged: a TERMINAL rule (grace prices the stay alone, and free beats
+    everything) and a stay no special qualified for that one time-based rate
+    prices. Where the time-based rate alone cannot price the stay, the specials
+    are the only ways, and the line says so.
+
+    **The work.** With N ways, the stay is priced N + 1 times, and that is the
+    rule itself: no way's fee is known until it has been through every stage.
+    Nothing else is done per way. Which rules qualify is asked once for the
+    quote (`qualified`), a rule is found by its id, a special that did not
+    qualify is asked for its line once, and each way's own charge once. So the
+    work grows with the ways times the plan's rules, and does not repeat a
+    question per pair of them. F64 holds this with a budget.
     """
-    qualified = _qualifying(plan, stay, QUALIFY)
-    if (
-        not qualified
-        or _terminal_rule(qualified) is not None
-        or plan.resolution[QUALIFY]["mode"] != "cheapest_wins"
-    ):
-        return with_special
     from .money import format_minor
 
-    special = _winner(plan, stay, QUALIFY, qualified)
-    special_fee = with_special.total_minor
-    named = f"{special.display_name} {format_minor(special_fee, plan.currency)}"
-    mode = f"(plan resolves {QUALIFY} by cheapest_wins)"
-    if _time_based_gaps(plan, stay):
-        with_special.add(
-            Line(
-                code=SPECIAL_USED,
-                rule_id=special.id,
-                text=f"{named} used: the time-based rate alone cannot price this stay {mode}",
-                delta_minor=0,
-            )
-        )
+    specials = qualified.at(QUALIFY)
+    terminal = _terminal_rule(specials)
+    if terminal is not None:
+        return _priced(plan, stay, terminal, qualified)
+    times = () if _time_based_gaps(plan, stay, qualified) else qualified.at(ACCUMULATE)
+    ways = specials + times
+    if len(ways) == 1:
+        # One way: nothing to choose between, so it is priced once.
+        ledger = _priced(plan, stay, ways[0], qualified)
+        if specials:
+            ledger.add(_special_alone_line(plan, ways[0], ledger.total_minor))
+        return ledger
+
+    compared = _Compared(
+        fees={rule.id: _priced(plan, stay, rule, qualified).total_minor for rule in ways},
+        own=_candidate_totals(ways, stay, plan),
+    )
+    special = _cheapest(plan, specials, compared)
+    time_based = _cheapest(plan, times, compared)
+    if special is None:
+        return _priced(plan, stay, time_based, qualified, compared)
+    if time_based is None:
+        with_special = _priced(plan, stay, special, qualified, compared)
+        with_special.add(_special_alone_line(plan, special, compared.fees[special.id]))
         return with_special
-    time_based = _priced(plan, stay, with_specials=False)
-    time_fee = time_based.total_minor
+
+    special_fee = compared.fees[special.id]
+    named = f"{special.display_name} {format_minor(special_fee, plan.currency)}"
+    mode = _mode_clause(plan, QUALIFY)
+    time_fee = compared.fees[time_based.id]
     by_time = format_minor(time_fee, plan.currency)
     if time_fee < special_fee:
-        time_based.add(
+        time_way = _priced(plan, stay, time_based, qualified, compared)
+        time_way.add(
             Line(
                 code=TIME_BASED_USED,
                 rule_id=special.id,
@@ -1032,7 +1241,8 @@ def _the_cheaper_way(plan: Plan, stay: Stay, with_special: Ledger) -> Ledger:
                 compared_minor=special_fee,
             )
         )
-        return time_based
+        return time_way
+    with_special = _priced(plan, stay, special, qualified, compared)
     with_special.add(
         Line(
             code=SPECIAL_USED,
@@ -1047,6 +1257,24 @@ def _the_cheaper_way(plan: Plan, stay: Stay, with_special: Ledger) -> Ledger:
         )
     )
     return with_special
+
+
+def _special_alone_line(plan: Plan, special, fee: int) -> Line:
+    """The special charged where the time-based rate alone cannot price the stay
+    (it stops before the stay ends, or no rule of it covers the class): there is
+    no other way to compare it with, and the line says so rather than naming a
+    number."""
+    from .money import format_minor
+
+    return Line(
+        code=SPECIAL_USED,
+        rule_id=special.id,
+        text=(
+            f"{special.display_name} {format_minor(fee, plan.currency)} used: the "
+            f"time-based rate alone cannot price this stay {_mode_clause(plan, QUALIFY)}"
+        ),
+        delta_minor=0,
+    )
 
 
 def _lines_of(rule, returned: object) -> list[Line]:

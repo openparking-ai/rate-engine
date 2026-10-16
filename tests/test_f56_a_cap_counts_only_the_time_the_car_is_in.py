@@ -22,11 +22,15 @@ own, so a minute past midnight is a second day holding the stay's sixteenth
 hour -- 30.00 + 4.00, not a second 30.00 -- and the hour after seven days is a
 second week holding 4.00. Those figures are re-pinned here; F59 holds the rule.
 
-**And the boundaries are pinned on a flat special too.** A flat price is one
-price for the whole stay, so a cap compares it with the max times the days and
-weeks the car is in, exactly as before. That is the path where COUNTING the
-days decides the money, so the boundaries are measured there as well as on the
-lines a time-based stay prints.
+**And the boundaries are pinned on one price for the whole stay too.** A rule
+type that does not say how its charge builds up -- one registered with no
+accrual, as a type written against the earlier `register` signature is -- is
+capped at the max times the days and weeks the car is in. That is the path where
+COUNTING the days decides the money, so the boundaries are measured there as well
+as on the lines a time-based stay prints. A `time_window` flat special took this
+path until F63, which owes it in full at entry and caps it on that day (Gokhan,
+2026-10-16: the cheapest price always wins), so the path is reached here through
+a type this file registers for the purpose and removes afterwards.
 
 `scripts/fail_controls.py` puts back the exit's own date, the week start at the
 exit, a rolling day counted past the week's end, and the week capped by the
@@ -40,13 +44,22 @@ from datetime import timedelta
 
 import pytest
 
+from rate_engine.breakdown import Line
 from rate_engine.contract import run_quote
-from rate_engine.engine import make_stay
+from rate_engine.engine import QUALIFIERS, make_stay
 from rate_engine.plan import load_plan, parse_instant
-from rate_engine.rules import RULE_ACCRUALS, RULE_APPLIERS
+from rate_engine.rules import (
+    RULE_ACCRUALS,
+    RULE_APPLIERS,
+    RULE_TRAITS,
+    RULE_TYPES,
+    Rule,
+    common_fields,
+    register,
+)
 from rate_engine.rules.daily_max import days_covered
 from rate_engine.rules.weekly_max import weeks_covered
-from rate_engine.stages import CAP
+from rate_engine.stages import ACCUMULATE, CAP
 
 HOURLY = {
     "id": "hourly", "type": "increment", "stage": "ACCUMULATE",
@@ -102,17 +115,38 @@ def _cap_text(body: dict, rule_id: str) -> str:
     return next(ln["text"] for ln in body["breakdown"] if ln["rule_id"] == rule_id)
 
 
-#: A flat special priced above every cap: one price for the whole stay, for any
-#: entry and any exit. The plan has no time-based rate, so the special is the
-#: only way to price a stay and the caps meet a flat price every time.
+#: A rule type that is one price for the whole stay and says nothing about how
+#: its charge builds up: registered with no accrual. Registered for this module
+#: and removed after it, so no other module's registry carries it.
+ONE_PRICE = "f56_one_price"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _a_type_with_no_accrual():
+    def build(raw, plan_space_classes, where):
+        rule_id, classes = common_fields(raw, plan_space_classes, where, {"price_minor"})
+        return Rule(id=rule_id, type=ONE_PRICE, stage=ACCUMULATE, space_classes=classes,
+                    params={"price_minor": raw["price_minor"]})
+
+    def apply(rule, stay, plan):
+        return [Line(code="f56.one_price", rule_id=rule.id, text="One price for the stay",
+                     delta_minor=rule.params["price_minor"])]
+
+    register(ONE_PRICE, ACCUMULATE, build, apply)
+    QUALIFIERS[ONE_PRICE] = lambda rule, stay, plan: rule.covers(stay.space_class)
+    try:
+        assert RULE_ACCRUALS[ONE_PRICE] is None, "the type must say nothing about its accrual"
+        yield
+    finally:
+        for table in (RULE_TYPES, RULE_APPLIERS, RULE_TRAITS, RULE_ACCRUALS, QUALIFIERS):
+            table.pop(ONE_PRICE, None)
+
+
+#: One price for the whole stay, above every cap, for any entry and any exit. The
+#: plan has no other way to price a stay, so the caps meet it every time.
 FLAT = {
-    "id": "flat", "type": "time_window", "stage": "QUALIFY",
-    "space_classes": ["standard"], "label": "Flat price",
-    "applies_on": {"kind": "days_of_week",
-                   "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
-    "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
-    "day_span": "any_span",
-    "effect": {"kind": "flat", "price_minor": 50000},
+    "id": "flat", "type": ONE_PRICE, "stage": "ACCUMULATE",
+    "space_classes": ["standard"], "price_minor": 50000,
 }
 
 

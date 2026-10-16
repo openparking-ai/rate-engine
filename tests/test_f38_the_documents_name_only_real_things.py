@@ -89,7 +89,8 @@ def _owned_names() -> dict[str, set[str]]:
     """Everything this module actually holds, by category. Read from the code."""
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
-    from rate_engine.engine import SPECIAL_USED, TIME_BASED_USED
+    from rate_engine import engine
+    from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED
     from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
     from rate_engine.rules import (
@@ -150,7 +151,9 @@ def _owned_names() -> dict[str, set[str]]:
         "stated value": values,
         "guarantee": set(GUARANTEES),
         "tax": tax_names,
-        "engine line code": {SPECIAL_USED, TIME_BASED_USED},
+        "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED},
+        # The engine's one stated limit (F62), read off the module that holds it.
+        "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
     }
 
 
@@ -213,6 +216,12 @@ def _response_fields() -> set[str]:
     status, invalid = run_validate({"plan": over})
     assert status == 400 and "code" in invalid, invalid
     fields |= set(invalid)
+
+    # And a plan that DOES load: the validate-plan answer, `max_stay_minutes` in it
+    # (F62), taken off the wire like the rest.
+    status, validated = run_validate({"plan": plan})
+    assert status == 200, validated
+    fields |= set(validated)
 
     # And the tax door's answer, taken the same way: a figure with a line in it.
     from rate_engine.contract import run_tax

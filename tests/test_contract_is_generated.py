@@ -332,7 +332,9 @@ def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls
     session will find it.
     """
     interpolation = {name for name, kind in _blocks().items() if kind == 1}
-    assert interpolation == {"schema_version", "stages", "resolution", "guarantees"}
+    assert interpolation == {
+        "schema_version", "stages", "resolution", "guarantees", "max_stay",
+    }
     assert not (interpolation & CONTROLLED_ASSERTIONS)
 
 

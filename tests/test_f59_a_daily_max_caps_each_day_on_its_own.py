@@ -20,10 +20,11 @@ $8 the first hour and $4 an hour after, $30 a day, New York, as in F56:
   after the last one.
 * A weekly max caps each week the same way -- by the plan's own week, from the
   day it names -- after the daily max for each of its days.
-* A flat special is one price for the whole stay. There is no day it was
-  charged in, so it is capped as before: at the max times the days the car is
-  in. Whether the owner wants a multi-day flat special split by the day is a
-  question this file does not answer; it pins what ships.
+* A flat special is owed in full when the car comes in, so it is capped on the
+  day of entry: the owner's later decision (2026-10-16, the cheapest price
+  always wins), pinned in F63. This file pinned the reading before it -- one
+  price, capped at the max times the days the car was in -- and that reading is
+  now what a rule type that says nothing about its accrual gets (F56).
 
 The caps learn how the time was charged from the engine (`charged_by`, the
 `told_the_base` trait), and the engine checks that what the base says it charged
@@ -31,9 +32,8 @@ is what its lines charged, on every quote.
 
 `scripts/fail_controls.py` puts back the whole-stay cap, charges every day from
 entry, makes a day 24 hours long, lets a week ignore the daily max, allows a
-week the whole weekly max, splits a flat price by the day, tells the caps the
-wrong base, and turns the ledger check off, and requires this file to go red
-each time.
+week the whole weekly max, tells the caps the wrong base, and turns the ledger
+check off, and requires this file to go red each time.
 """
 
 from __future__ import annotations
@@ -374,29 +374,6 @@ def test_a_weekend_rate_is_split_by_the_day_like_the_ordinary_one():
                   "2026-04-12T12:00:00-04:00")
     assert body["fee_minor"] == 1800
     assert "8.00 USD + 10.00 USD" in _line(body, "cap-daily")["text"]
-
-
-FLAT = {
-    "id": "flat", "type": "time_window", "stage": "QUALIFY",
-    "space_classes": ["standard"], "label": "Weekend flat",
-    "applies_on": {"kind": "days_of_week", "days": ["fri"]},
-    "enter_from": "17:00", "enter_by": "23:59", "exit_by": "23:59",
-    "day_span": "any_span",
-    "effect": {"kind": "flat", "price_minor": 5000},
-}
-
-
-@pytest.mark.guarantee("F59")
-def test_a_flat_special_is_one_price_for_the_stay_and_is_capped_as_before():
-    """Friday 18:00 to Sunday 20:00 at a flat 50.00, with $30 a day: the car is in
-    three days, so the ceiling is 90.00 and the special's 50.00 stands. No minute
-    of the stay builds up to a flat price, so there is no day to charge it in."""
-    body = _quote(_plan(FLAT, _daily()), "2026-04-10T18:00:00-04:00",
-                  "2026-04-12T20:00:00-04:00")
-    assert body["fee_minor"] == 5000
-    cap = _line(body, "cap-daily")
-    assert cap["code"] == "daily_max.not_reached", cap["text"]
-    assert "3 days" in cap["text"], cap["text"]
 
 
 # --- the engine checks what a base says it charged ------------------------------

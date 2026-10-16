@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
+from rate_engine.engine import MAX_STAY_DAYS, max_stay_minutes  # noqa: E402
 from rate_engine.findings import (  # noqa: E402
     CONFLICT_CODES,
     FAULT_CODES,
@@ -172,9 +173,11 @@ def _partial_dead_plan(day_span: str) -> dict:
         "timezone": "America/New_York",
         "currency": "USD",
         "space_classes": ["standard"],
-        # `stated_order`: a window that qualifies REPLACES the hourly rate, so its
-        # line says whether it fired. Under `cheapest_wins` this 40.00 window is
-        # dearer than an hour and would not be used (F50) though it qualified.
+        # Whether the window FIRED is read off its lines, not off the fee: under
+        # either mode the cheapest way is charged (F63), and this 40.00 window is
+        # dearer than an hour, so where it qualifies the hour is charged and the
+        # window's comparison line says it qualified. `stated_order` kept, so the
+        # published limit is measured on a plan that states it.
         "resolution": {
             "QUALIFY": {"mode": "stated_order", "order": ["day-rate"]},
             "ACCUMULATE": {"mode": "cheapest_wins"},
@@ -197,8 +200,15 @@ def _partial_dead_plan(day_span: str) -> dict:
     }
 
 
+#: The lines that say a special QUALIFIED: it was applied, or it was compared
+#: with the time-based rate -- each written only for a special that qualified.
+QUALIFIED_LINE_CODES = frozenset({"time_window.applied", "special_used", "time_based_used"})
+
+
 def _window_applied(day_span: str, entry_at: str, exit_at: str) -> bool:
-    """Did the window fire for this stay? Asked of the engine, not assumed."""
+    """Did the window fire -- qualify -- for this stay? Asked of the engine, not
+    assumed, and read off its lines: a window that qualified and was dearer
+    than the hour is not charged, and still fired."""
     status, body = run_quote(
         {
             "plans": [_partial_dead_plan(day_span)],
@@ -213,7 +223,10 @@ def _window_applied(day_span: str, entry_at: str, exit_at: str) -> bool:
             f"the contract's partial-dead-window example did not price under "
             f"{day_span!r}: {body}"
         )
-    return any(line["code"] == "time_window.applied" for line in body["breakdown"])
+    return any(
+        line["code"] in QUALIFIED_LINE_CODES and line["rule_id"] == "day-rate"
+        for line in body["breakdown"]
+    )
 
 
 def gen_window_limits() -> str:
@@ -316,6 +329,15 @@ def gen_schema() -> str:
     return block("schema_version", f"`schema_version` **{SCHEMA_VERSION}**")
 
 
+def gen_max_stay() -> str:
+    """The longest stay priced, read from the one constant that states it."""
+    return block(
+        "max_stay",
+        f"`MAX_STAY_DAYS` **{MAX_STAY_DAYS}**: the longest stay priced is {MAX_STAY_DAYS} "
+        f"days of 24 hours from entry to exit, `max_stay_minutes` **{max_stay_minutes()}**.",
+    )
+
+
 TEMPLATE = """# The rate engine contract
 
 Version {schema}. One contract, five surfaces: `POST /v1/quote`, `POST
@@ -376,20 +398,78 @@ max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
 period starts, and does not start again at midnight, so those fifteen minutes
 are the stay's sixteenth hour at 4, not a new first hour at 8. A 23- or 25-hour
-day is one day. A flat special is one price for the whole stay, with no day it
-was charged in, so it is capped as before: at the max times the days and weeks
-the car is in. This only lowers a fee. The cap lines list what each day or week
-paid when one paid less than the max; no line code or finding code was added. A
-rule type that prices the time now says, when it registers, how its charge
-builds up over the stay, and the engine checks that against its lines on every
-quote; a type that says nothing is capped as one price for the stay.
+day is one day. A flat special is owed in full when the car comes in, so it is
+capped on the day of entry (F63, below). This only lowers a fee. The cap lines
+list what each day or week paid when one paid less than the max; no line code
+or finding code was added. A rule type that prices the time now says, when it
+registers, how its charge builds up over the stay, and the engine checks that
+against its lines on every quote; a type that says nothing is capped as one
+price for the stay.
 
 **A long stay is priced in the memory of a short one (F61).** Because each day
 is capped on its own, a cap walks the stay a day at a time, so the time a quote
 takes grows with the number of days in the stay. The memory it takes does not:
 no list of the stay's days or weeks is kept. A cap's line lists what each day or
 week paid up to a bounded number of runs, then says how many more there were and
-what they came to. This version sets no limit on how long a stay may be.
+what they came to. The longest stay priced is 90 days, and a longer one is
+refused before any of this work (F62, below).
+
+**The longest stay priced is 90 days (F62).** The garage owner's decision,
+2026-10-16. A stay longer than 90 days of 24 hours, entry to exit, is refused
+with a new gap code, `GAP_STAY_LONGER_THAN_MAX_STAY`: a 422 like every refusal,
+so a door that closes a stay unpriced on a refusal closes this one unpriced, and
+an operator prices it. Exactly 90 days is priced; one second more is not. The
+limit is checked before the plan is read and before a day of the stay is walked,
+so ten thousand years are refused as fast as 90 days and a second, and no quote
+walks more than 90 days -- capping each day on its own made a quote's work grow
+with the days in the stay. It is one constant, `MAX_STAY_DAYS`, and `validate-plan`
+answers it as `max_stay_minutes` beside the findings, so a rate setup can show
+it; `validate-plan` never reports the code, which is not a gap in any plan. See
+"The longest stay priced" below. **What a caller must do.** Treat the new code as
+the refusal it is: a consumer routing on finding codes meets one it has not seen.
+Version 6 had not been released, so it is part of version 6.
+
+**The cheapest price always wins (F63).** The garage owner's rule, 2026-10-16:
+when more than one price could apply to the same time, the car pays the
+cheapest. Three places changed, and each only lowers a fee:
+
+- A flat special is owed in full when the car comes in, so a daily or weekly max
+  caps it on the day of entry: a 50 Friday-to-Sunday flat with a 30 daily max is
+  30, where the max times the three days, 90, let the 50 stand. Of every way a
+  flat price could be split into days, all of it on one is the cheapest, for
+  every cap at once.
+- Two specials, or two time-based rates, that qualify for one stay are compared
+  on the whole FEE -- each priced through every stage, caps, surcharges and
+  adjustments included -- not on what the rules themselves charge. A 100 flat
+  and a 1-an-hour weekend rate over two days, at 30 a day, come to 30 and 48:
+  the flat is charged, and the losing rule's line gives both figures.
+- `stated_order` no longer charges a dearer rule. Under either mode the cheapest
+  way is charged, the time-based rate included; the stated order names one of
+  two ways that charge the same, as `cheapest_wins` names the lowest rule id. A
+  stay a special qualified for under it gains the `special_used` or
+  `time_based_used` line.
+
+Not changed, because nothing there is a choice between prices: a surcharge, a
+fixed increase and a tax are added; the caps already leave the lowest ceiling
+standing, whatever the kinds of day and week; and the ADJUST rules all apply, in
+the plan's stated order, except the fill rule, whose place was already the
+cheapest (F55). A rule type that says nothing about how its charge builds up is
+still capped as one price for the stay, at the max times the days and weeks the
+car is in: the engine cannot know where its charge fell. **What a caller must
+do.** Nothing, to keep quoting: every plan that loaded loads. A stay may cost
+less, and a consumer reading `resolved` lines meets a clause giving what the
+stay comes to by each rule, where the rules' own prices do not say why one lost.
+
+**A quote prices each way once (F64).** Because the cheapest price wins, a stay
+with N ways that qualify -- specials and time-based rates -- is priced through
+every stage N + 1 times: once for each way's fee, and once more for the
+receipt. With one way it is priced once. Nothing else is repeated per way. Each
+rule is asked once a quote whether it qualifies, a rule is found by its id
+rather than by comparing it with the others, a special that did not qualify is
+asked for its line once, and a way at most three times. So a quote's work grows
+with its ways, times the plan's rules and the days in the stay, which are at
+most 90. No limit is set on the rules a plan may hold or the ways a stay may
+have. **What a caller must do.** Nothing.
 
 **A percent discount over 100% does not load (F60).** A `time_window` discount
 whose `percent_bp` is above 10000 is refused when the plan is loaded, so
@@ -430,9 +510,12 @@ a stay of another class that met every time it states was told the special
 hour and 4 an hour after, with a 30 flat for VIP spaces, two hours in a standard
 space was 42, not 12 -- and a grace told the stay it was free on a receipt that
 charged it. Such a special now gets its not-applied line, at zero, saying the
-stay's class is not one it covers. The class is said only when it is the only
-reason, so a special for another class that failed on its times keeps the line
-it had. This only lowers a fee. No line code or finding code was added.
+stay's class is not one it covers. The class is the reason whatever the times:
+a special for another class that the stay also missed on a time used to give
+that time, so a VIP car read that it came in too late for an early bird it could
+never get, and that line now names the class too. This only lowers a fee, and
+otherwise changes the words of a line at zero. No line code or finding code was
+added.
 
 ### What changed in version 5
 
@@ -483,7 +566,8 @@ the lower; a tie keeps the special (F50). One engine line says which way was
 used: `special_used` or `time_based_used`, its `rule_id` the special, delta zero,
 and `compared_minor` what the other way would have charged -- absent when the
 time-based rate alone cannot price the stay, in which case the special is the
-only way. `stated_order` is unchanged (the special replaces), and so is grace,
+only way. `stated_order` was unchanged (the special replaced; version 6 changed
+that too, F63), and so is grace,
 which prices a stay alone. When the time-based rate is charged, every other
 special keeps its line, as on the special's way: its own reason for not
 applying, or a line saying it qualified and which cheaper special was compared
@@ -641,6 +725,19 @@ answer is the owner's to give. Whichever it states, the stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 
+## The longest stay priced
+
+{max_stay}
+
+A stay one second longer is REFUSED, `GAP_STAY_LONGER_THAN_MAX_STAY`, before the
+plan is read and before a day of the stay is walked (F62). It is a refusal like
+any other -- 422, the code, the sentence, nothing guessed -- so a caller that
+closes a stay unpriced on a refusal closes this one unpriced, for an operator to
+price. The limit is elapsed time, so a clock change does not move it, and it is
+the same for every plan: `validate-plan` never reports it as a gap in one, and
+answers it as `max_stay_minutes` beside the findings so a rate setup can show
+the owner which stays will need an operator.
+
 ## The pipeline
 
 {stages}
@@ -666,21 +763,22 @@ refused by name: CAP, SURCHARGE and ADJUST compose, so a mode there could never
 choose anything, and a field that cannot change an answer is a decision the owner
 made and the software ignored.
 
-- `{{"mode": "cheapest_wins"}}` — the **lowest fee for the customer** wins.
-- `{{"mode": "stated_order", "order": [...]}}` — the plan names the rule ids and
-  the first that qualifies wins. It must name every rule at that stage **exactly
-  once**; a rule left out would take a silent position in the order.
+- `{{"mode": "cheapest_wins"}}` — the **lowest fee for the customer** wins, and of
+  two ways that charge the same, the lowest rule id is named.
+- `{{"mode": "stated_order", "order": [...]}}` — the lowest fee wins here too
+  (F63); of two ways that charge the same, the first in the order is named. It
+  must name every rule at that stage **exactly once**; a rule left out would
+  take a silent position in the order.
 
-**What `cheapest_wins` compares, stated because it is a limit.** Between two
-competing rules at one stage, it compares what the rules themselves charge for
-the stay — not the final fee. A cap or an adjustment downstream applies to
-whichever rule wins and could in principle bring two different bases to the same
-number. Between the special that won at QUALIFY and the time-based rate alone it
-compares FINAL fees: the stay is priced through the whole pipeline both ways and
-the lower is charged, a tie keeping the special (F50). Two rules charging the SAME amount are a
-tie, and since version 4 a tie is PRICED at that amount: the driver pays the same
-whichever rule is named, so the lowest rule id is named as applied and every other
-says it charged the same (F48).
+**What is compared.** Every way the stay can be priced -- each special that
+qualified, and each time-based rate that qualified where the time-based rate
+alone can price the stay -- is priced through the whole pipeline, caps,
+surcharges and adjustments included, and the lowest FEE is charged, under either
+mode (F50, F63). A special keeps a tie with the time-based rate. Between two ways
+that come to the same fee, the one whose own charge is lower is named; between
+two that charge the same in both, the mode names one, and every other rule says
+it charged the same (F48). Until version 6, two competing rules were compared on
+what the rules themselves charged, which a cap can reverse.
 
 `adjust_order` is a different thing and is stated separately: a list of rule ids,
 or null, giving the sequence the ADJUST rules run in. **An order is not a
@@ -703,7 +801,7 @@ the stage decides which.** This used to be one answer for all five stages, and i
 was wrong in a way that only a second rule type could expose:
 
 - **QUALIFY and ACCUMULATE resolve.** Two rules are a genuine either/or -- only
-  one of them can be the price -- and the plan's resolution mode settles it.
+  one of them can be the price -- and the cheapest is charged (F63).
 - **CAP and SURCHARGE compose, in any order.** Two caps are not a contradiction;
   they are two ceilings, and the lower one wins whichever ran first. Nothing is
   reported, because there is nothing for an owner to decide. Their lines are
@@ -719,15 +817,15 @@ was wrong in a way that only a second rule type could expose:
 is, rather than by anything the plan says, so a grace period beating a weekend
 rate is settled and the beaten rule gets a line saying so.
 
-**And at a resolving stage the plan's MODE settles it, every time.** Two windows
-at different prices are priced by the cheaper under `cheapest_wins`, or by the
-first named under `stated_order`. Two that charge the SAME amount under
-`cheapest_wins` are priced at that amount too (version 4, F48): there is nothing
-cheaper, the driver pays the same either way, and the lowest rule id is the one
-the receipt names. Nothing at a resolving stage is refused any more.
+**And at a resolving stage the cheapest way is charged, every time** (F63). Two
+windows that come to different fees are priced by the cheaper, under either
+mode. Two that come to the SAME fee are priced at it too (version 4, F48): there
+is nothing cheaper, the driver pays the same either way, and the plan's mode
+names the rule on the receipt. Nothing at a resolving stage is refused any more.
 
 **Every rule that lost is still on the receipt**, naming the winner, both prices
-and the mode that chose — a breakdown that silently omitted a rate the customer
+and the mode -- and, where the rules' own prices do not say why it lost, what
+the stay comes to by each. A breakdown that silently omitted a rate the customer
 nearly got could not answer the question an attendant is actually asked.
 
 `validate-plan` probes every boundary the plan DECLARES -- each entry limit, each
@@ -815,7 +913,7 @@ engine does not do.
 - `raises_specials` -- `yes`: a charge a special priced is raised like any
   other. `no`: it is not, and the line says so: "Early bird special: fill rule
   not applied (garage was 84% full at entry, at or above 80%; this plan does not
-  raise specials)". Under `cheapest_wins` the stay is still priced both ways, so
+  raise specials)". The stay is still priced both ways, under either mode, so
   the driver pays the cheaper of the unraised special and the raised time-based
   rate.
 - `raises_vip_extra` -- `yes`: what the stay's space-class surcharge added, flat
@@ -1017,6 +1115,7 @@ def render() -> str:
         rule_types=gen_rule_types(),
         window_limits=gen_window_limits(),
         resolution_inline=gen_resolution(),
+        max_stay=gen_max_stay(),
         findings=gen_findings(),
         example=gen_example(),
         guarantees=gen_guarantees(),

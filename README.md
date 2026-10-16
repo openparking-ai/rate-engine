@@ -139,11 +139,18 @@ drifts.
   the start of each day, and each day pays the time charged in it, or the
   maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first
   hour, $4 an hour after and $30 a day is $30 + $4, not $30 twice. A week is
-  capped the same way, after the daily maximum for each of its days. The work
-  of capping grows with the number of days in the stay; the memory does not. A
-  flat special is one price for the stay, and is capped at the maximum times the
-  days it covers. **Two caps are not a conflict** — they are two ceilings, and the
-  lower one wins whichever is applied first.
+  capped the same way, after the daily maximum for each of its days. A flat
+  special is owed in full when the car comes in, so a maximum caps it on that
+  day: a $50 Friday-to-Sunday flat with a $30 daily maximum is $30. The work of
+  capping grows with the number of days in the stay; the memory does not.
+  **Two caps are not a conflict** — they are two ceilings, and the lower one
+  wins whichever is applied first.
+- **The longest stay priced is 90 days.** A stay longer than 90 days of 24
+  hours, entry to exit, is refused — `GAP_STAY_LONGER_THAN_MAX_STAY`, nothing
+  guessed — before the plan is read or a day of it is walked, so refusing it
+  costs nothing however long it is. A car in that long needs an operator, not a
+  number. `validate-plan` answers the limit as `max_stay_minutes`, so a rate
+  setup can show it.
 - **A grace period, if the plan declares one.** A stay at or under the stated
   minutes is free, and free means free: no surcharge, no cap, no adjustment. One
   minute over and it prices from entry on the ordinary rate. There is no default
@@ -159,10 +166,14 @@ drifts.
   VIP extra is the owner's answer, stated on the rule; there is no default.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
-- **When two rules qualify at once, what that MEANS depends on the stage.** Two
-  specials competing to be the price is a conflict the plan settles. Two caps
-  compose and nothing is reported. Two adjustments compose but the order changes
-  the money, so the plan states the order and a plan that has not is refused.
+- **When two rules qualify at once, what that MEANS depends on the stage.**
+  Two ways of pricing the time — two specials, two time-based rates, a special
+  and the time-based rate — are a choice, and **the cheapest price always
+  wins**: each way is priced through the whole pipeline, caps included, and the
+  driver pays the least, under either resolution mode; the mode only names the
+  rule when two charge the same. Two caps compose and nothing is reported. Two
+  adjustments compose but the order changes the money, so the plan states the
+  order and a plan that has not is refused.
 
 Money is an integer of minor units everywhere. No float, no bool, no `Decimal`,
 at any depth — a plan carrying one does not load, whether or not the field is one

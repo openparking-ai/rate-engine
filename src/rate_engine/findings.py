@@ -29,6 +29,14 @@ GAP_NO_ACCUMULATE_RULE = "GAP_NO_ACCUMULATE_RULE"
 #: hours" -- and it is expressible only because `max_duration_minutes` is a
 #: required field on the rule rather than an assumed infinity.
 GAP_STAY_EXCEEDS_MAX_DURATION = "GAP_STAY_EXCEEDS_MAX_DURATION"
+#: The stay is longer than this engine prices: more than `MAX_STAY_DAYS` (90)
+#: days of 24 hours from entry to exit (Gokhan, 2026-10-16). Refused before the
+#: plan is read or a day of the stay is walked, so it costs nothing however long
+#: the stay is (F62). **A gap no rule can close**: the limit is the engine's, the
+#: same for every plan, so `validate-plan` never reports it -- it publishes the
+#: limit instead, as `max_stay_minutes`. A door that closes a stay unpriced on a
+#: refusal shows this one as needing an operator.
+GAP_STAY_LONGER_THAN_MAX_STAY = "GAP_STAY_LONGER_THAN_MAX_STAY"
 #: No plan version was in force at the stay's ENTRY time.
 GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 #: No tax set the garage stated was in force at the instant the tax was asked
@@ -148,6 +156,7 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
+    GAP_STAY_LONGER_THAN_MAX_STAY,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (

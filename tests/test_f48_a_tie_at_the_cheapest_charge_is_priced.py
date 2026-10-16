@@ -14,7 +14,10 @@ priced at that amount. The receipt still names ONE rule, and it is the lowest
 rule id: stated by the operator, stable, never the caller's array position. The
 others say they charged the same, which is the true reason they were not named.
 
-`stated_order` is unchanged: it names every rule at load, so it never had a tie.
+`stated_order` never had a tie while it chose outright: the plan named who won,
+the dearer included. Since F63 it charges the cheapest too, so two rules there
+CAN charge the same, and the stated order names the one the receipt shows -- the
+same tie, priced the same way, named by the plan's order instead of the id.
 
 The fixtures are F11's, kept on purpose: the same two windows and the same two
 increments that used to be refused are the ones that must now price.
@@ -157,16 +160,21 @@ def test_a_tie_at_the_OTHER_resolving_stage_prices_the_same_way():
 
 
 @pytest.mark.guarantee("F48")
-def test_stated_order_is_unchanged_by_the_tie_rule():
-    """`stated_order` was never a tie: the plan names who wins, even the dearer."""
+def test_under_stated_order_a_tie_is_priced_and_the_ORDER_names_the_rule():
+    """Since F63 `stated_order` charges the cheapest too, so a tie is a tie there:
+    priced at that amount, the first rule in the order named -- not the lowest
+    id -- and the other says it charged the same, and why it was not named."""
     document = copy.deepcopy(TWO_WINDOWS)
     document["resolution"]["QUALIFY"] = {
         "mode": "stated_order", "order": ["eb-weekday", "eb-late"],
     }
     result = quote([load_plan(document)], EARLY)
     assert result.fee_minor == 1200
-    assert _applied(result) == ["eb-weekday"]
-    assert "charged the same" not in _resolved(result)[0].text
+    assert _applied(result) == ["eb-weekday"], "the lowest id was named, not the stated first"
+    loser = _resolved(result)
+    assert [ln.rule_id for ln in loser] == ["eb-late"]
+    assert "charged the same as Early bird" in loser[0].text, loser[0].text
+    assert "the plan's stated order puts it first" in loser[0].text, loser[0].text
 
 
 @pytest.mark.guarantee("F48")

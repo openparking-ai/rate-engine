@@ -18,10 +18,16 @@ time-based rate the stay was also charged:
 
 Such a special now gets its not-applied line, at zero, saying the stay's class
 is not one it covers -- what `apply` says it returns for a rule that did not
-qualify. The class is said only when it is the only reason. A special for
-another class that failed on its times keeps the line it has always had, so no
-receipt that priced correctly changes. Whether a special for another class
-should be on the receipt at all is an open question, not settled here.
+qualify. The line stays: a QUALIFY rule always speaks (F22).
+
+**And the class is the reason whatever the times.** A special for another class
+that the stay also missed on a time used to give that time: every VIP receipt on
+the reference plan read "Early bird NOT applied: entry 09:14 is after the 09:00
+entry limit ...", so a VIP car read that it came in too late for an early bird it
+could never get. A grace for VIP spaces told a fifteen-minute standard stay it
+was five minutes over. Both now name the class, and nothing else. A stay of the
+special's own class still gets the time, or the minutes, as before. Only the
+words of a line at zero changed; no fee moves.
 
 The sweep at the end holds the whole property: on every stay, a plan's quote is
 the quote of the same plan with its specials for other classes taken out, but
@@ -29,7 +35,7 @@ for those specials' own lines, each at zero. Every special in the earlier
 sweeps covered both classes, which is how this went unseen.
 
 `scripts/fail_controls.py` takes the class check out of each applier, and has
-the class said where a time had already failed, and requires red.
+a time or the minutes said before the class, and requires red.
 """
 
 from __future__ import annotations
@@ -225,11 +231,34 @@ def test_a_grace_for_VIP_spaces_does_not_tell_a_standard_stay_it_is_free():
 
 
 @pytest.mark.guarantee("F22c")
-def test_a_special_for_another_class_that_failed_on_its_times_keeps_the_line_it_had():
-    """No receipt that priced correctly changes. These are the lines both kinds
-    of special carried before, byte for byte."""
+def test_a_special_for_another_class_the_stay_also_missed_on_a_time_names_the_class():
+    """Never a time reason for a special the stay could never get. The reference
+    plan's early bird is for standard spaces; a VIP car in at 09:14 and out at
+    18:40 missed both its times as well, and its line names the class alone."""
     status, body = _quote(copy.deepcopy(DOWNTOWN_V2), TUE.format("09:14"), TUE.format("18:40"),
                           "vip")
+    assert status == 200, body
+    assert _the_class_line(body, "eb-weekday")["text"] == (
+        "Early bird NOT applied: the stay is in a 'vip' space and this rule covers "
+        "'standard' only. All of its conditions must hold, so the stay prices on the "
+        "time-based rate"
+    )
+
+    status, body = _quote(_plan(HOURLY, _grace("vip-grace", ["vip"])), TUE.format("10:00"),
+                          TUE.format("10:15"), "standard")
+    assert status == 200, body
+    assert _the_class_line(body, "vip-grace", code="grace.not_applied")["text"] == (
+        "Grace period 10 min NOT applied: the stay is in a 'standard' space and this grace "
+        "covers 'vip' only, so the stay prices from entry on the ordinary rate"
+    )
+
+
+@pytest.mark.guarantee("F22c")
+def test_and_a_stay_of_the_specials_own_class_still_gets_the_time_it_missed():
+    """The control on the item above: the same stays in a class the special
+    covers keep the lines they always had, byte for byte."""
+    status, body = _quote(copy.deepcopy(DOWNTOWN_V2), TUE.format("09:14"), TUE.format("18:40"),
+                          "standard")
     assert status == 200, body
     assert _the_class_line(body, "eb-weekday")["text"] == (
         "Early bird NOT applied: entry 09:14 is after the 09:00 entry limit; exit 18:40 on "
@@ -238,7 +267,7 @@ def test_a_special_for_another_class_that_failed_on_its_times_keeps_the_line_it_
     )
 
     status, body = _quote(_plan(HOURLY, _grace("vip-grace", ["vip"])), TUE.format("10:00"),
-                          TUE.format("10:15"), "standard")
+                          TUE.format("10:15"), "vip")
     assert status == 200, body
     assert _the_class_line(body, "vip-grace", code="grace.not_applied")["text"] == (
         "Grace period 10 min NOT applied: the stay was 15 min, which is 5 over. Grace is "
@@ -295,6 +324,36 @@ def _exit(entry, minutes):
     return (datetime.fromisoformat(entry) + timedelta(minutes=minutes)).isoformat()
 
 
+def _class_sentence(rule, space_class):
+    """The whole line a special for another class gives: the class, and nothing else."""
+    covered = ", ".join(repr(c) for c in rule["space_classes"])
+    if rule["type"] == "grace":
+        return (
+            f"Grace period {rule['minutes']} min NOT applied: the stay is in a "
+            f"{space_class!r} space and this grace covers {covered} only, so the stay "
+            "prices from entry on the ordinary rate"
+        )
+    return (
+        f"{rule['label']} NOT applied: the stay is in a {space_class!r} space and this rule "
+        f"covers {covered} only. All of its conditions must hold, so the stay prices on the "
+        "time-based rate"
+    )
+
+
+def _missed_a_time(rule, entry, exit_, space_class):
+    """Whether the stay also missed one of the special's times: asked of the
+    registered qualifier with the special widened to the stay's class."""
+    from rate_engine.engine import QUALIFIERS, make_stay
+    from rate_engine.plan import load_plan, parse_instant
+
+    widened = copy.deepcopy(rule)
+    widened["space_classes"] = BOTH
+    plan = load_plan(_plan(HOURLY, widened))
+    (loaded,) = [r for r in plan.rules if r.id == rule["id"]]
+    stay = make_stay(parse_instant(entry, "entry"), parse_instant(exit_, "exit"), space_class)
+    return not QUALIFIERS[loaded.type](loaded, stay, plan)
+
+
 def _without_other_classes(plan, space_class):
     """The same plan with every special that does not cover `space_class` taken out."""
     reduced = copy.deepcopy(plan)
@@ -309,7 +368,7 @@ def _without_other_classes(plan, space_class):
 
 @pytest.mark.guarantee("F22c")
 def test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP():
-    met_every_time = failed_on_time = priced = 0
+    met_every_time = missed_a_time = priced = 0
     for names, base, mode, entry, minutes, space_class in itertools.product(
         SPECIAL_SETS, BASES, MODES, ENTRIES, MINUTES, BOTH
     ):
@@ -332,16 +391,21 @@ def test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP():
         rest = [line for line in body["breakdown"] if line["rule_id"] not in gone]
         assert rest == want["breakdown"], case
         assert len(theirs) == len(gone), f"{case}: {theirs}"
+        rules = {r["id"]: r for r in plan["rules"]}
         for line in theirs:
             assert line["delta_minor"] == 0 and line["code"].endswith(".not_applied"), (
                 f"{case}: {line}"
             )
-            if f"the stay is in a {space_class!r} space" in line["text"]:
-                met_every_time += 1
+            # The class, and nothing else, whatever the stay did on the times.
+            rule = rules[line["rule_id"]]
+            assert line["text"] == _class_sentence(rule, space_class), f"{case}: {line}"
+            if _missed_a_time(rule, entry, exit_, space_class):
+                missed_a_time += 1
             else:
-                failed_on_time += 1
-    # Both kinds of special for another class were met, and enough stays priced
+                met_every_time += 1
+    # Both kinds of stay were met -- ones that met every time of a special for
+    # another class, and ones that also missed a time -- and enough stays priced
     # for the comparison to mean something.
-    assert met_every_time >= 900 and failed_on_time >= 1000 and priced >= 1100, (
-        met_every_time, failed_on_time, priced,
+    assert met_every_time >= 900 and missed_a_time >= 1000 and priced >= 1100, (
+        met_every_time, missed_a_time, priced,
     )

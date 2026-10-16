@@ -11,7 +11,9 @@ the stay can be priced.
 So under `cheapest_wins` the stay is priced through the WHOLE pipeline both ways
 -- with the special, and by the time-based rate alone, caps and adjustments
 included -- and charged the lower. A tie keeps the special. The breakdown says
-which way was used and what the other would have charged.
+which way was used and what the other would have charged. Since F63 (Gokhan,
+2026-10-16: the cheapest price always wins) the same holds under
+`stated_order`, which used to let the special replace the hour whatever it cost.
 
 **The fixture straddles the comparison on purpose.** One stay where the hourly
 rate is cheaper (08:00 -> 10:30: 3.00 + 2 x 2.00 = 7.00 against 9.00) and one
@@ -85,15 +87,12 @@ def _compared(result):
 
 
 def test_the_fixture_puts_a_stay_on_each_side_of_the_comparison():
-    """The control on the fixture. Under `stated_order` the special replaces, as
-    it always did, so these are the special's prices; the hourly ones are worked
-    by hand: 3.00 + 2 x 2.00 and 3.00 + 12 x 2.00."""
-    replaces = _plan(resolution={
-        "QUALIFY": {"mode": "stated_order", "order": ["early-bird"]},
-        "ACCUMULATE": {"mode": "cheapest_wins"},
-    })
-    assert _quote(replaces, IN_0800_OUT_1030).fee_minor == EARLY_BIRD
-    assert _quote(replaces, IN_0500_OUT_1800).fee_minor == EARLY_BIRD
+    """The control on the fixture. With the special the plan's only way to price
+    either stay, these are the special's prices; the hourly ones are worked by
+    hand: 3.00 + 2 x 2.00 and 3.00 + 12 x 2.00."""
+    special_only = _plan(rules=[r for r in PLAN["rules"] if r["id"] == "early-bird"])
+    assert _quote(special_only, IN_0800_OUT_1030).fee_minor == EARLY_BIRD
+    assert _quote(special_only, IN_0500_OUT_1800).fee_minor == EARLY_BIRD
     by_the_hour = _plan(rules=[r for r in PLAN["rules"] if r["id"] == "hourly"])
     assert _quote(by_the_hour, IN_0800_OUT_1030).fee_minor == 700
     assert _quote(by_the_hour, IN_0500_OUT_1800).fee_minor == 2700
@@ -187,14 +186,21 @@ def test_a_tie_keeps_the_special():
 
 
 @pytest.mark.guarantee("F50")
-def test_stated_order_still_lets_the_special_replace():
+def test_stated_order_charges_the_cheaper_way_too():
+    """It used to let the special replace the hour, so this stay was 9.00. The
+    cheapest price always wins (F63): the hour's 7.00, with the comparison line,
+    which says how the plan resolves QUALIFY and what the order still does."""
     document = _plan(resolution={
         "QUALIFY": {"mode": "stated_order", "order": ["early-bird"]},
         "ACCUMULATE": {"mode": "cheapest_wins"},
     })
     result = _quote(document, IN_0800_OUT_1030)
-    assert result.fee_minor == EARLY_BIRD
-    assert SPECIAL_USED not in _codes(result) and TIME_BASED_USED not in _codes(result)
+    assert result.fee_minor == 700, "the stated order let a dearer special replace the hour"
+    line = _compared(result)
+    assert line.code == TIME_BASED_USED and line.compared_minor == EARLY_BIRD
+    assert "by stated_order: the cheapest is charged" in line.text, line.text
+    # And where the special is the cheaper way, it is still the one charged.
+    assert _quote(document, IN_0500_OUT_1800).fee_minor == EARLY_BIRD
 
 
 @pytest.mark.guarantee("F50")
@@ -382,8 +388,8 @@ def test_where_ONE_special_fits_and_the_hour_wins_the_others_still_say_why_not()
 # --- U7g fix 2, G1: the contract's partly dead window, under cheapest_wins ----
 #
 # docs/CONTRACT.md publishes a window 06:00-23:00 in, out by 20:00, same day, as
-# alive for an early entry and dead for a late one -- measured under
-# `stated_order`, where a 40.00 window replaces the hour. Here it is CHEAPER
+# alive for an early entry and dead for a late one -- measured on a 40.00 window,
+# dearer than the hour, by whether its lines say it qualified. Here it is CHEAPER
 # than the hour and the plan resolves by `cheapest_wins`: the window must apply
 # and be charged where it fits, and not where it is dead.
 
