@@ -1304,6 +1304,74 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "            extras = ledger.total_minor  # PLANTED: the time counted as extra",
         "'raise the VIP extra' raises the whole running total, so the time is raised twice",
     ),
+    # The caps' boundaries. The first two arms put back the shipped defect, a
+    # period the car is in for no time counting as a period; the third counts a
+    # rolling day past the end of a week; the fourth caps a week by the weekly
+    # max alone, which is how two weeks were charged for seven days and an hour.
+    "F56/exit-date-counted": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/daily_max.py",
+        "    last = (end - LAST_INSTANT).astimezone(plan.timezone).date()",
+        "    last = end.astimezone(plan.timezone).date()  # PLANTED: the exit's own date",
+        "an exit at exactly midnight counts the new date, so fifteen hours on Monday "
+        "pay two daily caps for no time at all on Tuesday",
+    ),
+    "F56/week-start-at-exit-counted": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/weekly_max.py",
+        "            if boundary >= exit_at:",
+        "            if boundary > exit_at:  # PLANTED: a week start at the exit counts",
+        "an exit at exactly the start of a calendar week counts that week, so a "
+        "Monday-to-Monday stay pays the weekly max twice",
+    ),
+    "F56/rolling-day-past-the-week": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/daily_max.py",
+        "        return -(-(end - entry) // ONE_DAY) - (start - entry) // ONE_DAY",
+        "        return (end - entry) // ONE_DAY + 1 - (start - entry) // ONE_DAY  # PLANTED",
+        "a week ending on a 24-hour mark counts one rolling day more than it holds, "
+        "so an eight-day stay's last week is allowed two daily caps for one day",
+    ),
+    "F56/week-by-weekly-max-alone": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/weekly_max.py",
+        '            ceiling = min(ceiling, day_rule.params["max_minor"] * count)',
+        "            pass  # PLANTED: a week is capped by the weekly max alone",
+        "a week holding one hour is allowed the whole weekly max, so seven days and "
+        "an hour pay 100 twice instead of 100 + 30",
+    ),
+    "F57/discount-not-limited": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '            return min(amount["minor"], running_total_minor)',
+        '            return amount["minor"]  # PLANTED: a fixed discount is not limited',
+        "a fixed discount larger than a short stay's charge takes the fee below zero, "
+        "and the stay is refused instead of priced at zero",
+    ),
+    "F57/limit-not-said": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '        if magnitude < amount["minor"]:',
+        "        if False:  # PLANTED: the limit is applied and not said",
+        "the discount line says 5.00 off and the fee moves by 3.00, so the receipt "
+        "does not explain its own figure",
+    ),
+    "F58/negative-length-read": (
+        "tests/test_f58_a_body_is_read_within_a_bound.py",
+        "service.py",
+        "        if length < 0:",
+        "        if False:  # PLANTED: a negative length is read to the end",
+        "a negative Content-Length is read to the end of the connection, so a caller "
+        "that keeps it open holds a server thread and gets no answer",
+    ),
+    "F58/no-socket-timeout": (
+        "tests/test_f58_a_body_is_read_within_a_bound.py",
+        "service.py",
+        "    timeout = SOCKET_TIMEOUT_SECONDS",
+        "    timeout = None  # PLANTED: no socket timeout",
+        "a connection has no socket timeout, so a caller that stops part-way through "
+        "a body holds its thread for as long as it keeps the connection open",
+    ),
 }
 
 

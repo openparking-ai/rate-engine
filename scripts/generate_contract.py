@@ -354,6 +354,18 @@ fill rule last in `adjust_order`. A consumer
 reading breakdown lines meets three new line codes, `fill_level.special_not_raised`,
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
+**Three corrections that move a fee, with no change to the plan document.** A
+cap no longer counts a day or a week the car is in for no time: an exit at
+exactly local midnight, at a 24-hour mark or at the start of a week adds no cap.
+A week costs no more than the daily max times the days the car is in it, so
+seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). A fixed
+discount takes off at most what the stay costs, so a stay cheaper than the
+discount is priced at zero, not refused (F57). Each lowers a fee or prices a
+stay that was refused; none raises one. The weekly cap's line and the discount's
+line say more in their text, and no line code or finding code was added. On the
+HTTP door, a negative Content-Length is a 400 and a connection that stops
+sending is closed after a timeout (F58).
+
 ### What changed in version 5
 
 **A plan may price on how full the garage was when the car came in.** A new rule

@@ -668,9 +668,15 @@ def _magnitude(effect: dict, running_total_minor: int) -> int:
     question the day one of them is edited. This effect may state only
     `ADJUST_ROUNDINGS`; the applier implements more, and that difference is the
     loader's to hold, not the arithmetic's.
+
+    A fixed DISCOUNT takes off at most the running total. "5.00 off" on a stay
+    that costs 3.00 makes it free, not minus 2.00 -- which the engine refused, so
+    the stay was not priced at all.
     """
     amount = effect["amount"]
     if amount["kind"] == "fixed":
+        if effect["direction"] == "discount":
+            return min(amount["minor"], running_total_minor)
         return amount["minor"]
     return percent_of_minor(running_total_minor, amount["percent_bp"], effect["rounding"])
 
@@ -698,6 +704,8 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
             f"{format_minor(amount['minor'], currency)} {effect['direction']} on "
             f"{format_minor(running_total_minor, currency)}"
         )
+        if magnitude < amount["minor"]:
+            measure += f", limited to the {format_minor(running_total_minor, currency)} charged"
     return Line(
         code=APPLIED,
         rule_id=rule.id,

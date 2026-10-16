@@ -20,9 +20,16 @@ two-day stay differently:
 §8 raises exactly this ("what happens at midnight on a two-day stay") as one of
 the things a rate sign does not tell you. So the engine does not decide it. A
 plan that does not state `day_boundary` does not load.
+
+**A day the car is in for no time is not a day it touched.** An exit at exactly
+local midnight ends on the date before, so Monday 09:00 to Tuesday 00:00 is one
+calendar day and one cap, not two caps for zero minutes of Tuesday. A rolling
+window already counted that way: a stay of exactly 24 hours is one window.
 """
 
 from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
@@ -32,6 +39,14 @@ from . import Rule, common_fields, register
 DAY_BOUNDARIES: tuple[str, ...] = ("calendar_day", "rolling_24h")
 
 EXTRA = {"max_minor", "day_boundary"}
+
+ONE_DAY = timedelta(days=1)
+
+#: The finest step a `datetime` has. A stay's last instant is this much before
+#: its exit, so an exit at exactly midnight is not an instant of the new day,
+#: and an exit at 00:00:00.000001 is -- the same convention as a part-minute
+#: being a whole minute.
+LAST_INSTANT = timedelta(microseconds=1)
 
 
 def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
@@ -67,12 +82,31 @@ def days_covered(rule: Rule, stay, plan) -> int:
             return 1
         return -(-minutes // (24 * 60))  # ceil, integer only
 
-    entry_local = stay.entry_at.astimezone(plan.timezone)
-    exit_local = stay.exit_at.astimezone(plan.timezone)
+    if stay.duration_minutes == 0:
+        return 1
+    return days_between(rule, stay, plan, stay.entry_at, stay.exit_at)
+
+
+def days_between(rule: Rule, stay, plan, start: datetime, end: datetime) -> int:
+    """How many of this cap's days the car is in from `start` to `end`, each for
+    more than zero time. `start` is before `end`, and both are inside the stay.
+
+    `weekly_max` asks this of each week a stay is cut into. A rolling window is
+    anchored on the stay's ENTRY whichever part of the stay is asked about, so a
+    week counts the same 24-hour windows the whole stay does.
+    """
+    start = start.astimezone(UTC)
+    end = end.astimezone(UTC)
+    if rule.params["day_boundary"] == "rolling_24h":
+        entry = stay.entry_at.astimezone(UTC)
+        return -(-(end - entry) // ONE_DAY) - (start - entry) // ONE_DAY
+
+    first = start.astimezone(plan.timezone).date()
+    last = (end - LAST_INSTANT).astimezone(plan.timezone).date()
     # Distinct local dates touched. Counted on dates rather than by dividing an
     # elapsed time, which is what makes a 23- or 25-hour DST day come out as one
     # day rather than as 0.96 or 1.04 of one.
-    return (exit_local.date() - entry_local.date()).days + 1
+    return (last - first).days + 1
 
 
 def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:

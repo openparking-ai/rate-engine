@@ -389,6 +389,26 @@ GUARANTEES: dict[str, str] = {
         "and a flat discount, each side of the threshold, prices to the cent worked "
         "by hand."
     ),
+    "F56": (
+        "A cap counts only the days and weeks the car is in for more than zero time: "
+        "an exit at exactly local midnight, at a 24-hour mark or at the start of a "
+        "week adds no cap, and one minute past it does. A week costs no more than the "
+        "daily max times the days the car is in it, so seven days and an hour at 30 a "
+        "day and 100 a week is 100 + 30, not 100 twice. The two caps still compose "
+        "in either order."
+    ),
+    "F57": (
+        "A fixed discount takes off at most what the stay costs. A stay cheaper than "
+        "the discount is priced at zero and the line says the discount was limited "
+        "to the charge; it is never refused as a negative fee. A discount smaller "
+        "than the charge is taken in full."
+    ),
+    "F58": (
+        "The HTTP door reads a request body only within a bound. A negative "
+        "Content-Length is a named 400 rather than a read to the end of the "
+        "connection, and every connection carries a socket timeout, so a caller that "
+        "stops part-way through a body is disconnected rather than holding a thread."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

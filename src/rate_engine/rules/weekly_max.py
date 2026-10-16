@@ -27,17 +27,26 @@ and is why CAP is a composing stage rather than a resolving one. See stages.py:
 `find_conflicts` used to refuse whenever more than one rule qualified anywhere,
 so this rule type's arrival would have made every plan carrying a daily AND a
 weekly cap refuse every stay in the garage.
+
+**A week costs no more than the daily caps of the days in it.** The stay is cut
+at its week boundaries, and each week is allowed the weekly max or, where the
+plan also caps the day, the daily max times the days the car is in that week,
+whichever is lower. Seven days and an hour at 30 a day and 100 a week is 100
+for the first week and 30 for the hour, not 100 twice. This reads the daily
+caps' terms from the plan, never their lines, so the two caps still compose in
+either order. And like a day, a week the car is in for no time is not a week it
+touched: an exit at exactly the start of a week adds no cap.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import CAP
 from ..wallclock import DAYS_OF_WEEK
-from . import Rule, common_fields, register
+from . import Rule, common_fields, daily_max, register
 
 WEEK_BOUNDARIES: tuple[str, ...] = ("calendar_week", "rolling_7d")
 
@@ -102,24 +111,61 @@ def _week_start(day: date, starts_on: str) -> date:
     return day - timedelta(days=offset)
 
 
-def weeks_covered(rule: Rule, stay, plan) -> int:
-    """How many caps this stay is allowed. Never zero -- any stay touches one week.
+def weeks_of(rule: Rule, stay, plan) -> list[tuple[datetime, datetime]]:
+    """The stay cut at this cap's week boundaries: one (start, end) for each week
+    the car is in for more than zero time, in order. A stay of zero length is in
+    one week, as it is in one day.
 
-    `daily_max.days_covered` one unit up, and deliberately the same shape: the
-    calendar branch counts DISTINCT LOCAL WEEKS rather than dividing an elapsed
-    time, which is what makes a week containing a daylight-saving transition come
-    out as one week rather than as 0.99 of one.
+    The calendar boundaries are local midnights at the start of each week, so a
+    week containing a daylight-saving transition is one week rather than 0.99 of
+    one -- `daily_max.days_covered`'s reasoning one unit up.
     """
-    if rule.params["week_boundary"] == "rolling_7d":
-        minutes = stay.duration_minutes
-        if minutes == 0:
-            return 1
-        return -(-minutes // (DAYS_IN_A_WEEK * 24 * 60))  # ceil, integer only
+    entry = stay.entry_at.astimezone(UTC)
+    exit_at = stay.exit_at.astimezone(UTC)
+    if stay.duration_minutes == 0:
+        return [(entry, exit_at)]
 
-    starts_on = rule.params["week_starts_on"]
-    entry_week = _week_start(stay.entry_at.astimezone(plan.timezone).date(), starts_on)
-    exit_week = _week_start(stay.exit_at.astimezone(plan.timezone).date(), starts_on)
-    return (exit_week - entry_week).days // DAYS_IN_A_WEEK + 1
+    cuts = [entry]
+    if rule.params["week_boundary"] == "rolling_7d":
+        weeks = -(-stay.duration_minutes // (DAYS_IN_A_WEEK * 24 * 60))  # ceil, integer only
+        cuts += [entry + timedelta(days=DAYS_IN_A_WEEK * k) for k in range(1, weeks)]
+    else:
+        local_entry = stay.entry_at.astimezone(plan.timezone).date()
+        week = _week_start(local_entry, rule.params["week_starts_on"])
+        while True:
+            week += timedelta(days=DAYS_IN_A_WEEK)
+            # fold=0 is the first instant of the date, even when midnight itself
+            # falls in a transition.
+            boundary = datetime.combine(week, time(0), tzinfo=plan.timezone)
+            boundary = boundary.astimezone(UTC)
+            if boundary >= exit_at:
+                break
+            cuts.append(boundary)
+    cuts.append(exit_at)
+    return list(zip(cuts, cuts[1:], strict=False))
+
+
+def weeks_covered(rule: Rule, stay, plan) -> int:
+    """How many caps this stay is allowed. Never zero -- any stay touches one week."""
+    return len(weeks_of(rule, stay, plan))
+
+
+def week_ceilings(rule: Rule, stay, plan) -> list[int]:
+    """The most each week of the stay may cost: the weekly max, or the daily max
+    times the days the car is in that week where the plan caps the day too and
+    that is lower."""
+    days = [
+        r for r in plan.rules_for_stage(CAP)
+        if r.type == "daily_max" and daily_max.qualifies(r, stay, plan)
+    ]
+    ceilings = []
+    for start, end in weeks_of(rule, stay, plan):
+        ceiling = rule.params["max_minor"]
+        for day_rule in days:
+            count = daily_max.days_between(day_rule, stay, plan, start, end) if end > start else 1
+            ceiling = min(ceiling, day_rule.params["max_minor"] * count)
+        ceilings.append(ceiling)
+    return ceilings
 
 
 def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:
@@ -131,10 +177,17 @@ def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:
     is what leaves the LOWER of the two ceilings standing whichever order they
     ran in.
     """
-    caps = weeks_covered(rule, stay, plan)
-    ceiling = rule.params["max_minor"] * caps
+    weeks = week_ceilings(rule, stay, plan)
+    caps = len(weeks)
+    ceiling = sum(weeks)
     currency = plan.currency
     span = f"{caps} weeks" if caps != 1 else "the week"
+    by_days = ""
+    if any(week < rule.params["max_minor"] for week in weeks):
+        by_days = (
+            f" ({' + '.join(format_minor(week, currency) for week in weeks)}: a week "
+            "costs no more than the daily max for the days the car is in it)"
+        )
 
     if running_total_minor <= ceiling:
         return [
@@ -157,7 +210,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:
                 f"Weekly max {format_minor(rule.params['max_minor'], currency)} "
                 f"({rule.params['week_boundary']}) applied over {span}: "
                 f"{format_minor(running_total_minor, currency)} reduced to "
-                f"{format_minor(ceiling, currency)}"
+                f"{format_minor(ceiling, currency)}{by_days}"
             ),
             delta_minor=ceiling - running_total_minor,
         )

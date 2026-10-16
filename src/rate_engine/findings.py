@@ -71,11 +71,15 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: code is what anything mechanical keys off. A consumer routing on it would
 #: have told an operator to settle a resolution order that was not the problem.
 #:
-#: Unreachable with the four rule types A1 ships: every money field goes through
-#: `as_non_negative_minor`, and `daily_max` sets the total to exactly
-#: `max_minor x days`, which is >= 0. It is registered anyway because a rule type
-#: is the unit of growth here, and the first one that can return a negative Line
-#: should meet a named refusal rather than a mislabelled one.
+#: Every money field goes through `as_non_negative_minor`, and a cap reduces the
+#: total to a ceiling that is never below zero (`daily_max`: `max_minor x days`;
+#: `weekly_max`: the sum of its weeks' ceilings). A fixed discount takes off at
+#: most the running total. This said "unreachable" while a fixed discount larger
+#: than a short stay's charge reached it, and that stay was refused rather than
+#: priced at zero. A percentage discount is still not limited: one over 100%
+#: reaches this refusal. It is registered either way because a rule type is the
+#: unit of growth here, and the first one that can return a negative Line should
+#: meet a named refusal rather than a mislabelled one.
 CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
 
 #: Two or more ADJUST rules qualify and the plan does not say in what order to
