@@ -187,7 +187,16 @@ def refusal_response(refused: Refused) -> dict[str, Any]:
 
 
 def invalid_response(error: Exception) -> dict[str, Any]:
-    return {"schema_version": SCHEMA_VERSION, "invalid": True, "error": str(error)}
+    """400: the request or the plan could not be read, and the sentence says why.
+
+    A refusal that carries a code (`findings.INVALID_CODES`) carries it as
+    `code`, after `error`. Every other refusal is the bytes it always was.
+    """
+    body: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "invalid": True, "error": str(error)}
+    code = error.code if isinstance(error, InvalidPlan) else None
+    if code is not None:
+        body["code"] = code
+    return body
 
 
 def validate_response(plan) -> dict[str, Any]:

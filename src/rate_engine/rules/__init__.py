@@ -153,9 +153,19 @@ ONE_PER_STAY = "one_per_stay"
 #: not, raise the VIP extra or not -- and no other type reads them.
 TOLD_THE_PASS = "told_the_pass"
 
+#: A rule of this type is handed `charged_by`: how the charge for the time built
+#: up over the stay on this pass. It is a function of a number of minutes into
+#: the stay, returning what the base that priced the time (the time-based rate
+#: or a special) charges for the stay's first that many minutes -- or None when
+#: the base is one price for the whole stay, which no minute of the stay builds
+#: up to. The daily and weekly caps need it to cap each day and each week on its
+#: own (F59): a cap that sees only the running total cannot tell which day the
+#: money was charged in.
+TOLD_THE_BASE = "told_the_base"
+
 TRAITS: tuple[str, ...] = (
     TERMINAL, SPEAKS_UNQUALIFIED, ON_THE_TIME_CHARGE, NEEDS_OCCUPANCY, ONE_PER_STAY,
-    TOLD_THE_PASS,
+    TOLD_THE_PASS, TOLD_THE_BASE,
 )
 
 #: type name -> the traits it declared. Every registered type has an entry, so a
@@ -173,6 +183,20 @@ RULE_TRAITS: dict[str, frozenset[str]] = {}
 RULE_TYPES: dict[str, tuple[tuple[str, ...], Callable[..., Rule]]] = {}
 RULE_APPLIERS: dict[str, Callable[..., Any]] = {}
 
+#: type name -> how a rule of this type that prices the time builds its charge
+#: up over the stay, or None. Called as `accrual(rule, stay, plan)`, it returns
+#: the `charged_by` function `TOLD_THE_BASE` describes -- minutes into the stay
+#: to what the rule charges for that many minutes -- or None when the rule is
+#: one price for the whole stay. Every registered type has an entry, so a lookup
+#: is never a `.get` with a default.
+#:
+#: **None is the safe answer, not the precise one.** A cap handed None caps the
+#: whole charge at the daily max times the days the car is in, which is what a
+#: cap did before it capped each day on its own. A type that prices the time by
+#: the minute and registers no accrual is therefore capped as one price for the
+#: stay; a type of that kind declares its accrual when it is added.
+RULE_ACCRUALS: dict[str, Callable[..., Any] | None] = {}
+
 
 def register(
     rule_type: str,
@@ -180,6 +204,7 @@ def register(
     builder: Callable[..., Rule],
     applier: Callable[..., Any],
     traits: tuple[str, ...] = (),
+    accrual: Callable[..., Any] | None = None,
 ):
     """Register a rule type at the stage, or the stages, it may run at.
 
@@ -193,6 +218,11 @@ def register(
     differently, rather than the engine knowing its name. It defaults to none, so
     a type registered against the earlier signature declares nothing and behaves
     exactly as it did.
+
+    `accrual` is how a type that prices the time says how its charge builds up
+    over the stay (see `RULE_ACCRUALS`). It defaults to None, the answer for a
+    type that is one price for the whole stay, so a type registered against the
+    earlier signature is capped exactly as it was.
     """
     stages = (stage,) if isinstance(stage, str) else tuple(stage)
     if not stages:
@@ -225,6 +255,7 @@ def register(
     RULE_TYPES[rule_type] = (stages, builder)
     RULE_APPLIERS[rule_type] = applier
     RULE_TRAITS[rule_type] = declared
+    RULE_ACCRUALS[rule_type] = accrual
 
 
 def build_rule(raw: object, plan_space_classes: tuple[str, ...], where: str) -> Rule:

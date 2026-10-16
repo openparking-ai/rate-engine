@@ -1,5 +1,5 @@
-"""F56 -- a cap counts only the days and weeks the car is in, and a week costs no
-more than the daily caps of the days in it.
+"""F56 -- a cap counts only the days and weeks the car is in, and a week holds
+only its own days.
 
 Two defects, one plan. $8 the first hour, $4 an hour after, $30 a day, $100 a
 week, New York:
@@ -12,17 +12,25 @@ week, New York:
   hours is one window -- and that is pinned here so it stays.
 * **A week was capped at the weekly max times the weeks touched.** Seven days
   and an hour paid the weekly max twice, 200.00, although the hour's week
-  holds one hour, which the daily cap limits to 30.00. Each week now costs at
-  most the daily max times the days the car is in it: 100.00 + 30.00.
+  holds one hour. A week now holds only its own days, and costs no more than
+  the daily max for them.
 
-Both are wrong whatever a daily max is taken to mean -- each day capped on its
-own, or the max times the days and part-days of the stay. Which of those the
-plan means is not settled here, and these figures are the ones that hold under
-either.
+**The figures moved again when the daily max became per calendar day (F59).**
+This file was written while that was undecided, and pinned only what held
+under either reading. Gokhan decided 2026-10-16 that each day is capped on its
+own, so a minute past midnight is a second day holding the stay's sixteenth
+hour -- 30.00 + 4.00, not a second 30.00 -- and the hour after seven days is a
+second week holding 4.00. Those figures are re-pinned here; F59 holds the rule.
+
+**And the boundaries are pinned on a flat special too.** A flat price is one
+price for the whole stay, so a cap compares it with the max times the days and
+weeks the car is in, exactly as before. That is the path where COUNTING the
+days decides the money, so the boundaries are measured there as well as on the
+lines a time-based stay prints.
 
 `scripts/fail_controls.py` puts back the exit's own date, the week start at the
-exit, a rolling day counted past the exit, and the week capped by the weekly max
-alone, and requires this file to go red each time.
+exit, a rolling day counted past the week's end, and the week capped by the
+weekly max alone, and requires this file to go red each time.
 """
 
 from __future__ import annotations
@@ -35,7 +43,7 @@ import pytest
 from rate_engine.contract import run_quote
 from rate_engine.engine import make_stay
 from rate_engine.plan import load_plan, parse_instant
-from rate_engine.rules import RULE_APPLIERS
+from rate_engine.rules import RULE_ACCRUALS, RULE_APPLIERS
 from rate_engine.rules.daily_max import days_covered
 from rate_engine.rules.weekly_max import weeks_covered
 from rate_engine.stages import CAP
@@ -90,19 +98,54 @@ def _fee(plan: dict, entry: str, exit_: str) -> int:
     return _quote(plan, entry, exit_)["fee_minor"]
 
 
+def _cap_text(body: dict, rule_id: str) -> str:
+    return next(ln["text"] for ln in body["breakdown"] if ln["rule_id"] == rule_id)
+
+
+#: A flat special priced above every cap: one price for the whole stay, for any
+#: entry and any exit. The plan has no time-based rate, so the special is the
+#: only way to price a stay and the caps meet a flat price every time.
+FLAT = {
+    "id": "flat", "type": "time_window", "stage": "QUALIFY",
+    "space_classes": ["standard"], "label": "Flat price",
+    "applies_on": {"kind": "days_of_week",
+                   "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+    "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+    "day_span": "any_span",
+    "effect": {"kind": "flat", "price_minor": 50000},
+}
+
+
+def _flat_plan(day_boundary: str | None, week_boundary: str | None) -> dict:
+    plan = _plan(day_boundary, week_boundary)
+    plan["rules"] = [copy.deepcopy(FLAT)] + [r for r in plan["rules"] if r["id"] != "hourly"]
+    return plan
+
+
 # 2026-04-06 is a Monday, and no daylight-saving change falls near it.
 MONDAY = "2026-04-06T09:00:00-04:00"
 
 
 @pytest.mark.guarantee("F56")
 def test_an_exit_at_midnight_adds_no_calendar_day():
-    """15 hours, Monday 09:00 to Tuesday 00:00: 64.00 uncapped, ONE day's cap."""
+    """15 hours, Monday 09:00 to Tuesday 00:00: 64.00 uncapped, ONE day."""
     plan = _plan("calendar_day", None)
-    assert _fee(plan, MONDAY, "2026-04-07T00:00:00-04:00") == 3000
-    # One minute into Tuesday is a second day, and a second cap.
-    assert _fee(plan, MONDAY, "2026-04-07T00:01:00-04:00") == 6000
+    body = _quote(plan, MONDAY, "2026-04-07T00:00:00-04:00")
+    assert body["fee_minor"] == 3000
+    assert "applied over the day:" in _cap_text(body, "cap-daily"), _cap_text(body, "cap-daily")
+    # One minute into Tuesday is a second day, holding the stay's sixteenth hour.
+    assert _fee(plan, MONDAY, "2026-04-07T00:01:00-04:00") == 3400
     # The day before is untouched by the fix.
     assert _fee(plan, MONDAY, "2026-04-06T23:59:00-04:00") == 3000
+
+
+@pytest.mark.guarantee("F56")
+def test_an_exit_at_midnight_adds_no_day_to_a_flat_price():
+    """A flat 500.00 is capped at 30.00 a day for the days the car is in: one day
+    for Monday 09:00 to Tuesday 00:00, two from a minute later."""
+    plan = _flat_plan("calendar_day", None)
+    assert _fee(plan, MONDAY, "2026-04-07T00:00:00-04:00") == 3000
+    assert _fee(plan, MONDAY, "2026-04-07T00:01:00-04:00") == 6000
 
 
 @pytest.mark.guarantee("F56")
@@ -123,23 +166,29 @@ def test_a_part_minute_past_midnight_is_in_the_new_day():
 def test_exactly_24_hours_is_one_rolling_window_and_a_minute_more_is_two():
     plan = _plan("rolling_24h", None)
     assert _fee(plan, MONDAY, "2026-04-07T09:00:00-04:00") == 3000
-    assert _fee(plan, MONDAY, "2026-04-07T09:01:00-04:00") == 6000
+    assert _fee(plan, MONDAY, "2026-04-07T09:01:00-04:00") == 3400
 
 
 @pytest.mark.guarantee("F56")
 def test_an_exit_at_the_start_of_a_week_adds_no_week():
-    """A weekly cap alone, so the count of weeks is the whole ceiling."""
+    """A weekly cap alone. Monday 00:00 to the next Monday 00:00 is one week; a
+    minute more is a second week, holding the stay's 169th hour."""
     plan = _plan(None, "calendar_week")
     start = "2026-04-06T00:00:00-04:00"
-    assert _fee(plan, start, "2026-04-13T00:00:00-04:00") == 10000
-    assert _fee(plan, start, "2026-04-13T00:01:00-04:00") == 20000
+    body = _quote(plan, start, "2026-04-13T00:00:00-04:00")
+    assert body["fee_minor"] == 10000
+    assert "applied over the week:" in _cap_text(body, "cap-weekly"), body["breakdown"]
+    assert _fee(plan, start, "2026-04-13T00:01:00-04:00") == 10400
+    flat = _flat_plan(None, "calendar_week")
+    assert _fee(flat, start, "2026-04-13T00:00:00-04:00") == 10000
+    assert _fee(flat, start, "2026-04-13T00:01:00-04:00") == 20000
 
 
 @pytest.mark.guarantee("F56")
 def test_exactly_seven_days_is_one_rolling_week_and_a_minute_more_is_two():
     plan = _plan(None, "rolling_7d")
     assert _fee(plan, MONDAY, "2026-04-13T09:00:00-04:00") == 10000
-    assert _fee(plan, MONDAY, "2026-04-13T09:01:00-04:00") == 20000
+    assert _fee(plan, MONDAY, "2026-04-13T09:01:00-04:00") == 10400
 
 
 @pytest.mark.guarantee("F56")
@@ -157,33 +206,62 @@ def test_a_week_with_a_clock_change_ends_at_the_next_local_midnight():
     assert weeks_covered(weekly, stay, plan) == 1
 
 
+SEVEN_DAYS_AND_AN_HOUR = [
+    ("rolling_24h", "rolling_7d", MONDAY, "2026-04-13T10:00:00-04:00"),
+    ("calendar_day", "calendar_week",
+     "2026-04-06T00:00:00-04:00", "2026-04-13T01:00:00-04:00"),
+]
+
+
 @pytest.mark.guarantee("F56")
-@pytest.mark.parametrize(
-    "day_boundary,week_boundary,entry,exit_",
-    [
-        ("rolling_24h", "rolling_7d", MONDAY, "2026-04-13T10:00:00-04:00"),
-        ("calendar_day", "calendar_week",
-         "2026-04-06T00:00:00-04:00", "2026-04-13T01:00:00-04:00"),
-    ],
-)
-def test_seven_days_and_an_hour_pay_one_week_and_one_day(
+@pytest.mark.parametrize("day_boundary,week_boundary,entry,exit_", SEVEN_DAYS_AND_AN_HOUR)
+def test_seven_days_and_an_hour_pay_one_week_and_the_hour(
     day_boundary, week_boundary, entry, exit_
 ):
-    """169 hours: 680.00 uncapped, eight days at 30.00 is 240.00, and two weeks
-    at 100.00 was 200.00. The second week holds one hour, which costs at most one
-    day's cap, so the stay costs 100.00 + 30.00."""
+    """169 hours: 680.00 uncapped, and two weeks at 100.00 was 200.00. The second
+    week holds one hour, the stay's 169th, at 4.00: 100.00 + 4.00."""
     body = _quote(_plan(day_boundary, week_boundary), entry, exit_)
-    assert body["fee_minor"] == 13000
+    assert body["fee_minor"] == 10400
     weekly = next(ln for ln in body["breakdown"] if ln["rule_id"] == "cap-weekly")
     assert weekly["code"] == "weekly_max.applied"
-    assert "100.00 USD + 30.00 USD" in weekly["text"], weekly["text"]
+    assert "100.00 USD + 4.00 USD" in weekly["text"], weekly["text"]
+
+
+@pytest.mark.guarantee("F56")
+@pytest.mark.parametrize("day_boundary,week_boundary,entry,exit_", SEVEN_DAYS_AND_AN_HOUR)
+def test_a_flat_price_over_seven_days_and_an_hour_pays_one_week_and_one_day(
+    day_boundary, week_boundary, entry, exit_
+):
+    """One price for the stay, so the second week is allowed the daily max for
+    the one day the car is in it: 100.00 + 30.00, not 100.00 twice."""
+    body = _quote(_flat_plan(day_boundary, week_boundary), entry, exit_)
+    assert body["fee_minor"] == 13000
+    assert "100.00 USD + 30.00 USD" in _cap_text(body, "cap-weekly"), body["breakdown"]
 
 
 @pytest.mark.guarantee("F56")
 def test_a_week_counts_the_rolling_days_it_holds_and_no_more():
     """Eight days exactly, rolling: the second week holds one 24-hour window, not
-    two, so it is 30.00 and the stay is 130.00."""
+    two, so it is 30.00 and the stay is 130.00 -- by the hour, and as a flat
+    price, where the count of days IS the ceiling."""
     assert _fee(_plan("rolling_24h", "rolling_7d"), MONDAY, "2026-04-14T09:00:00-04:00") == 13000
+    flat = _flat_plan("rolling_24h", "rolling_7d")
+    assert _fee(flat, MONDAY, "2026-04-14T09:00:00-04:00") == 13000
+
+
+@pytest.mark.guarantee("F56")
+def test_a_short_first_week_holds_only_its_own_days():
+    """Saturday 00:00 to Friday 12:00, Monday weeks. The first week is Saturday and
+    Sunday, 60.00; it ends where Monday starts and Monday is not in it. The
+    second week's five days pay the weekly max, 100.00. 160.00 by the hour and
+    as a flat price -- counting Monday in the first week too makes the flat
+    price 190.00."""
+    entry, exit_ = "2026-04-04T00:00:00-04:00", "2026-04-10T12:00:00-04:00"
+    for plan in (_plan("calendar_day", "calendar_week"),
+                 _flat_plan("calendar_day", "calendar_week")):
+        body = _quote(plan, entry, exit_)
+        assert body["fee_minor"] == 16000, body["breakdown"]
+        assert "60.00 USD + 100.00 USD" in _cap_text(body, "cap-weekly"), body["breakdown"]
 
 
 @pytest.mark.guarantee("F56")
@@ -198,27 +276,34 @@ def test_a_full_week_still_pays_the_weekly_max():
 
 
 @pytest.mark.guarantee("F56")
-def test_without_a_daily_cap_a_short_week_is_the_weekly_max():
-    """No daily cap, nothing to bound the short week by: two weeks at 100.00."""
-    assert _fee(_plan(None, "rolling_7d"), MONDAY, "2026-04-13T10:00:00-04:00") == 20000
+def test_without_a_daily_cap_a_short_week_pays_what_it_holds():
+    """No daily cap: the second week holds one hour, 4.00. A flat price has no
+    hour to hold and nothing to bound the short week by, so it is two weeks at
+    100.00."""
+    assert _fee(_plan(None, "rolling_7d"), MONDAY, "2026-04-13T10:00:00-04:00") == 10400
+    assert _fee(_flat_plan(None, "rolling_7d"), MONDAY, "2026-04-13T10:00:00-04:00") == 20000
 
 
 @pytest.mark.guarantee("F56")
 def test_the_two_caps_still_compose_in_either_order():
     """F33's property on the stay this file changes: the weekly cap reads the
-    daily caps' TERMS, so the total after CAP is the same whichever runs first."""
+    daily caps' TERMS, and both work from how the time was charged rather than
+    from the running total, so the total after CAP is the same whichever runs
+    first."""
     plan = load_plan(_plan("rolling_24h", "rolling_7d"))
     entry = parse_instant(MONDAY, "entry")
     stay = make_stay(entry, entry + timedelta(hours=169), "standard")
+    hourly = next(r for r in plan.rules if r.id == "hourly")
+    charged_by = RULE_ACCRUALS[hourly.type](hourly, stay, plan)
     caps = list(plan.rules_for_stage(CAP))
     totals = set()
     for order in (caps, list(reversed(caps))):
         running = 68000
         for rule in order:
-            for line in RULE_APPLIERS[rule.type](rule, stay, plan, running):
+            for line in RULE_APPLIERS[rule.type](rule, stay, plan, running, charged_by=charged_by):
                 running += line.delta_minor
         totals.add(running)
-    assert totals == {13000}
+    assert totals == {10400}
 
 
 @pytest.mark.guarantee("F56")

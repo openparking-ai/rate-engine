@@ -108,6 +108,8 @@ def _cmd_quote(args) -> int:
             print(f"      {finding['text']}\n")
         return 1
     print(f"\n  the request could not be read: {body['error']}\n")
+    if "code" in body:
+        print(f"    [invalid] {body['code']}\n")
     return 2
 
 
@@ -118,6 +120,8 @@ def _cmd_validate(args) -> int:
         return 0 if status == 200 else 1
     if status != 200:
         print(f"\n  the plan could not be read: {body['error']}\n")
+        if "code" in body:
+            print(f"    [invalid] {body['code']}\n")
         return 2
     if not body["findings"]:
         print(f"\n  plan {body['plan_version']}: no gaps, no conflicts.\n")

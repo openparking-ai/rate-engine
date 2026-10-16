@@ -28,14 +28,21 @@ and is why CAP is a composing stage rather than a resolving one. See stages.py:
 so this rule type's arrival would have made every plan carrying a daily AND a
 weekly cap refuse every stay in the garage.
 
-**A week costs no more than the daily caps of the days in it.** The stay is cut
-at its week boundaries, and each week is allowed the weekly max or, where the
-plan also caps the day, the daily max times the days the car is in that week,
-whichever is lower. Seven days and an hour at 30 a day and 100 a week is 100
-for the first week and 30 for the hour, not 100 twice. This reads the daily
-caps' terms from the plan, never their lines, so the two caps still compose in
-either order. And like a day, a week the car is in for no time is not a week it
-touched: an exit at exactly the start of a week adds no cap.
+**Each week is capped on its own, after the daily max for each of its days.**
+The week follows the daily max's calendar logic (F59): the stay is cut at its
+week boundaries -- a `calendar_week` at local midnight on the day the plan
+names, a `rolling_7d` every seven days from entry, both as before -- and each
+week pays what the time in it was charged, with each of its days capped by the
+plan's daily max, or the weekly max where that is less. Seven days and an hour
+at $8 then $4 an hour, $30 a day and $100 a week, is $100 for the first week
+and $4 for the hour. This reads the daily caps' terms from the plan, never their
+lines, and works from the base rather than the running total, so the two caps
+still compose in either order. And like a day, a week the car is in for no time
+is not a week it touched: an exit at exactly the start of a week adds no cap.
+
+A flat special is one price for the whole stay, with nothing to split by the
+week, so it is capped as it was: each week is allowed the weekly max, or the
+daily max times the days the car is in that week where that is lower.
 """
 
 from __future__ import annotations
@@ -46,7 +53,7 @@ from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import CAP
 from ..wallclock import DAYS_OF_WEEK
-from . import Rule, common_fields, daily_max, register
+from . import TOLD_THE_BASE, Rule, common_fields, daily_max, register
 
 WEEK_BOUNDARIES: tuple[str, ...] = ("calendar_week", "rolling_7d")
 
@@ -150,44 +157,67 @@ def weeks_covered(rule: Rule, stay, plan) -> int:
     return len(weeks_of(rule, stay, plan))
 
 
-def week_ceilings(rule: Rule, stay, plan) -> list[int]:
-    """The most each week of the stay may cost: the weekly max, or the daily max
-    times the days the car is in that week where the plan caps the day too and
-    that is lower."""
+def week_ceilings(rule: Rule, stay, plan, charged_by) -> list[int]:
+    """The most each week of the stay costs, in order.
+
+    Split by the week (`charged_by` given): what the time in that week was
+    charged, each of its days capped by every daily cap covering the stay, and
+    no more than the weekly max. One price for the whole stay (`charged_by` is
+    None): the weekly max, or the daily max times the days the car is in that
+    week where the plan caps the day too and that is lower.
+    """
+    # Each daily cap's days, found once for the whole stay rather than once a week.
     days = [
-        r for r in plan.rules_for_stage(CAP)
+        (r, daily_max.days_of(r, stay, plan)) for r in plan.rules_for_stage(CAP)
         if r.type == "daily_max" and daily_max.qualifies(r, stay, plan)
     ]
     ceilings = []
     for start, end in weeks_of(rule, stay, plan):
-        ceiling = rule.params["max_minor"]
-        for day_rule in days:
-            count = daily_max.days_between(day_rule, stay, plan, start, end) if end > start else 1
-            ceiling = min(ceiling, day_rule.params["max_minor"] * count)
+        if charged_by is None:
+            ceiling = rule.params["max_minor"]
+            for day_rule, its_days in days:
+                count = len(daily_max.pieces(day_rule, stay, plan, start, end, its_days))
+                ceiling = min(ceiling, day_rule.params["max_minor"] * count)
+        else:
+            charged = daily_max.charge_in(stay, charged_by, start, end)
+            for day_rule, its_days in days:
+                by_day = daily_max.capped_days(
+                    day_rule, stay, plan, charged_by, start, end, its_days
+                )
+                charged = min(charged, sum(by_day))
+            ceiling = min(rule.params["max_minor"], charged)
         ceilings.append(ceiling)
     return ceilings
 
 
-def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:
+def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> list[Line]:
     """Take the excess off, or say the cap was not reached.
 
     Shown the running total, like every CAP rule, and like every rule it can only
-    return a Line -- it cannot set the total. When a daily cap has already run,
-    the number this sees is the daily-capped one, and taking the excess off that
-    is what leaves the LOWER of the two ceilings standing whichever order they
-    ran in.
+    return a Line -- it cannot set the total. The ceiling is worked out from the
+    BASE (`charged_by`), with the daily caps' terms read from the plan, so when a
+    daily cap has already run the total this sees is at or above that ceiling
+    and is taken down to it, and when this runs first the daily cap then finds
+    itself reached: the LOWER standing whichever order they ran in. `charged_by`
+    has no default, for `daily_max.apply`'s reason.
     """
-    weeks = week_ceilings(rule, stay, plan)
+    weeks = week_ceilings(rule, stay, plan, charged_by)
     caps = len(weeks)
     ceiling = sum(weeks)
     currency = plan.currency
     span = f"{caps} weeks" if caps != 1 else "the week"
     by_days = ""
     if any(week < rule.params["max_minor"] for week in weeks):
-        by_days = (
-            f" ({' + '.join(format_minor(week, currency) for week in weeks)}: a week "
-            "costs no more than the daily max for the days the car is in it)"
-        )
+        if charged_by is None:
+            why = "a week costs no more than the daily max for the days the car is in it"
+        elif any(
+            r.type == "daily_max" and daily_max.qualifies(r, stay, plan)
+            for r in plan.rules_for_stage(CAP)
+        ):
+            why = "each week is capped on its own, after the daily max for each of its days"
+        else:
+            why = "each week is capped on its own"
+        by_days = f" ({daily_max.amounts_text(weeks, currency)}: {why})"
 
     if running_total_minor <= ceiling:
         return [
@@ -217,4 +247,4 @@ def apply(rule: Rule, stay, plan, running_total_minor: int) -> list[Line]:
     ]
 
 
-register("weekly_max", CAP, build, apply)
+register("weekly_max", CAP, build, apply, traits=(TOLD_THE_BASE,))

@@ -72,15 +72,14 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: have told an operator to settle a resolution order that was not the problem.
 #:
 #: Every money field goes through `as_non_negative_minor`, and a cap reduces the
-#: total to a ceiling that is never below zero (`daily_max`: `max_minor x days`;
-#: `weekly_max`: the sum of its weeks' ceilings). A fixed discount takes off at
-#: most the running total, and nothing once the total is at or below zero, so it
-#: never adds money. This said "unreachable" while a fixed discount larger
-#: than a short stay's charge reached it, and that stay was refused rather than
-#: priced at zero. A percentage discount is still not limited: one over 100%
-#: reaches this refusal, and a fixed discount after it does not undo that (a
-#: limit with no floor once turned 150% then 5.00 off into a priced stay with a
-#: discount line adding 1.50). It is registered either way because a rule type is the
+#: total to a ceiling that is never below zero (`daily_max`: the sum of its
+#: days, each capped at `max_minor`; `weekly_max`: the sum of its weeks). A fixed
+#: discount takes off at most the running total, and nothing once the total is at
+#: or below zero, so it never adds money. This said "unreachable" while a fixed
+#: discount larger than a short stay's charge reached it, and that stay was
+#: refused rather than priced at zero. A percentage discount over 100% reached
+#: it too until it stopped loading (INVALID_PERCENT_DISCOUNT_OVER_100), so no
+#: rule type this version ships can reach it. It is registered either way because a rule type is the
 #: unit of growth here, and the first one that can return a negative Line should
 #: meet a named refusal rather than a mislabelled one.
 CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
@@ -126,6 +125,22 @@ CONFLICT_OVERLAPPING_FILL_RULES = "CONFLICT_OVERLAPPING_FILL_RULES"
 #: a refusal whose code names something that did not happen.
 FAULT_RULE_RETURNED_NOT_LINES = "FAULT_RULE_RETURNED_NOT_LINES"
 
+# --- invalid codes ---------------------------------------------------------
+#: A `time_window` discount states a `percent_bp` above 10000: more than 100%
+#: off, which would take the fee below zero and pay the driver to park.
+#:
+#: **Not a finding about a stay, and that is why it is a fourth tuple.** A gap,
+#: a conflict and a fault are each about a stay the engine was asked to price; a
+#: plan carrying this does not LOAD, so no stay is ever priced on it, and
+#: `validate-plan`, `quote` and every door answer 400 with this code beside the
+#: sentence (`code`, next to `error`). Most load refusals name their field in a
+#: sentence and carry no code. This one carries one because the owner's
+#: decision (Gokhan, 2026-10-16) is that a percent discount can never exceed
+#: 100% and that every place a plan is saved refuses it -- and a plan store
+#: routes on a code, never on a sentence. It used to load, and a stay it priced
+#: below zero was refused at the counter as `CONFLICT_NEGATIVE_TOTAL`.
+INVALID_PERCENT_DISCOUNT_OVER_100 = "INVALID_PERCENT_DISCOUNT_OVER_100"
+
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
     GAP_NO_ACCUMULATE_RULE,
@@ -147,6 +162,11 @@ CONFLICT_CODES: tuple[str, ...] = (
 FAULT_CODES: tuple[str, ...] = (FAULT_RULE_RETURNED_NOT_LINES,)
 
 ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES + FAULT_CODES
+
+#: Codes a plan that does not load is refused with. Never a Finding -- see
+#: INVALID_PERCENT_DISCOUNT_OVER_100 -- so not in ALL_CODES, and a Finding
+#: built with one is refused like any unregistered code.
+INVALID_CODES: tuple[str, ...] = (INVALID_PERCENT_DISCOUNT_OVER_100,)
 
 
 @dataclass(frozen=True)

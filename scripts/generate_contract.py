@@ -29,7 +29,12 @@ sys.path.insert(0, str(ROOT / "tests"))
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
-from rate_engine.findings import CONFLICT_CODES, FAULT_CODES, GAP_CODES  # noqa: E402
+from rate_engine.findings import (  # noqa: E402
+    CONFLICT_CODES,
+    FAULT_CODES,
+    GAP_CODES,
+    INVALID_CODES,
+)
 from rate_engine.plan import RESOLUTION_MODES  # noqa: E402
 from rate_engine.rules import RULE_TYPES  # noqa: E402
 from rate_engine.rules.time_window import DAY_SPAN_LIMITS  # noqa: E402
@@ -92,11 +97,15 @@ def gen_rule_types() -> str:
 
 
 def gen_findings() -> str:
-    # Derived from the registry's own three tuples. A fourth kind added to
-    # findings.py appears here without this function being touched; a kind added
-    # here without a tuple behind it cannot be written at all.
+    # Derived from the registry's own tuples: a code added to one of them appears
+    # here without this function being touched, and a kind added here without a
+    # tuple behind it cannot be written at all. The fourth, `invalid`, is not a
+    # finding about a stay: a plan refused with one does not load (F60).
     rows = ["| code | kind |", "| --- | --- |"]
-    for codes, kind in ((GAP_CODES, "gap"), (CONFLICT_CODES, "conflict"), (FAULT_CODES, "fault")):
+    for codes, kind in (
+        (GAP_CODES, "gap"), (CONFLICT_CODES, "conflict"), (FAULT_CODES, "fault"),
+        (INVALID_CODES, "invalid -- the plan does not load"),
+    ):
         rows += [f"| `{c}` | {kind} |" for c in codes]
     return block("findings", "\n".join(rows), ASSERTION)
 
@@ -354,26 +363,57 @@ fill rule last in `adjust_order`. A consumer
 reading breakdown lines meets three new line codes, `fill_level.special_not_raised`,
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
+**A daily max caps each day on its own, and a weekly max each week (F59).** The
+garage owner's decision, 2026-10-16: the daily max is per calendar day. The stay
+is cut at each local midnight -- or every 24 hours from entry under
+`rolling_24h`, which stays the plan's choice -- and each day pays the time
+charged in it, or the daily max where that is less. A day the car is in for no
+time adds nothing. A weekly max caps each of the plan's weeks the same way, by
+the week it already states (`calendar_week` from `week_starts_on`, or
+`rolling_7d`), after the daily max for each of the week's days. At 8 the first
+hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 was 60 -- the
+max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
+days and an hour is 100 + 4. A time-based rate charges a period on the day the
+period starts, and does not start again at midnight, so those fifteen minutes
+are the stay's sixteenth hour at 4, not a new first hour at 8. A 23- or 25-hour
+day is one day. A flat special is one price for the whole stay, with no day it
+was charged in, so it is capped as before: at the max times the days and weeks
+the car is in. This only lowers a fee. The cap lines list what each day or week
+paid when one paid less than the max; no line code or finding code was added. A
+rule type that prices the time now says, when it registers, how its charge
+builds up over the stay, and the engine checks that against its lines on every
+quote; a type that says nothing is capped as one price for the stay.
+
+**A percent discount over 100% does not load (F60).** A `time_window` discount
+whose `percent_bp` is above 10000 is refused when the plan is loaded, so
+`validate-plan`, `quote` and every door answer 400, and the answer carries
+`code`, `INVALID_PERCENT_DISCOUNT_OVER_100`, after `error`. It is the one load
+refusal with a code, because the owner's decision is that every place a plan is
+saved refuses it, and a plan store routes on a code. A refusal without one is
+the bytes it was. 100% loads and makes the stay free; a percent increase is not
+bounded by this, and a fixed discount larger than the charge loads as below.
+That is a plan that loaded and does not load here, and version 6 had not been
+released, so it is part of version 6. A caller with stored plans should look
+for such a discount before upgrading: the plan will not load.
+
 **Three corrections that move a fee, with no change to the plan document.** A
 cap no longer counts a day or a week the car is in for no time: an exit at
-exactly local midnight, at a 24-hour mark or at the start of a week adds no cap.
-A week costs no more than the daily max times the days the car is in it, so
-seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). These
-two only lower a fee. A fixed discount takes off at most what the stay costs
-when it is taken, and never less than nothing, so a stay cheaper than the
-discount is priced at zero, not refused (F57). **That one can raise a fee.** A
-fixed increase is still added in full, so a fixed discount larger than the
-charge, listed in `adjust_order` before a fixed increase, no longer takes its
-excess off that increase: at 3 an hour, 5 off then 4 added on a one-hour stay
-was 3 - 5 + 4 = 2 and is 0 + 4 = 4, while the other way round it is 7 - 5 = 2 on
-both. A caller whose plans list a fixed discount before a fixed increase should
-re-price those stays. Which way a fee moves, as said here, assumes no
-percentage discount over 100%, which the admin does not allow: with one, a fee
-can move either way, and a total it takes below zero is still refused
-(`CONFLICT_NEGATIVE_TOTAL`). The weekly cap's line and the discount's line say
-more in their text, and no line code or finding code was added. On the HTTP
-door, a negative Content-Length is a 400 and a connection that stops sending is
-closed after a timeout (F58).
+exactly local midnight, at a 24-hour mark or at the start of a week adds no day
+or week. A week holds only its own days, so it costs no more than the daily
+max for the days the car is in it (F56). These two only lower a fee. A fixed
+discount takes off at most what the stay costs when it is taken, and never less
+than nothing, so a stay cheaper than the discount is priced at zero, not
+refused (F57). **That one can raise a fee.** A fixed increase is still added in
+full, so a fixed discount larger than the charge, listed in `adjust_order`
+before a fixed increase, no longer takes its excess off that increase: at 3 an
+hour, 5 off then 4 added on a one-hour stay was 3 - 5 + 4 = 2 and is 0 + 4 = 4,
+while the other way round it is 7 - 5 = 2 on both. A caller whose plans list a
+fixed discount before a fixed increase should re-price those stays. Which way a
+fee moves, as said here, holds for every plan that loads: the percentage
+discount over 100% that could move a fee either way no longer loads (F60). The
+weekly cap's line and the discount's line say more in their text, and no line
+code or finding code was added. On the HTTP door, a negative Content-Length is
+a 400 and a connection that stops sending is closed after a timeout (F58).
 
 ### What changed in version 5
 
@@ -578,7 +618,9 @@ speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state whether a day means a local `calendar_day` or a `rolling_24h` window,
 because those price a Friday-night-to-Saturday-morning stay differently and the
-answer is the owner's to give.
+answer is the owner's to give. Whichever it states, the stay is cut at the start
+of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
+local day is one day, capped once.
 
 ## The pipeline
 

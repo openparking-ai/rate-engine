@@ -126,6 +126,7 @@ drifts.
   the caps and the surcharges, because a percentage taken any earlier is a
   percentage of a number the customer is not being charged. Percentages are
   integer basis points and the plan states which way a fraction of a cent goes.
+  A percentage discount is at most 100%: a plan stating more does not load.
 - **A window is all-conditions-or-nothing.** Miss the exit time by a minute and
   the rate does not apply at all — no pro-rating, no partial credit, and not the
   cheaper of the two. The breakdown still carries a line saying which condition
@@ -134,8 +135,14 @@ drifts.
   local calendar day or a rolling 24 hours; a calendar week starting on the day
   the plan names, or a rolling seven days. Those price a Friday-night stay
   differently and the answer is the operator's, not ours: there is no universal
-  first day of the week. **Two caps are not a conflict** — they are two ceilings,
-  and the lower one wins whichever is applied first.
+  first day of the week. **Each day is capped on its own**: the stay is cut at
+  the start of each day, and each day pays the time charged in it, or the
+  maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first
+  hour, $4 an hour after and $30 a day is $30 + $4, not $30 twice. A week is
+  capped the same way, after the daily maximum for each of its days. A flat
+  special is one price for the stay, and is capped at the maximum times the days
+  it covers. **Two caps are not a conflict** — they are two ceilings, and the
+  lower one wins whichever is applied first.
 - **A grace period, if the plan declares one.** A stay at or under the stated
   minutes is free, and free means free: no surcharge, no cap, no adjustment. One
   minute over and it prices from entry on the ordinary rate. There is no default

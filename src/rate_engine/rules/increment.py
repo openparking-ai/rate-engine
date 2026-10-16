@@ -40,6 +40,8 @@ requires the window's line to move with it.
 
 from __future__ import annotations
 
+from functools import cache
+
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
 from ..stages import ACCUMULATE
@@ -256,4 +258,34 @@ def _period(minutes: int, plural: bool = False) -> str:
     return f"{minutes} min"
 
 
-register("increment", ACCUMULATE, build, apply)
+def charged_by(p: dict, rule_id: str, currency: str):
+    """What a time-based rate charges for a stay's first `minutes` minutes.
+
+    The daily and weekly caps cap each day and each week on its own (F59), so
+    they need to know how much of the charge falls in each. This is it: the
+    charge for the first `minutes` minutes is `lines_for` of that many minutes,
+    so a period is charged on the day it starts in -- the minute a car enters a
+    period, it owes all of it, which is what `ceil` means. A period that starts
+    at 23:30 and runs to 00:30 is the earlier day's.
+
+    It is `lines_for` itself, summed, not a count of periods done a second way:
+    the parts a cap splits the stay into add up to the charge on the receipt
+    because they are the same arithmetic. And the rate does not start again at
+    midnight -- the stay's sixteenth hour is a repeat period, on whichever day it
+    falls.
+    """
+
+    # Remembered for the one quote this function is made for: the daily and the
+    # weekly cap ask the same minutes, and a long stay has many of them.
+    @cache
+    def by(minutes: int) -> int:
+        return sum(line.delta_minor for line in lines_for(p, rule_id, minutes, currency))
+
+    return by
+
+
+def accrual(rule: Rule, stay, plan):
+    return charged_by(rule.params, rule.id, plan.currency)
+
+
+register("increment", ACCUMULATE, build, apply, accrual=accrual)

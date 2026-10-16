@@ -392,10 +392,11 @@ GUARANTEES: dict[str, str] = {
     "F56": (
         "A cap counts only the days and weeks the car is in for more than zero time: "
         "an exit at exactly local midnight, at a 24-hour mark or at the start of a "
-        "week adds no cap, and one minute past it does. A week costs no more than the "
-        "daily max times the days the car is in it, so seven days and an hour at 30 a "
-        "day and 100 a week is 100 + 30, not 100 twice. The two caps still compose "
-        "in either order."
+        "week adds no day or week, and one minute past it does. A week holds only its "
+        "own days, so it costs no more than the daily max for the days the car is in "
+        "it: at 30 a day and 100 a week, seven days and an hour is 100 + 4 by the "
+        "hour and 100 + 30 for a flat price, not 100 twice. The two caps still "
+        "compose in either order."
     ),
     "F57": (
         "A fixed discount takes off at most what the stay costs when it is taken, and "
@@ -404,15 +405,39 @@ GUARANTEES: dict[str, str] = {
         "refused as a negative fee; a discount smaller than the charge is taken in "
         "full. A fixed increase is added in full, so a fixed discount listed before "
         "it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the "
-        "other way round 2. A fixed discount never adds money: on a total a "
-        "percentage over 100% took below zero it takes off nothing, so 150% off then "
-        "5 off on a stay of 3 is refused as a negative fee."
+        "other way round 2. A fixed discount never adds money: on a total at or below "
+        "zero it takes off nothing. The 150% discount that once took a total there no "
+        "longer loads (F60)."
     ),
     "F58": (
         "The HTTP door reads a request body only within a bound. A negative "
         "Content-Length is a named 400 rather than a read to the end of the "
         "connection, and every connection carries a socket timeout, so a caller that "
         "stops part-way through a body is disconnected rather than holding a thread."
+    ),
+    "F59": (
+        "A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). "
+        "The stay is cut at each local midnight, or each 24 hours from entry under "
+        "`rolling_24h`, and each day pays the time charged in it or the max, whichever "
+        "is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to "
+        "Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it "
+        "starts, the rate does not start again at midnight, a day with a clock change "
+        "is one day, and a day the car is in for no time adds nothing. A weekly max "
+        "caps each of the plan's weeks the same way, after the daily max for each of "
+        "its days. The caps compose in either order, the answer is the same on every "
+        "run and in every server zone, and no fee is higher than the max times the "
+        "days touched. A flat special is one price for the stay and is capped as "
+        "before, at the max times the days the car is in. What a base says it "
+        "charged is checked against its lines on every quote."
+    ),
+    "F60": (
+        "A percent discount can never exceed 100%. A `time_window` discount whose "
+        "`percent_bp` is above 10000 does not load: `validate-plan`, `quote` and the "
+        "HTTP door answer 400 with the code INVALID_PERCENT_DISCOUNT_OVER_100 beside "
+        "a sentence naming the field, so no plan carrying one is saved and no stay is "
+        "priced on it. 10000 loads and makes the stay free. A percent increase over "
+        "100% still loads, a fixed discount larger than the charge is F57's, and "
+        "every other load refusal carries no code."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

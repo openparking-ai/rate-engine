@@ -1306,15 +1306,23 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     # The caps' boundaries. The first two arms put back the shipped defect, a
     # period the car is in for no time counting as a period; the third counts a
-    # rolling day past the end of a week; the fourth caps a week by the weekly
-    # max alone, which is how two weeks were charged for seven days and an hour.
+    # day past the end of a week; the fourth caps a week by the weekly max
+    # alone, which is how two weeks were charged for seven days and an hour.
+    #
+    # Re-anchored when each day became capped on its own (F59): the days are
+    # found by cutting the stay in `daily_max.days_of`, and a week's days by
+    # `daily_max.pieces`, rather than by counting dates. THE PLANTED DEFECTS ARE
+    # UNCHANGED -- the exit's own date counted, a day starting at the week's end
+    # counted in it. By the hour such a day holds no time and charges nothing,
+    # so these show on the line (over 2 days) and on a flat price, where the
+    # count of days is the ceiling.
     "F56/exit-date-counted": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/daily_max.py",
-        "    last = (end - LAST_INSTANT).astimezone(plan.timezone).date()",
-        "    last = end.astimezone(plan.timezone).date()  # PLANTED: the exit's own date",
+        "            if start >= exit_at:",
+        "            if start > exit_at:  # PLANTED: the exit's own date",
         "an exit at exactly midnight counts the new date, so fifteen hours on Monday "
-        "pay two daily caps for no time at all on Tuesday",
+        "are two days, and a flat price is allowed two daily caps for no time on Tuesday",
     ),
     "F56/week-start-at-exit-counted": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
@@ -1322,23 +1330,134 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "            if boundary >= exit_at:",
         "            if boundary > exit_at:  # PLANTED: a week start at the exit counts",
         "an exit at exactly the start of a calendar week counts that week, so a "
-        "Monday-to-Monday stay pays the weekly max twice",
+        "Monday-to-Monday stay is two weeks and a flat price pays the weekly max twice",
     ),
     "F56/rolling-day-past-the-week": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/daily_max.py",
-        "        return -(-(end - entry) // ONE_DAY) - (start - entry) // ONE_DAY",
-        "        return (end - entry) // ONE_DAY + 1 - (start - entry) // ONE_DAY  # PLANTED",
-        "a week ending on a 24-hour mark counts one rolling day more than it holds, "
-        "so an eight-day stay's last week is allowed two daily caps for one day",
+        "        if not (day_start < end and day_end > start):",
+        "        if not (day_start <= end and day_end > start):  # PLANTED: a day past the week",
+        "a week ending where a day starts counts that day too, so a flat price's "
+        "two-day first week is allowed three daily caps",
     ),
     "F56/week-by-weekly-max-alone": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/weekly_max.py",
-        '            ceiling = min(ceiling, day_rule.params["max_minor"] * count)',
-        "            pass  # PLANTED: a week is capped by the weekly max alone",
-        "a week holding one hour is allowed the whole weekly max, so seven days and "
-        "an hour pay 100 twice instead of 100 + 30",
+        '                ceiling = min(ceiling, day_rule.params["max_minor"] * count)',
+        "                pass  # PLANTED: a week is capped by the weekly max alone",
+        "a week holding one day of a flat price is allowed the whole weekly max, so "
+        "seven days and an hour pay 100 twice instead of 100 + 30",
+    ),
+    # Each day capped on its own (F59, Gokhan 2026-10-16). The first arm is the
+    # whole-stay cap that shipped; the rest each break one part of splitting the
+    # charge by the day or the week, or what the caps are told about the base.
+    "F59/whole-stay-capped": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "        ceiling = sum(amounts)",
+        "        ceiling = most * caps  # PLANTED: the max times the days touched",
+        "the whole stay is capped at the max times the days it touches, so fifteen "
+        "minutes past midnight unlock a second 30.00 for Monday's hours: 60, not 34",
+    ),
+    "F59/day-charged-from-entry": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "    before = 0 if start == stay.entry_at else charged_by(_minutes_into(stay, start))",
+        "    before = 0  # PLANTED: every day charged from entry",
+        "each day is charged everything since entry, so Tuesday's fifteen minutes "
+        "carry Monday's hours and are capped at 30.00 too",
+    ),
+    "F59/day-is-24-hours": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "        yield datetime.combine(day, time(0), tzinfo=plan.timezone).astimezone(UTC)",
+        "        yield datetime.combine(  # PLANTED: a day ends 24 hours after its midnight\n"
+        "            day - ONE_DAY, time(0), tzinfo=plan.timezone\n"
+        "        ).astimezone(UTC) + ONE_DAY",
+        "a calendar day is cut 24 hours after the last midnight, so on a 23- or "
+        "25-hour day the next day starts an hour early or late and is charged for it",
+    ),
+    "F59/week-ignores-the-daily-max": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/weekly_max.py",
+        "                charged = min(charged, sum(by_day))",
+        "                pass  # PLANTED: the week ignores the daily max",
+        "a week pays its time up to the weekly max with its days uncapped, so a "
+        "week holding two full days pays 100.00 instead of 60.00",
+    ),
+    "F59/week-allowed-the-whole-max": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/weekly_max.py",
+        '            ceiling = min(rule.params["max_minor"], charged)',
+        '            ceiling = rule.params["max_minor"]  # PLANTED: a week may cost the whole max',
+        "a week holding one hour is allowed the whole weekly max, so the time in it "
+        "is not what it pays",
+    ),
+    "F59/flat-split-by-the-day": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/time_window.py",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        "    return None",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        '    return lambda minutes: effect["price_minor"]  # PLANTED: charged on the entry day',
+        "a flat special is charged on the day the car came in and capped there, so a "
+        "three-day 50.00 special is cut to one day's 30.00",
+    ),
+    "F59/base-is-the-time-based-rate": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "engine.py",
+        "    base = priced_by_special\n    if base is None:",
+        "    base = None  # PLANTED: the caps are always told the time-based rate\n"
+        "    if base is None:",
+        "the caps are told how the time-based rate would have charged even when a "
+        "special priced the stay, so a weekend rate is capped as if it were one price",
+    ),
+    "F59/accrual-not-checked": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "engine.py",
+        "    if charged_by is not None and charged_by(stay.duration_minutes) != base_minor:",
+        "    if False:  # PLANTED: what a base says it charged is not checked",
+        "a base whose accrual disagrees with its own lines is capped on the wrong "
+        "figure and the quote goes on",
+    ),
+    # A percent discount can never exceed 100% (F60, Gokhan 2026-10-16).
+    "F60/over-100-loads": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if amount["percent_bp"] > WHOLE_FEE_BP:',
+        "    if False:  # PLANTED: a discount over 100% loads",
+        "a 150% discount loads and validates clean, and every stay it takes below "
+        "zero is refused at the counter after the plan was saved",
+    ),
+    "F60/100-refused": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if amount["percent_bp"] > WHOLE_FEE_BP:',
+        '    if amount["percent_bp"] >= WHOLE_FEE_BP:  # PLANTED: 100% refused too',
+        "a 100% discount, a free stay the owner may well mean, is refused",
+    ),
+    "F60/no-code": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        "            code=INVALID_PERCENT_DISCOUNT_OVER_100,",
+        "            code=None,  # PLANTED: refused with no code",
+        "the plan is refused with a sentence and no code, so a plan store has "
+        "nothing to route on",
+    ),
+    "F60/code-not-sent": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "contract.py",
+        "    if code is not None:\n        body[\"code\"] = code",
+        "    if False:  # PLANTED: the code is not sent\n        body[\"code\"] = code",
+        "the refusal carries its code inside the engine and every door drops it",
+    ),
+    "F60/increase-bounded-too": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if direction != "discount" or amount["kind"] != "percent":',
+        '    if amount["kind"] != "percent":  # PLANTED: an increase over 100% refused too',
+        "a percent increase over 100% is refused as if it were a discount, which "
+        "the decision did not ask for",
     ),
     # The fixed-discount limit, and what it must not become. The first arm is
     # the shipped defect; the second is the review round's: a limit with no
@@ -1358,8 +1477,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "rules/time_window.py",
         '            return max(0, min(amount["minor"], running_total_minor))',
         '            return min(amount["minor"], running_total_minor)  # PLANTED: no floor',
-        "a fixed discount on a total a 150% discount took below zero takes off a "
-        "negative amount, so the line adds money and a refused stay is priced at zero",
+        "a fixed discount on a total below zero -- where a 150% discount took one "
+        "before it stopped loading (F60) -- takes off a negative amount, so the line "
+        "adds money",
     ),
     "F57/limit-not-said": (
         "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",

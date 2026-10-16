@@ -93,7 +93,8 @@ def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
 
     A stay of 1499 minutes beginning at local midnight that day ends at 23:59 the
     SAME date — so it is one calendar day, and two rolling 24-hour windows. The
-    same stay is 3000 under one rule and 6000 under the other.
+    same stay is 3000 under one rule and 3400 under the other: each day is capped
+    on its own (F59), and the second window holds the stay's 25th hour, 4.00.
 
     On an ordinary day the two agree, which is why an axis carrying only the
     spring transition proves nothing about this: the spring day is shorter, so
@@ -126,7 +127,7 @@ def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
     )
 
     assert calendar.fee_minor == 3000, "one local calendar date, so one cap"
-    assert rolling.fee_minor == 6000, "24h59m is two rolling windows, so two caps"
+    assert rolling.fee_minor == 3400, "24h59m is two rolling windows: 30.00 + 4.00"
     assert calendar.fee_minor != rolling.fee_minor
 
     # And on an ordinary day the two rules agree, which is what makes the
@@ -135,7 +136,7 @@ def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
     assert (
         quote([with_boundary("calendar_day")], ordinary).fee_minor
         == quote([with_boundary("rolling_24h")], ordinary).fee_minor
-        == 6000
+        == 3400
     )
 
 

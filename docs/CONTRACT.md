@@ -47,26 +47,57 @@ fill rule last in `adjust_order`. A consumer
 reading breakdown lines meets three new line codes, `fill_level.special_not_raised`,
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
+**A daily max caps each day on its own, and a weekly max each week (F59).** The
+garage owner's decision, 2026-10-16: the daily max is per calendar day. The stay
+is cut at each local midnight -- or every 24 hours from entry under
+`rolling_24h`, which stays the plan's choice -- and each day pays the time
+charged in it, or the daily max where that is less. A day the car is in for no
+time adds nothing. A weekly max caps each of the plan's weeks the same way, by
+the week it already states (`calendar_week` from `week_starts_on`, or
+`rolling_7d`), after the daily max for each of the week's days. At 8 the first
+hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 was 60 -- the
+max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
+days and an hour is 100 + 4. A time-based rate charges a period on the day the
+period starts, and does not start again at midnight, so those fifteen minutes
+are the stay's sixteenth hour at 4, not a new first hour at 8. A 23- or 25-hour
+day is one day. A flat special is one price for the whole stay, with no day it
+was charged in, so it is capped as before: at the max times the days and weeks
+the car is in. This only lowers a fee. The cap lines list what each day or week
+paid when one paid less than the max; no line code or finding code was added. A
+rule type that prices the time now says, when it registers, how its charge
+builds up over the stay, and the engine checks that against its lines on every
+quote; a type that says nothing is capped as one price for the stay.
+
+**A percent discount over 100% does not load (F60).** A `time_window` discount
+whose `percent_bp` is above 10000 is refused when the plan is loaded, so
+`validate-plan`, `quote` and every door answer 400, and the answer carries
+`code`, `INVALID_PERCENT_DISCOUNT_OVER_100`, after `error`. It is the one load
+refusal with a code, because the owner's decision is that every place a plan is
+saved refuses it, and a plan store routes on a code. A refusal without one is
+the bytes it was. 100% loads and makes the stay free; a percent increase is not
+bounded by this, and a fixed discount larger than the charge loads as below.
+That is a plan that loaded and does not load here, and version 6 had not been
+released, so it is part of version 6. A caller with stored plans should look
+for such a discount before upgrading: the plan will not load.
+
 **Three corrections that move a fee, with no change to the plan document.** A
 cap no longer counts a day or a week the car is in for no time: an exit at
-exactly local midnight, at a 24-hour mark or at the start of a week adds no cap.
-A week costs no more than the daily max times the days the car is in it, so
-seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). These
-two only lower a fee. A fixed discount takes off at most what the stay costs
-when it is taken, and never less than nothing, so a stay cheaper than the
-discount is priced at zero, not refused (F57). **That one can raise a fee.** A
-fixed increase is still added in full, so a fixed discount larger than the
-charge, listed in `adjust_order` before a fixed increase, no longer takes its
-excess off that increase: at 3 an hour, 5 off then 4 added on a one-hour stay
-was 3 - 5 + 4 = 2 and is 0 + 4 = 4, while the other way round it is 7 - 5 = 2 on
-both. A caller whose plans list a fixed discount before a fixed increase should
-re-price those stays. Which way a fee moves, as said here, assumes no
-percentage discount over 100%, which the admin does not allow: with one, a fee
-can move either way, and a total it takes below zero is still refused
-(`CONFLICT_NEGATIVE_TOTAL`). The weekly cap's line and the discount's line say
-more in their text, and no line code or finding code was added. On the HTTP
-door, a negative Content-Length is a 400 and a connection that stops sending is
-closed after a timeout (F58).
+exactly local midnight, at a 24-hour mark or at the start of a week adds no day
+or week. A week holds only its own days, so it costs no more than the daily
+max for the days the car is in it (F56). These two only lower a fee. A fixed
+discount takes off at most what the stay costs when it is taken, and never less
+than nothing, so a stay cheaper than the discount is priced at zero, not
+refused (F57). **That one can raise a fee.** A fixed increase is still added in
+full, so a fixed discount larger than the charge, listed in `adjust_order`
+before a fixed increase, no longer takes its excess off that increase: at 3 an
+hour, 5 off then 4 added on a one-hour stay was 3 - 5 + 4 = 2 and is 0 + 4 = 4,
+while the other way round it is 7 - 5 = 2 on both. A caller whose plans list a
+fixed discount before a fixed increase should re-price those stays. Which way a
+fee moves, as said here, holds for every plan that loads: the percentage
+discount over 100% that could move a fee either way no longer loads (F60). The
+weekly cap's line and the discount's line say more in their text, and no line
+code or finding code was added. On the HTTP door, a negative Content-Length is
+a 400 and a connection that stops sending is closed after a timeout (F58).
 
 ### What changed in version 5
 
@@ -271,7 +302,9 @@ speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state whether a day means a local `calendar_day` or a `rolling_24h` window,
 because those price a Friday-night-to-Saturday-morning stay differently and the
-answer is the owner's to give.
+answer is the owner's to give. Whichever it states, the stay is cut at the start
+of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
+local day is one day, capped once.
 
 ## The pipeline
 
@@ -422,6 +455,7 @@ cannot check its work.
 | `CONFLICT_UNORDERED_ADJUSTMENTS` | conflict |
 | `CONFLICT_OVERLAPPING_FILL_RULES` | conflict |
 | `FAULT_RULE_RETURNED_NOT_LINES` | fault |
+| `INVALID_PERCENT_DISCOUNT_OVER_100` | invalid -- the plan does not load |
 <!--/gen:findings-->
 
 ## A worked example
@@ -521,10 +555,12 @@ never failed is a decoration.
 | **F53** | `validate-plan` probes the occupancy axis of every fill rule: one basis point below each threshold, on it, and at 100% full, across every other axis, so two fill rules colliding only when the garage is full are reported before a stay is refused for it, and the finding names the figure that found it. A plan with no fill rule is probed exactly as before, and a missing figure is not reported as a gap in the plan. |
 | **F54** | A fill rule states the owner's two answers, `raises_specials` and `raises_vip_extra`, each "yes" or "no", and a rule that omits either or states anything else does not load, naming the field. `raises_specials` no leaves a charge a special priced unraised and says so; yes raises it. `raises_vip_extra` yes raises the space-class extra by the same percent on its own line; no leaves it as set. All four combinations, on each side of the threshold, price to the cent worked by hand, and flipping one answer moves the fee by exactly what that answer governs. |
 | **F55** | Where a discount and a fill rule both apply, the driver pays the CHEAPEST order, to the cent after rounding: the discounts first and the fill rule on what is left; the fill rule first; the discounts first with each part (time charge, space-class extra) carrying its share; and the fill rule between discounts. The plan's stated order does not decide the price. A tie charges the first of those, and one line says which order was charged and what the others would have charged. Every pair of the owner's two answers, a percent and a flat discount, each side of the threshold, prices to the cent worked by hand. |
-| **F56** | A cap counts only the days and weeks the car is in for more than zero time: an exit at exactly local midnight, at a 24-hour mark or at the start of a week adds no cap, and one minute past it does. A week costs no more than the daily max times the days the car is in it, so seven days and an hour at 30 a day and 100 a week is 100 + 30, not 100 twice. The two caps still compose in either order. |
-| **F57** | A fixed discount takes off at most what the stay costs when it is taken, and never less than nothing. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge, rather than refused as a negative fee; a discount smaller than the charge is taken in full. A fixed increase is added in full, so a fixed discount listed before it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the other way round 2. A fixed discount never adds money: on a total a percentage over 100% took below zero it takes off nothing, so 150% off then 5 off on a stay of 3 is refused as a negative fee. |
+| **F56** | A cap counts only the days and weeks the car is in for more than zero time: an exit at exactly local midnight, at a 24-hour mark or at the start of a week adds no day or week, and one minute past it does. A week holds only its own days, so it costs no more than the daily max for the days the car is in it: at 30 a day and 100 a week, seven days and an hour is 100 + 4 by the hour and 100 + 30 for a flat price, not 100 twice. The two caps still compose in either order. |
+| **F57** | A fixed discount takes off at most what the stay costs when it is taken, and never less than nothing. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge, rather than refused as a negative fee; a discount smaller than the charge is taken in full. A fixed increase is added in full, so a fixed discount listed before it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the other way round 2. A fixed discount never adds money: on a total at or below zero it takes off nothing. The 150% discount that once took a total there no longer loads (F60). |
 | **F58** | The HTTP door reads a request body only within a bound. A negative Content-Length is a named 400 rather than a read to the end of the connection, and every connection carries a socket timeout, so a caller that stops part-way through a body is disconnected rather than holding a thread. |
+| **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, or each 24 hours from entry under `rolling_24h`, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special is one price for the stay and is capped as before, at the max times the days the car is in. What a base says it charged is checked against its lines on every quote. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
+| **F60** | A percent discount can never exceed 100%. A `time_window` discount whose `percent_bp` is above 10000 does not load: `validate-plan`, `quote` and the HTTP door answer 400 with the code INVALID_PERCENT_DISCOUNT_OVER_100 beside a sentence naming the field, so no plan carrying one is saved and no stay is priced on it. 10000 loads and makes the stay free. A percent increase over 100% still loads, a fixed discount larger than the charge is F57's, and every other load refusal carries no code. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

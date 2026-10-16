@@ -68,7 +68,8 @@ VOCABULARY = frozenset(
         "validate-tax-sets", "/v1/validate-tax-sets", "/v1/tax",
         "POST", "pytest", "pip",
         # keys of a JSON response body, which are strings in the code, not names
-        "invalid", "rule_count", "tax_sets", "probe",
+        # (`invalid` left this list when the 400 shape began to be derived, F60)
+        "rule_count", "tax_sets", "probe",
         # things named in prose that are code but not identifiers of ours
         "datetime.time", "time.fromisoformat", "json.dumps", "importlib.reload",
         "max", "min",
@@ -89,7 +90,7 @@ def _owned_names() -> dict[str, set[str]]:
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
     from rate_engine.engine import SPECIAL_USED, TIME_BASED_USED
-    from rate_engine.findings import ALL_CODES
+    from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
     from rate_engine.rules import (
         RULE_TYPES,
@@ -143,6 +144,7 @@ def _owned_names() -> dict[str, set[str]]:
         "stage": set(STAGES),
         "trait": set(TRAITS),
         "finding code": set(ALL_CODES),
+        "invalid code": set(INVALID_CODES),
         "plan key": set(PLAN_KEYS),
         "rule field": fields,
         "stated value": values,
@@ -193,6 +195,24 @@ def _response_fields() -> set[str]:
     fields |= set(refused)
     for finding in refused["findings"]:
         fields |= set(finding)
+
+    # A plan that does not load, so the 400 shape is derived too -- one whose
+    # refusal carries a code (F60), so `code` beside `error` is read off the wire.
+    from rate_engine.contract import run_validate
+
+    over = json.loads(json.dumps(plan))
+    over["adjust_order"] = None
+    over["rules"].append({
+        "id": "over", "type": "time_window", "stage": "ADJUST", "space_classes": ["standard"],
+        "label": "Over 100%", "applies_on": {"kind": "days_of_week", "days": ["sat"]},
+        "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+        "day_span": "any_span",
+        "effect": {"kind": "adjust", "direction": "discount", "rounding": "down",
+                   "amount": {"kind": "percent", "percent_bp": 15000}},
+    })
+    status, invalid = run_validate({"plan": over})
+    assert status == 400 and "code" in invalid, invalid
+    fields |= set(invalid)
 
     # And the tax door's answer, taken the same way: a figure with a line in it.
     from rate_engine.contract import run_tax

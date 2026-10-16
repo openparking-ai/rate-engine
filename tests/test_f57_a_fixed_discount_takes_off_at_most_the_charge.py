@@ -23,9 +23,11 @@ semantics the owner wants is put to him in the batch's receipt; this pins what
 ships.
 
 **And a fixed discount never ADDS money.** `min` alone limited "5.00 off" to a
-total already below zero -- a 150% discount gets it there -- so the line took off
+total already below zero -- a 150% discount got it there -- so the line took off
 minus 1.50, and a stay the engine refused as a negative fee was priced at zero
-under a line contradicting itself. The limit is floored at nothing.
+under a line contradicting itself. The limit is floored at nothing. Since F60 a
+percent discount over 100% does not load, so no plan reaches that total; the
+floor is measured on the line itself, handed a total at or below zero.
 
 `scripts/fail_controls.py` removes the limit, removes the floor, removes the
 words that say it was applied, and limits a fixed increase too, and requires
@@ -202,22 +204,22 @@ def test_a_fixed_increase_larger_than_the_charge_is_added_in_full():
 
 # --- a discount never adds money -------------------------------------------
 
-#: A percentage over 100% loads in the engine (the admin refuses it); it is the
-#: only way the running total is below zero when a fixed discount meets it.
+#: A percentage over 100% used to load, and it was the only way the running
+#: total was below zero when a fixed discount met it. It no longer loads (F60).
 OVER_100 = _weekend_adjust(
     "over", "150% off", "discount", {"kind": "percent", "percent_bp": 15000}
 )
 
 
 @pytest.mark.guarantee("F57")
-def test_150_percent_then_5_off_is_still_refused_as_a_negative_fee():
-    """3.00 less 150% is minus 1.50. The 5.00 off after it takes off nothing --
-    not minus 1.50 -- so the total stays below zero and the stay is refused,
-    named, as it was before the limit."""
+def test_150_percent_then_5_off_no_longer_loads():
+    """3.00 less 150% was minus 1.50, and the 5.00 off after it took off nothing,
+    so the stay was refused as a negative fee. The plan is now refused when it is
+    loaded, before any stay, so no plan this version loads reaches a total below
+    zero; the floor is held by the test below."""
     status, body = _quote("2026-03-07T11:00:00-05:00", _with(OVER_100, order=["over", "weekend"]))
-    assert status == 422, f"a negative total was priced: {body}"
-    assert [f["code"] for f in body["findings"]] == ["CONFLICT_NEGATIVE_TOTAL"]
-    assert "(-150)" in body["findings"][0]["text"], body["findings"][0]["text"]
+    assert status == 400, f"a plan with a 150% discount loaded: {body}"
+    assert body["code"] == "INVALID_PERCENT_DISCOUNT_OVER_100", body
 
 
 @pytest.mark.guarantee("F57")

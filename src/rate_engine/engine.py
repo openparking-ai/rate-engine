@@ -47,10 +47,12 @@ from .rules import (
     NEEDS_OCCUPANCY,
     ON_THE_TIME_CHARGE,
     ONE_PER_STAY,
+    RULE_ACCRUALS,
     RULE_APPLIERS,
     RULE_TRAITS,
     SPEAKS_UNQUALIFIED,
     TERMINAL,
+    TOLD_THE_BASE,
     TOLD_THE_PASS,
 )
 from .rules import daily_max as daily_max_rule
@@ -692,8 +694,13 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
         _winner(plan, stay, QUALIFY, qualified_at_qualify) if qualified_at_qualify else None
     )
     extras = 0
+    #: How the charge for the time built up over the stay on this pass, told to
+    #: a rule that declares `TOLD_THE_BASE` (the caps). Set when CAP begins.
+    charged_by = None
 
     for stage in STAGES:
+        if stage == CAP and terminal is None:
+            charged_by = _charged_by(plan, stay, priced_by_special, ledger.total_minor)
         if stage == SURCHARGE:
             time_charge = ledger.total_minor
         if stage == ADJUST:
@@ -776,6 +783,8 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
             )
             if TOLD_THE_PASS in RULE_TRAITS[rule.type]:
                 given.update(priced_by_special=priced_by_special, extras_minor=extras)
+            if TOLD_THE_BASE in RULE_TRAITS[rule.type]:
+                given["charged_by"] = charged_by
             if stage in STAGES_GIVEN_THE_RUNNING_TOTAL:
                 lines = applier(rule, stay, plan, ledger.total_minor, **given)
             else:
@@ -784,6 +793,39 @@ def _priced(plan: Plan, stay: Stay, with_specials: bool) -> Ledger:
                 ledger.add(line)
 
     return ledger
+
+
+def _charged_by(plan: Plan, stay: Stay, priced_by_special, base_minor: int):
+    """How the charge for the time built up over the stay on this pass, or None.
+
+    The caps cap each day and each week on its own (F59), so they need more than
+    the running total: they need to know which day each part of it was charged
+    in. The rule that priced the time on this pass -- the special, or the
+    time-based rate the plan's mode chose -- says, through the accrual its type
+    registered: a function of minutes into the stay, or None for one price for
+    the whole stay. The engine does not know any type's arithmetic; it asks.
+
+    **And it is checked against the ledger, on every quote.** What the base
+    charges for the whole stay must be exactly what its lines added to the
+    total. A type whose accrual said one thing and whose lines another would have
+    the caps split a charge that is not the one on the receipt -- so a mismatch
+    stops the quote, as `_assert_ledger_is_the_fee` does, rather than capping it.
+    """
+    base = priced_by_special
+    if base is None:
+        base = _winner(plan, stay, ACCUMULATE, _qualifying(plan, stay, ACCUMULATE))
+    if base is None:
+        return None
+    accrual = RULE_ACCRUALS[base.type]
+    charged_by = accrual(base, stay, plan) if accrual is not None else None
+    if charged_by is not None and charged_by(stay.duration_minutes) != base_minor:
+        raise AssertionError(
+            f"rule {base.id!r} says it charges {charged_by(stay.duration_minutes)} for "
+            f"this stay and its lines charged {base_minor}. The caps split the charge by "
+            "the day from the first figure, so they would be capping a charge that is "
+            "not the one on the receipt."
+        )
+    return charged_by
 
 
 #: The line that says in which order the discounts and the fill rule were taken.

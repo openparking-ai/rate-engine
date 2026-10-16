@@ -26,7 +26,7 @@ import pytest
 from rate_engine.contract import run_quote
 from rate_engine.engine import make_stay
 from rate_engine.plan import load_plan, parse_instant
-from rate_engine.rules import RULE_APPLIERS
+from rate_engine.rules import RULE_ACCRUALS, RULE_APPLIERS
 from rate_engine.stages import CAP
 
 RESOLUTION = {"QUALIFY": {"mode": "cheapest_wins"}, "ACCUMULATE": {"mode": "cheapest_wins"}}
@@ -111,13 +111,19 @@ def test_the_total_after_CAP_is_the_SAME_IN_BOTH_ORDERS():
     stay = make_stay(entry_at, parse_instant(EXIT, "exit"), "standard")
     caps = list(plan.rules_for_stage(CAP))
     assert len(caps) == 2
+    # How the time was charged, as the engine tells the caps (F59): the hourly
+    # rate's own accrual.
+    hourly = next(r for r in plan.rules if r.id == "hourly")
+    charged_by = RULE_ACCRUALS[hourly.type](hourly, stay, plan)
+    assert charged_by(stay.duration_minutes) == UNCAPPED
 
     outcomes = {}
     for order in (caps, list(reversed(caps))):
         running = UNCAPPED
         lines = []
         for rule in order:
-            for line in RULE_APPLIERS[rule.type](rule, stay, plan, running):
+            applied = RULE_APPLIERS[rule.type](rule, stay, plan, running, charged_by=charged_by)
+            for line in applied:
                 running += line.delta_minor
                 lines.append((line.code, line.delta_minor))
         outcomes[tuple(r.id for r in order)] = (running, tuple(lines))
