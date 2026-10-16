@@ -384,6 +384,13 @@ rule type that prices the time now says, when it registers, how its charge
 builds up over the stay, and the engine checks that against its lines on every
 quote; a type that says nothing is capped as one price for the stay.
 
+**A long stay is priced in the memory of a short one (F61).** Because each day
+is capped on its own, a cap walks the stay a day at a time, so the time a quote
+takes grows with the number of days in the stay. The memory it takes does not:
+no list of the stay's days or weeks is kept. A cap's line lists what each day or
+week paid up to a bounded number of runs, then says how many more there were and
+what they came to. This version sets no limit on how long a stay may be.
+
 **A percent discount over 100% does not load (F60).** A `time_window` discount
 whose `percent_bp` is above 10000 is refused when the plan is loaded, so
 `validate-plan`, `quote` and every door answer 400, and the answer carries

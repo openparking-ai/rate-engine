@@ -139,9 +139,10 @@ drifts.
   the start of each day, and each day pays the time charged in it, or the
   maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first
   hour, $4 an hour after and $30 a day is $30 + $4, not $30 twice. A week is
-  capped the same way, after the daily maximum for each of its days. A flat
-  special is one price for the stay, and is capped at the maximum times the days
-  it covers. **Two caps are not a conflict** — they are two ceilings, and the
+  capped the same way, after the daily maximum for each of its days. The work
+  of capping grows with the number of days in the stay; the memory does not. A
+  flat special is one price for the stay, and is capped at the maximum times the
+  days it covers. **Two caps are not a conflict** — they are two ceilings, and the
   lower one wins whichever is applied first.
 - **A grace period, if the plan declares one.** A stay at or under the stated
   minutes is free, and free means free: no surcharge, no cap, no adjustment. One

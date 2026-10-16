@@ -1351,10 +1351,12 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # Each day capped on its own (F59, Gokhan 2026-10-16). The first arm is the
     # whole-stay cap that shipped; the rest each break one part of splitting the
     # charge by the day or the week, or what the caps are told about the base.
+    # Re-anchored when the days began to be tallied rather than listed (F61):
+    # the ceiling is the tally's total. THE PLANTED DEFECT IS UNCHANGED.
     "F59/whole-stay-capped": (
         "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
         "rules/daily_max.py",
-        "        ceiling = sum(amounts)",
+        "        ceiling = amounts.total",
         "        ceiling = most * caps  # PLANTED: the max times the days touched",
         "the whole stay is capped at the max times the days it touches, so fifteen "
         "minutes past midnight unlock a second 30.00 for Monday's hours: 60, not 34",
@@ -1419,6 +1421,66 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if False:  # PLANTED: what a base says it charged is not checked",
         "a base whose accrual disagrees with its own lines is capped on the wrong "
         "figure and the quote goes on",
+    ),
+    # A long stay in a short one's memory (F61). The first two arms put back the
+    # two things that made a quote's memory grow with the stay: every minute the
+    # base was asked about remembered, and every day of the stay listed. The
+    # third walks each week's days from entry, which prices right and makes the
+    # work grow with the square of the stay. The fourth spells out every run.
+    "F61/charges-remembered": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/increment.py",
+        "    @lru_cache(maxsize=CHARGES_REMEMBERED)",
+        "    @lru_cache(maxsize=None)  # PLANTED: every minute asked about is kept",
+        "the base remembers every minute a cap asks it about, so a quote's memory "
+        "grows with the days in the stay",
+    ),
+    "F61/days-listed": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    caps = days_covered(rule, stay, plan)",
+        "    caps = len(list(days_of(rule, stay, plan)))  # PLANTED: every day listed",
+        "the cap lists every day of the stay to count them, so a quote's memory "
+        "grows with the days in the stay",
+    ),
+    "F61/week-walks-from-entry": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    for day_start, day_end in days_of(rule, stay, plan, after=start):",
+        "    for day_start, day_end in days_of(rule, stay, plan):  # PLANTED: from entry\n"
+        "        if day_end <= start:\n"
+        "            continue",
+        "each week's days are found by walking from entry, so the fee is right and "
+        "the work grows with the square of the stay",
+    ),
+    # The day holding a week's start is found from its date and checked against
+    # the day starts both ways. Up: a date a zone lived twice (Juneau, 1867).
+    # Down: a clock that skips over midnight, which the test builds as a zone.
+    "F61/day-guess-not-checked-up": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    while _start_of_day(rule, stay, plan, index + 1) <= instant:\n"
+        "        index += 1\n",
+        "    pass  # PLANTED: a day guessed too early is not moved on\n",
+        "where a date happens twice, an instant on its second pass is put in the day "
+        "before, so a week is cut from the wrong day",
+    ),
+    "F61/day-guess-not-checked-down": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    while index > 0 and _start_of_day(rule, stay, plan, index) > instant:\n"
+        "        index -= 1\n",
+        "    pass  # PLANTED: a day guessed too late is not moved back\n",
+        "where a clock skips over midnight, the first instants of the new date are put "
+        "in a day that has not started",
+    ),
+    "F61/every-run-spelled-out": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "RUNS_SPELLED_OUT = 20",
+        "RUNS_SPELLED_OUT = 10**9  # PLANTED: every run spelled out",
+        "a cap's line spells out every run of equal amounts, so a long stay whose "
+        "days alternate has a line as long as the stay",
     ),
     # A percent discount can never exceed 100% (F60, Gokhan 2026-10-16).
     "F60/over-100-loads": (

@@ -439,6 +439,16 @@ GUARANTEES: dict[str, str] = {
         "100% still loads, a fixed discount larger than the charge is F57's, and "
         "every other load refusal carries no code."
     ),
+    "F61": (
+        "A long stay is priced in the memory of a short one. A cap finds the stay's "
+        "days and weeks as it walks them and lists none of them, each day's or week's "
+        "amount goes into a running tally, the base remembers only its last few "
+        "answers, and a cap's line spells out a bounded number of runs of equal "
+        "amounts, then says how many more there were and what they came to. The work "
+        "still grows with the stay, by a step a day: ten years take ten times the work "
+        "of one, and a century no more a day than a year. This version sets no limit "
+        "on how long a stay may be."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

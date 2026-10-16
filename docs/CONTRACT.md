@@ -68,6 +68,13 @@ rule type that prices the time now says, when it registers, how its charge
 builds up over the stay, and the engine checks that against its lines on every
 quote; a type that says nothing is capped as one price for the stay.
 
+**A long stay is priced in the memory of a short one (F61).** Because each day
+is capped on its own, a cap walks the stay a day at a time, so the time a quote
+takes grows with the number of days in the stay. The memory it takes does not:
+no list of the stay's days or weeks is kept. A cap's line lists what each day or
+week paid up to a bounded number of runs, then says how many more there were and
+what they came to. This version sets no limit on how long a stay may be.
+
 **A percent discount over 100% does not load (F60).** A `time_window` discount
 whose `percent_bp` is above 10000 is refused when the plan is loaded, so
 `validate-plan`, `quote` and every door answer 400, and the answer carries
@@ -561,6 +568,7 @@ never failed is a decoration.
 | **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, or each 24 hours from entry under `rolling_24h`, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special is one price for the stay and is capped as before, at the max times the days the car is in. What a base says it charged is checked against its lines on every quote. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F60** | A percent discount can never exceed 100%. A `time_window` discount whose `percent_bp` is above 10000 does not load: `validate-plan`, `quote` and the HTTP door answer 400 with the code INVALID_PERCENT_DISCOUNT_OVER_100 beside a sentence naming the field, so no plan carrying one is saved and no stay is priced on it. 10000 loads and makes the stay free. A percent increase over 100% still loads, a fixed discount larger than the charge is F57's, and every other load refusal carries no code. |
+| **F61** | A long stay is priced in the memory of a short one. A cap finds the stay's days and weeks as it walks them and lists none of them, each day's or week's amount goes into a running tally, the base remembers only its last few answers, and a cap's line spells out a bounded number of runs of equal amounts, then says how many more there were and what they came to. The work still grows with the stay, by a step a day: ten years take ten times the work of one, and a century no more a day than a year. This version sets no limit on how long a stay may be. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

@@ -43,6 +43,12 @@ is not a week it touched: an exit at exactly the start of a week adds no cap.
 A flat special is one price for the whole stay, with nothing to split by the
 week, so it is capped as it was: each week is allowed the weekly max, or the
 daily max times the days the car is in that week where that is lower.
+
+**A long stay is priced in the memory of a short one (F61).** The weeks are found
+as they are walked, each week's days are found from the week's own start rather
+than from a list of every day of the stay, and each week's ceiling goes into
+`daily_max.Amounts`, a running tally. The work grows with the days in the stay;
+the memory does not.
 """
 
 from __future__ import annotations
@@ -118,10 +124,10 @@ def _week_start(day: date, starts_on: str) -> date:
     return day - timedelta(days=offset)
 
 
-def weeks_of(rule: Rule, stay, plan) -> list[tuple[datetime, datetime]]:
+def weeks_of(rule: Rule, stay, plan):
     """The stay cut at this cap's week boundaries: one (start, end) for each week
-    the car is in for more than zero time, in order. A stay of zero length is in
-    one week, as it is in one day.
+    the car is in for more than zero time, in order, found as they are asked for
+    and never listed. A stay of zero length is in one week, as it is in one day.
 
     The calendar boundaries are local midnights at the start of each week, so a
     week containing a daylight-saving transition is one week rather than 0.99 of
@@ -130,12 +136,16 @@ def weeks_of(rule: Rule, stay, plan) -> list[tuple[datetime, datetime]]:
     entry = stay.entry_at.astimezone(UTC)
     exit_at = stay.exit_at.astimezone(UTC)
     if stay.duration_minutes == 0:
-        return [(entry, exit_at)]
+        yield entry, exit_at
+        return
 
-    cuts = [entry]
+    cut = entry
     if rule.params["week_boundary"] == "rolling_7d":
         weeks = -(-stay.duration_minutes // (DAYS_IN_A_WEEK * 24 * 60))  # ceil, integer only
-        cuts += [entry + timedelta(days=DAYS_IN_A_WEEK * k) for k in range(1, weeks)]
+        for k in range(1, weeks):
+            start = entry + timedelta(days=DAYS_IN_A_WEEK * k)
+            yield cut, start
+            cut = start
     else:
         local_entry = stay.entry_at.astimezone(plan.timezone).date()
         week = _week_start(local_entry, rule.params["week_starts_on"])
@@ -147,47 +157,45 @@ def weeks_of(rule: Rule, stay, plan) -> list[tuple[datetime, datetime]]:
             boundary = boundary.astimezone(UTC)
             if boundary >= exit_at:
                 break
-            cuts.append(boundary)
-    cuts.append(exit_at)
-    return list(zip(cuts, cuts[1:], strict=False))
+            yield cut, boundary
+            cut = boundary
+    yield cut, exit_at
 
 
 def weeks_covered(rule: Rule, stay, plan) -> int:
     """How many caps this stay is allowed. Never zero -- any stay touches one week."""
-    return len(weeks_of(rule, stay, plan))
+    return sum(1 for _ in weeks_of(rule, stay, plan))
 
 
-def week_ceilings(rule: Rule, stay, plan, charged_by) -> list[int]:
-    """The most each week of the stay costs, in order.
+def week_ceilings(rule: Rule, stay, plan, charged_by):
+    """The most each week of the stay costs, in order, one week at a time.
 
     Split by the week (`charged_by` given): what the time in that week was
     charged, each of its days capped by every daily cap covering the stay, and
     no more than the weekly max. One price for the whole stay (`charged_by` is
     None): the weekly max, or the daily max times the days the car is in that
     week where the plan caps the day too and that is lower.
+
+    Each week's days are found from the week's own start (`daily_max.pieces`),
+    so no list of the stay's days is kept and no week walks the days before it.
     """
-    # Each daily cap's days, found once for the whole stay rather than once a week.
-    days = [
-        (r, daily_max.days_of(r, stay, plan)) for r in plan.rules_for_stage(CAP)
+    day_rules = [
+        r for r in plan.rules_for_stage(CAP)
         if r.type == "daily_max" and daily_max.qualifies(r, stay, plan)
     ]
-    ceilings = []
     for start, end in weeks_of(rule, stay, plan):
         if charged_by is None:
             ceiling = rule.params["max_minor"]
-            for day_rule, its_days in days:
-                count = len(daily_max.pieces(day_rule, stay, plan, start, end, its_days))
+            for day_rule in day_rules:
+                count = sum(1 for _ in daily_max.pieces(day_rule, stay, plan, start, end))
                 ceiling = min(ceiling, day_rule.params["max_minor"] * count)
         else:
             charged = daily_max.charge_in(stay, charged_by, start, end)
-            for day_rule, its_days in days:
-                by_day = daily_max.capped_days(
-                    day_rule, stay, plan, charged_by, start, end, its_days
-                )
+            for day_rule in day_rules:
+                by_day = daily_max.capped_days(day_rule, stay, plan, charged_by, start, end)
                 charged = min(charged, sum(by_day))
             ceiling = min(rule.params["max_minor"], charged)
-        ceilings.append(ceiling)
-    return ceilings
+        yield ceiling
 
 
 def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> list[Line]:
@@ -201,13 +209,14 @@ def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> li
     itself reached: the LOWER standing whichever order they ran in. `charged_by`
     has no default, for `daily_max.apply`'s reason.
     """
-    weeks = week_ceilings(rule, stay, plan, charged_by)
-    caps = len(weeks)
-    ceiling = sum(weeks)
+    # Tallied week by week, never listed: a long stay in a short one's memory.
+    weeks = daily_max.Amounts(week_ceilings(rule, stay, plan, charged_by))
+    caps = weeks.count
+    ceiling = weeks.total
     currency = plan.currency
     span = f"{caps} weeks" if caps != 1 else "the week"
     by_days = ""
-    if any(week < rule.params["max_minor"] for week in weeks):
+    if weeks.smallest < rule.params["max_minor"]:
         if charged_by is None:
             why = "a week costs no more than the daily max for the days the car is in it"
         elif any(

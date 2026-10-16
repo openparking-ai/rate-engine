@@ -327,7 +327,15 @@ class Stay:
         comparison against raw microseconds and another against minutes.
         `tests/test_f20_time_rounding_is_declared.py` holds that.
         """
-        delta = self.exit_at - self.entry_at
+        return self.minutes_until(self.exit_at)
+
+    def minutes_until(self, instant: datetime) -> int:
+        """Whole minutes from entry to `instant`, rounded UP: `duration_minutes`
+        of this stay as if it ended there, by the same arithmetic. The caps ask
+        it of every day boundary in a stay (F59), so it is the one rounding
+        `duration_minutes` describes, without a copy of the stay per question.
+        """
+        delta = instant - self.entry_at
         seconds = delta.days * 86400 + delta.seconds
         micro = delta.microseconds
         return -(-(seconds * 1_000_000 + micro) // 60_000_000)

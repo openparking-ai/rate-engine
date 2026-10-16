@@ -40,7 +40,7 @@ requires the window's line to move with it.
 
 from __future__ import annotations
 
-from functools import cache
+from functools import lru_cache
 
 from ..breakdown import Line
 from ..money import as_non_negative_minor, format_minor
@@ -74,6 +74,12 @@ def _ceil_periods(remainder: int, period_minutes: int) -> int:
 #: So the applier asks what it can actually DO. A mode the loader accepts and
 #: this table does not implement is refused, loudly, instead of mispriced.
 PERIOD_COUNTERS = {"ceil": _ceil_periods}
+
+#: How many of its answers a time-based rate's `charged_by` remembers. A cap asks
+#: about the minute a day ends and then, as the next day starts, the same minute
+#: again; a few answers cover that. A long stay's minutes are never all kept --
+#: the memory of a quote does not grow with the stay (F61).
+CHARGES_REMEMBERED = 8
 
 EXTRA = {
     "first_period_minutes",
@@ -177,9 +183,36 @@ def lines_for(p: dict, rule_id: str, minutes: int, currency: str) -> list[Line]:
     `rate` effect, with the same parameters producing the same lines for the same
     duration -- identical code, identical text, identical delta. See this file's
     header for why that is a guarantee rather than a convenience.
-    """
-    from ..plan import InvalidPlan
 
+    The money is `_charges`'s, the one period calculation; this puts it in words.
+    """
+    lines = []
+    for code, periods, delta in _charges(p, rule_id, minutes):
+        if code == "increment.first_period":
+            text = (
+                f"Time-based: first {_period(p['first_period_minutes'])} "
+                f"{format_minor(p['first_period_minor'], currency)}"
+            )
+        else:
+            text = (
+                f"Time-based: {periods} additional "
+                f"{_period(p['repeat_period_minutes'], plural=periods != 1)} at "
+                f"{format_minor(p['repeat_period_minor'], currency)} = "
+                f"{format_minor(delta, currency)}"
+            )
+        lines.append(Line(code=code, rule_id=rule_id, text=text, delta_minor=delta))
+    return lines
+
+
+def _charges(p: dict, rule_id: str, minutes: int) -> list[tuple[str, int, int]]:
+    """What a time-based rate charges for `minutes`, as (line code, periods,
+    amount) for each line it will have. THE period calculation.
+
+    `lines_for` puts these in words and `charged_by` adds them up, so the
+    receipt and the caps' split of the charge by the day are the same
+    arithmetic, and a cap walking a long stay a day at a time does not format a
+    line it will never show.
+    """
     # THE FIELD IS CONSULTED, NOT ASSUMED. Unreachable through `load_plan` today
     # -- the loader accepts only `ceil` and `ceil` is implemented -- and that is
     # the point: it is the guard on the round that changes one of those two
@@ -190,6 +223,8 @@ def lines_for(p: dict, rule_id: str, minutes: int, currency: str) -> list[Line]:
     rounding = p["rounding"]
     count_periods = PERIOD_COUNTERS.get(rounding)
     if count_periods is None:
+        from ..plan import InvalidPlan
+
         raise InvalidPlan(
             f"rule {rule_id!r} states rounding {rounding!r}, which this version "
             f"does not implement (it implements: {', '.join(sorted(PERIOD_COUNTERS))}). "
@@ -221,32 +256,12 @@ def lines_for(p: dict, rule_id: str, minutes: int, currency: str) -> list[Line]:
     else:
         repeats = count_periods(minutes - first_len, repeat_len)
 
-    lines = [
-        Line(
-            code="increment.first_period",
-            rule_id=rule_id,
-            text=(
-                f"Time-based: first {_period(first_len)} "
-                f"{format_minor(p['first_period_minor'], currency)}"
-            ),
-            delta_minor=p["first_period_minor"],
-        )
-    ]
+    charges = [("increment.first_period", 1, p["first_period_minor"])]
     if repeats:
-        lines.append(
-            Line(
-                code="increment.repeat_periods",
-                rule_id=rule_id,
-                text=(
-                    f"Time-based: {repeats} additional "
-                    f"{_period(repeat_len, plural=repeats != 1)} at "
-                    f"{format_minor(p['repeat_period_minor'], currency)} = "
-                    f"{format_minor(repeats * p['repeat_period_minor'], currency)}"
-                ),
-                delta_minor=repeats * p["repeat_period_minor"],
-            )
+        charges.append(
+            ("increment.repeat_periods", repeats, repeats * p["repeat_period_minor"])
         )
-    return lines
+    return charges
 
 
 def _period(minutes: int, plural: bool = False) -> str:
@@ -268,18 +283,21 @@ def charged_by(p: dict, rule_id: str, currency: str):
     period, it owes all of it, which is what `ceil` means. A period that starts
     at 23:30 and runs to 00:30 is the earlier day's.
 
-    It is `lines_for` itself, summed, not a count of periods done a second way:
-    the parts a cap splits the stay into add up to the charge on the receipt
-    because they are the same arithmetic. And the rate does not start again at
-    midnight -- the stay's sixteenth hour is a repeat period, on whichever day it
-    falls.
+    It is `lines_for`'s own arithmetic (`_charges`), summed, not a count of
+    periods done a second way: the parts a cap splits the stay into add up to the
+    charge on the receipt because they are the same arithmetic. And the rate does
+    not start again at midnight -- the stay's sixteenth hour is a repeat period,
+    on whichever day it falls.
     """
 
-    # Remembered for the one quote this function is made for: the daily and the
-    # weekly cap ask the same minutes, and a long stay has many of them.
-    @cache
+    # The last few answers are remembered, for the one quote this function is
+    # made for: a cap asks the minute a day ends twice, once as that day's end
+    # and once as the next day's start. Only a few -- a long stay has as many
+    # minutes to ask about as it has days, and keeping them all made a quote's
+    # memory grow with the stay (F61).
+    @lru_cache(maxsize=CHARGES_REMEMBERED)
     def by(minutes: int) -> int:
-        return sum(line.delta_minor for line in lines_for(p, rule_id, minutes, currency))
+        return sum(amount for _code, _periods, amount in _charges(p, rule_id, minutes))
 
     return by
 
