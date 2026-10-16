@@ -50,7 +50,11 @@ from rate_engine.wallclock import local_minute
 ZONE = "America/New_York"
 NY = ZoneInfo(ZONE)
 
-WINDOW_PRICE = 4000
+#: The story above is told at 40.00. The fixture's window is 15.00, below every
+#: hourly total a stay below reaches where it qualifies (21.00 and up), because
+#: the cheapest way is charged under either mode (F63): only then is the window
+#: charged where it qualifies, and the fee says whether it did.
+WINDOW_PRICE = 1500
 
 #: The fall-back night. In at 18:30 on the Saturday, out by 01:30 -- a limit that
 #: falls INSIDE the hour that happens twice.
@@ -84,10 +88,11 @@ PLAN = {
     "timezone": ZONE,
     "currency": "USD",
     "space_classes": ["standard"],
-    # `stated_order` at QUALIFY: the window REPLACES the hourly rate when it
-    # qualifies, so the fee says whether it qualified. Under `cheapest_wins` a
-    # qualifying window dearer than the hourly rate is not used (U7g fix 1), and
-    # the fee could no longer tell the two outcomes apart.
+    # `stated_order` at QUALIFY. It used to let the window REPLACE the hourly
+    # rate whatever it cost, which is how this fixture's fee said whether the
+    # window qualified. Under either mode the cheapest way is charged now
+    # (F63), so the window is priced below the hour (WINDOW_PRICE) and the fee
+    # says it the same way. The mode is kept so a stated order is exercised.
     "resolution": {
         "QUALIFY": {"mode": "stated_order", "order": ["night"]},
         "ACCUMULATE": {"mode": "cheapest_wins"},
@@ -185,6 +190,9 @@ def test_the_fixture_can_tell_the_outcomes_apart():
     """The window price and every time-based total below must differ, or the
     tables pass whether or not the rule was applied."""
     assert len({WINDOW_PRICE, TIME_BASED_0131, TIME_BASED_0300}) == 3
+    # And the window is the cheaper way on every stay it qualifies for: the
+    # shortest, out at 01:00 on the first pass, is 6.5 hours -- 3.00 + 6 x 3.00.
+    assert WINDOW_PRICE < 300 + 6 * 300
     assert TIME_BASED_0131 == TIME_BASED_0230 != WINDOW_PRICE
     assert TIME_BASED_0400 != WINDOW_PRICE
 

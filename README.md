@@ -126,6 +126,7 @@ drifts.
   the caps and the surcharges, because a percentage taken any earlier is a
   percentage of a number the customer is not being charged. Percentages are
   integer basis points and the plan states which way a fraction of a cent goes.
+  A percentage discount is at most 100%: a plan stating more does not load.
 - **A window is all-conditions-or-nothing.** Miss the exit time by a minute and
   the rate does not apply at all — no pro-rating, no partial credit, and not the
   cheaper of the two. The breakdown still carries a line saying which condition
@@ -134,8 +135,28 @@ drifts.
   local calendar day or a rolling 24 hours; a calendar week starting on the day
   the plan names, or a rolling seven days. Those price a Friday-night stay
   differently and the answer is the operator's, not ours: there is no universal
-  first day of the week. **Two caps are not a conflict** — they are two ceilings,
-  and the lower one wins whichever is applied first.
+  first day of the week. **Each day is capped on its own**: the stay is cut at
+  the start of each day, and each day pays the time charged in it, or the
+  maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first
+  hour, $4 an hour after and $30 a day is $30 + $4, not $30 twice. A week is
+  capped the same way, after the daily maximum for each of its days. **A flat
+  special is one price for the stay it covers**, never split by the day: it is
+  held to the maximum for each day and week the car is in, and compared with
+  the normal price for the same stay — each calendar day capped by the daily
+  maximum, each week by the weekly maximum — and the cheaper is charged. With a
+  $50 Friday-to-Sunday flat, a $30 daily maximum and an hourly rate that reaches
+  $30 within a day, Saturday only pays $30 and all weekend (Friday 18:00 to
+  Sunday 18:00) pays $50. A stay that runs past a special's exit limit is not
+  covered by it, so the time-based rate prices it. The work of capping grows
+  with the number of days in the stay; the memory does not.
+  **Two caps are not a conflict** — they are two ceilings, and the lower one
+  wins whichever is applied first.
+- **The longest stay priced is 90 days.** A stay longer than 90 days of 24
+  hours, entry to exit, is refused — `GAP_STAY_LONGER_THAN_MAX_STAY`, nothing
+  guessed — before the plan is read or a day of it is walked, so refusing it
+  costs nothing however long it is. A car in that long needs an operator, not a
+  number. `validate-plan` answers the limit as `max_stay_minutes`, so a rate
+  setup can show it.
 - **A grace period, if the plan declares one.** A stay at or under the stated
   minutes is free, and free means free: no surcharge, no cap, no adjustment. One
   minute over and it prices from entry on the ordinary rate. There is no default
@@ -151,10 +172,14 @@ drifts.
   VIP extra is the owner's answer, stated on the rule; there is no default.
 - **The plan in force at entry prices the whole stay.** A rate change never
   splits a stay or reaches back into a car that is already parked.
-- **When two rules qualify at once, what that MEANS depends on the stage.** Two
-  specials competing to be the price is a conflict the plan settles. Two caps
-  compose and nothing is reported. Two adjustments compose but the order changes
-  the money, so the plan states the order and a plan that has not is refused.
+- **When two rules qualify at once, what that MEANS depends on the stage.**
+  Two ways of pricing the time — two specials, two time-based rates, a special
+  and the time-based rate — are a choice, and **the cheapest price always
+  wins**: each way is priced through the whole pipeline, caps included, and the
+  driver pays the least, under either resolution mode; the mode only names the
+  rule when two charge the same. Two caps compose and nothing is reported. Two
+  adjustments compose but the order changes the money, so the plan states the
+  order and a plan that has not is refused.
 
 Money is an integer of minor units everywhere. No float, no bool, no `Decimal`,
 at any depth — a plan carrying one does not load, whether or not the field is one

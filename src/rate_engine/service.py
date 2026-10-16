@@ -40,10 +40,18 @@ from .rules import RULE_TYPES
 #: a few kilobytes; anything at this size is a mistake or an attempt.
 MAX_BODY_BYTES = 1 << 20
 
+#: Seconds a connection may wait on one read or write before it is closed. A
+#: caller that stops sending part-way through a body would otherwise hold its
+#: thread for as long as it keeps the connection open.
+SOCKET_TIMEOUT_SECONDS = 30
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "openparking-rate-engine"
     sys_version = ""
+    #: `StreamRequestHandler.setup` sets this on the connection's socket. A read
+    #: that times out ends the request and closes the connection.
+    timeout = SOCKET_TIMEOUT_SECONDS
 
     def _send(self, status: int, body: dict) -> None:
         # contract.encode is THE encoder. This used to call json.dumps itself,
@@ -84,6 +92,11 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             self._send(400, {"error": "unreadable Content-Length"})
+            return
+        if length < 0:
+            # `rfile.read` with a negative size reads to the end of the
+            # connection, with no bound at all.
+            self._send(400, {"error": "Content-Length is negative"})
             return
         if length > MAX_BODY_BYTES:
             self._send(413, {"error": f"body larger than {MAX_BODY_BYTES} bytes"})

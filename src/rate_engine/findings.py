@@ -29,6 +29,14 @@ GAP_NO_ACCUMULATE_RULE = "GAP_NO_ACCUMULATE_RULE"
 #: hours" -- and it is expressible only because `max_duration_minutes` is a
 #: required field on the rule rather than an assumed infinity.
 GAP_STAY_EXCEEDS_MAX_DURATION = "GAP_STAY_EXCEEDS_MAX_DURATION"
+#: The stay is longer than this engine prices: more than `MAX_STAY_DAYS` (90)
+#: days of 24 hours from entry to exit (Gokhan, 2026-10-16). Refused before the
+#: plan is read or a day of the stay is walked, so it costs nothing however long
+#: the stay is (F62). **A gap no rule can close**: the limit is the engine's, the
+#: same for every plan, so `validate-plan` never reports it -- it publishes the
+#: limit instead, as `max_stay_minutes`. A door that closes a stay unpriced on a
+#: refusal shows this one as needing an operator.
+GAP_STAY_LONGER_THAN_MAX_STAY = "GAP_STAY_LONGER_THAN_MAX_STAY"
 #: No plan version was in force at the stay's ENTRY time.
 GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 #: No tax set the garage stated was in force at the instant the tax was asked
@@ -71,11 +79,17 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: code is what anything mechanical keys off. A consumer routing on it would
 #: have told an operator to settle a resolution order that was not the problem.
 #:
-#: Unreachable with the four rule types A1 ships: every money field goes through
-#: `as_non_negative_minor`, and `daily_max` sets the total to exactly
-#: `max_minor x days`, which is >= 0. It is registered anyway because a rule type
-#: is the unit of growth here, and the first one that can return a negative Line
-#: should meet a named refusal rather than a mislabelled one.
+#: Every money field goes through `as_non_negative_minor`, and a cap reduces the
+#: total to a ceiling that is never below zero (`daily_max`: the sum of its
+#: days, each capped at `max_minor`; `weekly_max`: the sum of its weeks). A fixed
+#: discount takes off at most the running total, and nothing once the total is at
+#: or below zero, so it never adds money. This said "unreachable" while a fixed
+#: discount larger than a short stay's charge reached it, and that stay was
+#: refused rather than priced at zero. A percentage discount over 100% reached
+#: it too until it stopped loading (INVALID_PERCENT_DISCOUNT_OVER_100), so no
+#: rule type this version ships can reach it. It is registered either way because a rule type is the
+#: unit of growth here, and the first one that can return a negative Line should
+#: meet a named refusal rather than a mislabelled one.
 CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"
 
 #: Two or more ADJUST rules qualify and the plan does not say in what order to
@@ -119,6 +133,22 @@ CONFLICT_OVERLAPPING_FILL_RULES = "CONFLICT_OVERLAPPING_FILL_RULES"
 #: a refusal whose code names something that did not happen.
 FAULT_RULE_RETURNED_NOT_LINES = "FAULT_RULE_RETURNED_NOT_LINES"
 
+# --- invalid codes ---------------------------------------------------------
+#: A `time_window` discount states a `percent_bp` above 10000: more than 100%
+#: off, which would take the fee below zero and pay the driver to park.
+#:
+#: **Not a finding about a stay, and that is why it is a fourth tuple.** A gap,
+#: a conflict and a fault are each about a stay the engine was asked to price; a
+#: plan carrying this does not LOAD, so no stay is ever priced on it, and
+#: `validate-plan`, `quote` and every door answer 400 with this code beside the
+#: sentence (`code`, next to `error`). Most load refusals name their field in a
+#: sentence and carry no code. This one carries one because the owner's
+#: decision (Gokhan, 2026-10-16) is that a percent discount can never exceed
+#: 100% and that every place a plan is saved refuses it -- and a plan store
+#: routes on a code, never on a sentence. It used to load, and a stay it priced
+#: below zero was refused at the counter as `CONFLICT_NEGATIVE_TOTAL`.
+INVALID_PERCENT_DISCOUNT_OVER_100 = "INVALID_PERCENT_DISCOUNT_OVER_100"
+
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
     GAP_NO_ACCUMULATE_RULE,
@@ -126,6 +156,7 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
+    GAP_STAY_LONGER_THAN_MAX_STAY,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (
@@ -140,6 +171,11 @@ CONFLICT_CODES: tuple[str, ...] = (
 FAULT_CODES: tuple[str, ...] = (FAULT_RULE_RETURNED_NOT_LINES,)
 
 ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES + FAULT_CODES
+
+#: Codes a plan that does not load is refused with. Never a Finding -- see
+#: INVALID_PERCENT_DISCOUNT_OVER_100 -- so not in ALL_CODES, and a Finding
+#: built with one is refused like any unregistered code.
+INVALID_CODES: tuple[str, ...] = (INVALID_PERCENT_DISCOUNT_OVER_100,)
 
 
 @dataclass(frozen=True)

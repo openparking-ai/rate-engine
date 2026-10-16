@@ -42,6 +42,10 @@ class InvalidPlan(ValueError):
     `missing_keys` and `unknown_keys` carry, as data, the fields `_require_keys`
     refused -- so a caller or a test keys off WHICH field rather than off the
     wording of the sentence. Empty on every other refusal.
+
+    `code` is one of `findings.INVALID_CODES` where the refusal has one, and
+    None everywhere else. It reaches the caller beside the sentence, so a plan
+    store can route on it.
     """
 
     def __init__(
@@ -50,10 +54,19 @@ class InvalidPlan(ValueError):
         *,
         missing_keys: tuple[str, ...] = (),
         unknown_keys: tuple[str, ...] = (),
+        code: str | None = None,
     ) -> None:
+        from .findings import INVALID_CODES
+
+        if code is not None and code not in INVALID_CODES:
+            raise ValueError(
+                f"{code!r} is not a registered invalid code. Add it to findings.py "
+                "so the contract learns about it."
+            )
         super().__init__(message)
         self.missing_keys = missing_keys
         self.unknown_keys = unknown_keys
+        self.code = code
 
 
 #: Resolution modes a plan may state, and A2 is where they finally DECIDE

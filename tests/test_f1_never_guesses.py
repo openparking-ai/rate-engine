@@ -24,6 +24,7 @@ from rate_engine.findings import (
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_STAY_EXCEEDS_MAX_DURATION,
+    GAP_STAY_LONGER_THAN_MAX_STAY,
     GAP_UNDECLARED_SPACE_CLASS,
     Refused,
 )
@@ -95,6 +96,11 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
         quote([loaded(FILL_PLAN)], stay(LATE, 120))
     reached.add(e.value.findings[0].code)
 
+    # The engine's own limit: a stay a minute longer than 90 days (F62).
+    with pytest.raises(Refused) as e:
+        quote([loaded()], stay(LATE, 90 * 24 * 60 + 1))
+    reached.add(e.value.findings[0].code)
+
     from rate_engine.findings import GAP_CODES
 
     assert reached == set(GAP_CODES), (
@@ -107,6 +113,7 @@ def test_every_registered_gap_code_is_reachable_from_a_fixture():
         GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
         GAP_NO_TAX_SET_IN_FORCE,
         GAP_NO_OCCUPANCY_AT_ENTRY,
+        GAP_STAY_LONGER_THAN_MAX_STAY,
     }
 
 

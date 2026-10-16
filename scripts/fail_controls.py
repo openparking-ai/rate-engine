@@ -152,16 +152,18 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # conflict. A control whose fixture cannot reach it reports green from an
     # unmodified measurement. This one plants what F7 actually guards: the
     # REGISTRY leaking into a plan that never named the new type.
+    # Re-anchored in F64, when a pass began to read the quote's own answer to
+    # which rules qualify. The defect is unchanged: the registry leaks.
     "F7": (
         "tests/test_f7_new_rule_type.py",
         "engine.py",
-        "    qualified_at_qualify = _qualifying(plan, stay, QUALIFY)",
+        "    qualified_at_qualify = qualified.at(QUALIFY)",
         "    for _registered in sorted(RULE_APPLIERS):  # PLANTED: the registry leaks\n"
         "        ledger.add(\n"
         "            Line(code='registry.note', rule_id=None,\n"
         "                 text=f'rule type available: {_registered}', delta_minor=0)\n"
         "        )\n"
-        "    qualified_at_qualify = _qualifying(plan, stay, QUALIFY)",
+        "    qualified_at_qualify = qualified.at(QUALIFY)",
         "the engine mentions every REGISTERED rule type in the breakdown, so "
         "registering a new one rewrites the explanation an existing plan produces",
     ),
@@ -240,14 +242,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "owner recorded, so decisions[] is write-only again and `undecided()` is "
         "back to being called by nothing",
     ),
+    # Re-anchored in F64 (the quote's `qualified` is handed to both); the defect
+    # is unchanged.
     "F12b": (
         "tests/test_f12_a_decision_is_not_a_price.py",
         "engine.py",
-        "    blocking = find_gaps(plan, stay) + find_conflicts(plan, stay)",
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)",
         "    _decided = {d['code'] for d in plan.decisions}  # PLANTED\n"
         "    blocking = [\n"
         "        f\n"
-        "        for f in find_gaps(plan, stay) + find_conflicts(plan, stay)\n"
+        "        for f in find_gaps(plan, stay, qualified)\n"
+        "        + find_conflicts(plan, stay, qualified)\n"
         "        if f.code not in _decided\n"
         "    ]  # PLANTED: a free-text note now prices a stay",
         "an entry in decisions[] suppresses the finding it names, so a gap an owner "
@@ -626,6 +631,67 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "because it is a Tuesday says nothing at all and the receipt cannot answer "
         "the question it was asked",
     ),
+    # A special for another space class. The engine asks every QUALIFY rule for
+    # its lines, and the appliers did not ask the class, so a VIP-only special a
+    # standard stay met on every time said "applied" and added its price. Each
+    # applier's check is taken out on its own, and the sweep is shown seeing each
+    # on its own. And the class is the reason whatever the times: the old order,
+    # a time or the minutes said before the class -- a VIP car told it was late
+    # for an early bird it could never get -- is red too, for each applier.
+    # Re-anchored when the class moved first; the first four defects are unchanged.
+    "F22c": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/time_window.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a window does not ask the stay's class\n",
+        "a window for VIP spaces met on every time by a standard stay says "
+        "'applied' and adds its price beside the time-based rate, or stops the "
+        "quote where the caps check the base against the receipt",
+    ),
+    "F22c/grace-applies-for-another-class": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/grace.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a grace does not ask the stay's class\n",
+        "a grace for VIP spaces tells a five-minute standard stay there is no "
+        "charge and nothing further is added, on a receipt that charges it",
+    ),
+    "F22c/times-said-over-the-class": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/time_window.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class) and not _failures(rule, stay, plan):"
+        "  # PLANTED\n",
+        "a window for another class that the stay also missed on a time gives the "
+        "time as its reason, so a VIP car reads that it came in too late for an "
+        "early bird it could never get",
+    ),
+    "F22c/minutes-said-over-the-class": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/grace.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class) and minutes <= allowed:  # PLANTED\n",
+        "a grace for another class that the stay ran over gives the minutes as its "
+        "reason, so the stay is told by how much it missed a grace it could never have",
+    ),
+    "F22c/sweep-window": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py::"
+        "test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP",
+        "rules/time_window.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a window does not ask the stay's class\n",
+        "the sweep alone does not see a window for another class adding its "
+        "price, which is how every earlier sweep missed it",
+    ),
+    "F22c/sweep-grace": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py::"
+        "test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP",
+        "rules/grace.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a grace does not ask the stay's class\n",
+        "the sweep alone does not see a grace for another class saying the stay "
+        "is free",
+    ),
     "F32": (
         "tests/test_f32_grace_is_terminal_and_free.py",
         "engine.py",
@@ -862,11 +928,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "two specials charging the same amount are refused again, so a plan whose "
         "every stay has one answer cannot be stored",
     ),
+    # Re-anchored in F63, when the ways began to be ranked on the whole fee
+    # (`_cheapest`). THE PLANTED DEFECT IS UNCHANGED: the dearer one is chosen.
     "F48/dearer-chosen": (
         "tests/test_f48_a_tie_at_the_cheapest_charge_is_priced.py",
         "engine.py",
-        "    return min(qualifying, key=lambda rule: (totals[rule.id], rule.id))",
-        "    return max(qualifying, key=lambda rule: (totals[rule.id], rule.id))  # PLANTED",
+        "    return min(rules, key=lambda rule: _rank(plan, rule, compared))",
+        "    return max(rules, key=lambda rule: _rank(plan, rule, compared))  # PLANTED",
         "the dearer of two qualifying specials is applied, so the driver pays more "
         "than the plan's own rule says",
     ),
@@ -954,12 +1022,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # says why it was not used. Three arms: the specials that did not qualify go
     # silent (the re-gate's R10), the ones that qualified and lost go silent, and
     # the loser's line claims the cheaper special was applied when the hour was.
+    # Re-anchored in F64 (a special that did not qualify is asked for its line
+    # once a quote, `qualified.why_not`); the defect is unchanged.
     "F50/why-not-unqualified-left-out": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
         "                        ledger.add(lost)\n"
         "                    continue\n"
-        "                for line in _lines_of(rule, RULE_APPLIERS[rule.type](rule, stay, plan)):\n"
+        "                for line in qualified.why_not(rule):\n"
         "                    ledger.add(line)\n",
         "                        ledger.add(lost)\n"
         "                    continue\n"
@@ -978,8 +1048,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F50/why-not-says-applied": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
-        "totals, by_time=True)",
-        "totals, by_time=False)  # PLANTED",
+        # Re-anchored in F63 (`compared` replaced `totals`); the defect is unchanged.
+        "rule, cheapest, QUALIFY, plan, compared, by_time=True",
+        "rule, cheapest, QUALIFY, plan, compared, by_time=False  # PLANTED",
         "on the time-based way the losing special's line says the cheaper special "
         "was applied, when the hour was charged",
     ),
@@ -989,14 +1060,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F50/why-not-one-qualifier-left-out": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
-        "            for rule in plan.rules_for_stage(QUALIFY):\n"
-        "                if rule in qualifying:\n"
-        "                    if rule is not cheapest:\n",
+        # Re-anchored in F63 (the qualifying specials are named once, at the top
+        # of the pass) and in F64 (a rule is found by its id); the defect is
+        # unchanged.
+        "            for rule in qualified.rules(QUALIFY):\n"
+        "                if qualified.has(rule):\n"
+        "                    if compared is not None and rule is not cheapest:\n",
         "            for rule in (  # PLANTED: the why-not lines only when 2+ qualify\n"
-        "                plan.rules_for_stage(QUALIFY) if len(qualifying) > 1 else []\n"
+        "                qualified.rules(QUALIFY) if len(qualified_at_qualify) > 1 else []\n"
         "            ):\n"
-        "                if rule in qualifying:\n"
-        "                    if rule is not cheapest:\n",
+        "                if qualified.has(rule):\n"
+        "                    if compared is not None and rule is not cheapest:\n",
         "on the time-based way, when the early bird alone qualifies and loses to "
         "the hour, every other special's line is gone, so the breakdown frozen on "
         "the stay cannot say why the weekend rate was not given",
@@ -1274,12 +1348,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if priced_by_special is not None:  # PLANTED: specials never raised",
         "a charge a special priced is left unraised although the owner said raise it",
     ),
+    # Re-anchored in F63, when the special that prices a pass became the pass's
+    # own base. The defect is unchanged.
     "F54/special-not-told": (
         "tests/test_f54_the_owner_says_what_the_fill_rule_raises.py",
         "engine.py",
-        "        _winner(plan, stay, QUALIFY, qualified_at_qualify)"
-        " if qualified_at_qualify else None",
-        "        None  # PLANTED: the fill rule is never told a special priced the time",
+        "    priced_by_special = base if by_a_special else None",
+        "    priced_by_special = None  # PLANTED: the fill rule is never told a special priced",
         "the engine forgets that a special priced the time, so 'do not raise specials' "
         "raises them anyway",
     ),
@@ -1303,6 +1378,504 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "            extras = ledger.total_minor - time_charge",
         "            extras = ledger.total_minor  # PLANTED: the time counted as extra",
         "'raise the VIP extra' raises the whole running total, so the time is raised twice",
+    ),
+    # The caps' boundaries. The first two arms put back the shipped defect, a
+    # period the car is in for no time counting as a period; the third counts a
+    # day past the end of a week; the fourth caps a week by the weekly max
+    # alone, which is how two weeks were charged for seven days and an hour.
+    #
+    # Re-anchored when each day became capped on its own (F59): the days are
+    # found by cutting the stay in `daily_max.days_of`, and a week's days by
+    # `daily_max.pieces`, rather than by counting dates. THE PLANTED DEFECTS ARE
+    # UNCHANGED -- the exit's own date counted, a day starting at the week's end
+    # counted in it. By the hour such a day holds no time and charges nothing,
+    # so these show on the line (over 2 days) and on a flat price, where the
+    # count of days is the ceiling.
+    "F56/exit-date-counted": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/daily_max.py",
+        "            if start >= exit_at:",
+        "            if start > exit_at:  # PLANTED: the exit's own date",
+        "an exit at exactly midnight counts the new date, so fifteen hours on Monday "
+        "are two days, and a flat price is allowed two daily caps for no time on Tuesday",
+    ),
+    "F56/week-start-at-exit-counted": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/weekly_max.py",
+        "            if boundary >= exit_at:",
+        "            if boundary > exit_at:  # PLANTED: a week start at the exit counts",
+        "an exit at exactly the start of a calendar week counts that week, so a "
+        "Monday-to-Monday stay is two weeks and a flat price pays the weekly max twice",
+    ),
+    "F56/rolling-day-past-the-week": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/daily_max.py",
+        "        if not (day_start < end and day_end > start):",
+        "        if not (day_start <= end and day_end > start):  # PLANTED: a day past the week",
+        "a week ending where a day starts counts that day too, so a flat price's "
+        "two-day first week is allowed three daily caps",
+    ),
+    "F56/week-by-weekly-max-alone": (
+        "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
+        "rules/weekly_max.py",
+        '                ceiling = min(ceiling, day_rule.params["max_minor"] * count)',
+        "                pass  # PLANTED: a week is capped by the weekly max alone",
+        "a week holding one day of a flat price is allowed the whole weekly max, so "
+        "seven days and an hour pay 100 twice instead of 100 + 30",
+    ),
+    # Each day capped on its own (F59, Gokhan 2026-10-16). The first arm is the
+    # whole-stay cap that shipped; the rest each break one part of splitting the
+    # charge by the day or the week, or what the caps are told about the base.
+    # Re-anchored when the days began to be tallied rather than listed (F61):
+    # the ceiling is the tally's total. THE PLANTED DEFECT IS UNCHANGED.
+    "F59/whole-stay-capped": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "        ceiling = amounts.total",
+        "        ceiling = most * caps  # PLANTED: the max times the days touched",
+        "the whole stay is capped at the max times the days it touches, so fifteen "
+        "minutes past midnight unlock a second 30.00 for Monday's hours: 60, not 34",
+    ),
+    "F59/day-charged-from-entry": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "    before = 0 if start == stay.entry_at else charged_by(_minutes_into(stay, start))",
+        "    before = 0  # PLANTED: every day charged from entry",
+        "each day is charged everything since entry, so Tuesday's fifteen minutes "
+        "carry Monday's hours and are capped at 30.00 too",
+    ),
+    "F59/day-is-24-hours": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/daily_max.py",
+        "        yield datetime.combine(day, time(0), tzinfo=plan.timezone).astimezone(UTC)",
+        "        yield datetime.combine(  # PLANTED: a day ends 24 hours after its midnight\n"
+        "            day - ONE_DAY, time(0), tzinfo=plan.timezone\n"
+        "        ).astimezone(UTC) + ONE_DAY",
+        "a calendar day is cut 24 hours after the last midnight, so on a 23- or "
+        "25-hour day the next day starts an hour early or late and is charged for it",
+    ),
+    "F59/week-ignores-the-daily-max": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/weekly_max.py",
+        "                charged = min(charged, sum(by_day))",
+        "                pass  # PLANTED: the week ignores the daily max",
+        "a week pays its time up to the weekly max with its days uncapped, so a "
+        "week holding two full days pays 100.00 instead of 60.00",
+    ),
+    "F59/week-allowed-the-whole-max": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "rules/weekly_max.py",
+        '            ceiling = min(rule.params["max_minor"], charged)',
+        '            ceiling = rule.params["max_minor"]  # PLANTED: a week may cost the whole max',
+        "a week holding one hour is allowed the whole weekly max, so the time in it "
+        "is not what it pays",
+    ),
+    # Re-anchored in F63, when `_charged_by` began to be handed the pass's base.
+    # The defect is unchanged: the caps are told the time-based rate, or nothing.
+    "F59/base-is-the-time-based-rate": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "engine.py",
+        "    accrual = RULE_ACCRUALS[base.type]\n",
+        "    # PLANTED: the caps are always told the time-based rate\n"
+        "    base = next(iter(_qualifying(plan, stay, ACCUMULATE)), None)\n"
+        "    if base is None:\n"
+        "        return None\n"
+        "    accrual = RULE_ACCRUALS[base.type]\n",
+        "the caps are told how the time-based rate would have charged even when a "
+        "special priced the stay, so a weekend rate is capped as if it were one price",
+    ),
+    "F59/accrual-not-checked": (
+        "tests/test_f59_a_daily_max_caps_each_day_on_its_own.py",
+        "engine.py",
+        "    if charged_by is not None and charged_by(stay.duration_minutes) != base_minor:",
+        "    if False:  # PLANTED: what a base says it charged is not checked",
+        "a base whose accrual disagrees with its own lines is capped on the wrong "
+        "figure and the quote goes on",
+    ),
+    # A long stay in a short one's memory (F61). The first two arms put back the
+    # two things that made a quote's memory grow with the stay: every minute the
+    # base was asked about remembered, and every day of the stay listed. The
+    # third walks each week's days from entry, which prices right and makes the
+    # work grow with the square of the stay. The fourth spells out every run.
+    "F61/charges-remembered": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/increment.py",
+        "    @lru_cache(maxsize=CHARGES_REMEMBERED)",
+        "    @lru_cache(maxsize=None)  # PLANTED: every minute asked about is kept",
+        "the base remembers every minute a cap asks it about, so a quote's memory "
+        "grows with the days in the stay",
+    ),
+    "F61/days-listed": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    caps = days_covered(rule, stay, plan)",
+        "    caps = len(list(days_of(rule, stay, plan)))  # PLANTED: every day listed",
+        "the cap lists every day of the stay to count them, so a quote's memory "
+        "grows with the days in the stay",
+    ),
+    "F61/week-walks-from-entry": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    for day_start, day_end in days_of(rule, stay, plan, after=start):",
+        "    for day_start, day_end in days_of(rule, stay, plan):  # PLANTED: from entry\n"
+        "        if day_end <= start:\n"
+        "            continue",
+        "each week's days are found by walking from entry, so the fee is right and "
+        "the work grows with the square of the stay",
+    ),
+    # The day holding a week's start is found from its date and checked against
+    # the day starts both ways. Up: a date a zone lived twice (Juneau, 1867).
+    # Down: a clock that skips over midnight, which the test builds as a zone.
+    "F61/day-guess-not-checked-up": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    while _start_of_day(rule, stay, plan, index + 1) <= instant:\n"
+        "        index += 1\n",
+        "    pass  # PLANTED: a day guessed too early is not moved on\n",
+        "where a date happens twice, an instant on its second pass is put in the day "
+        "before, so a week is cut from the wrong day",
+    ),
+    "F61/day-guess-not-checked-down": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "    while index > 0 and _start_of_day(rule, stay, plan, index) > instant:\n"
+        "        index -= 1\n",
+        "    pass  # PLANTED: a day guessed too late is not moved back\n",
+        "where a clock skips over midnight, the first instants of the new date are put "
+        "in a day that has not started",
+    ),
+    "F61/every-run-spelled-out": (
+        "tests/test_f61_a_long_stay_is_priced_in_the_memory_of_a_short_one.py",
+        "rules/daily_max.py",
+        "RUNS_SPELLED_OUT = 20",
+        "RUNS_SPELLED_OUT = 10**9  # PLANTED: every run spelled out",
+        "a cap's line spells out every run of equal amounts, so a long stay whose "
+        "days alternate has a line as long as the stay",
+    ),
+    # The longest stay priced (F62, Gokhan 2026-10-16): 90 days. The first arm
+    # removes the limit; the second refuses 90 days itself; the third asks it
+    # only after the stay is priced, which brings back the cost it bounds (the
+    # tests stop the walk at a budget, so the arm is red in a moment); the
+    # fourth copies the number instead of reading the constant; the fifth stops
+    # publishing it; the sixth refuses with the plan's code instead of its own.
+    "F62/no-limit": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n        return None\n",
+        "    return None  # PLANTED: no stay is too long\n",
+        "a stay of any length is priced, so a caller hands the engine ten thousand "
+        "years and a thread walks them for as long as the caps take",
+    ),
+    "F62/90-days-refused": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n",
+        "    if stay.duration_minutes < limit:  # PLANTED: 90 days itself refused\n",
+        "a stay of exactly 90 days, which the decision prices, is refused",
+    ),
+    # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
+    # unchanged.
+    "F62/after-the-work": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    too_long = _longer_than_priced(stay)\n"
+        "    if too_long is not None:\n"
+        "        # First of all, before a plan is read or a day walked (F62).\n"
+        "        raise Refused([too_long])\n"
+        "    plan = select_plan(plans, stay)\n"
+        "    # Which rules qualify, asked once for the whole quote (`_Qualified`).\n"
+        "    qualified = _Qualified(plan, stay)\n"
+        "\n"
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
+        "    if blocking:\n"
+        "        raise Refused(blocking)\n"
+        "\n"
+        "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
+        "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
+        "    qualified = _Qualified(plan, stay)\n"
+        "\n"
+        "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
+        "    if blocking:\n"
+        "        raise Refused(blocking)\n"
+        "\n"
+        "    ledger = _the_cheapest_way(plan, stay, qualified)\n"
+        "    too_long = _longer_than_priced(stay)\n"
+        "    if too_long is not None:\n"
+        "        raise Refused([too_long])\n",
+        "the stay is refused for its length only after it has been priced, so ten "
+        "thousand years are walked a day at a time before the refusal comes",
+    ),
+    "F62/limit-copied": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "    limit = max_stay_minutes()\n",
+        "    limit = 129600  # PLANTED: a copy of the number, not the constant\n",
+        "the limit is a second copy of the number, so changing the one constant "
+        "changes what is published and not what is refused",
+    ),
+    "F62/not-published": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "contract.py",
+        '        "max_stay_minutes": max_stay_minutes(),\n',
+        "        # PLANTED: the limit is not published\n",
+        "`validate-plan` no longer answers the limit, so a rate setup cannot show the "
+        "owner which stays will need an operator",
+    ),
+    "F62/cli-not-told": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "cli.py",
+        "    print(limit)\n",
+        "    pass  # PLANTED: the limit is not shown beside the findings\n",
+        "`rate-engine validate-plan` lists a plan's findings and not the longest stay "
+        "priced, so an owner checking rates with a gap open is not told the limit",
+    ),
+    "F62/wrong-code": (
+        "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
+        "engine.py",
+        "        code=GAP_STAY_LONGER_THAN_MAX_STAY,\n",
+        "        code=GAP_STAY_EXCEEDS_MAX_DURATION,  # PLANTED: the plan's code\n",
+        "the engine's limit is refused under the plan's own ceiling code, so a door "
+        "routing on codes tells the owner to change a rule no rule can change",
+    ),
+    # The cheapest price always wins (F63, Gokhan 2026-10-16), comparing whole-stay
+    # alternatives (2026-10-17). The first five arms each break one part of the
+    # flat special's rule, against the one test that holds it: the whole special
+    # owed and capped on the day of entry (the reading the 10-17 decision
+    # corrects, which made the full weekend 30.00); a flat price no cap holds; a
+    # special charged over a cheaper hour; a special that covers a stay past its
+    # exit limit; and the 90-day limit taken out. The rest compare the ways on
+    # what the rules charge rather than on the fee, let the stated order choose
+    # between specials, drop the whole stay from the losing line, and name a tie
+    # at one fee by rule id alone.
+    #
+    # Retired: F63/flat-capped-at-the-max-times-the-days. Its plant, a flat
+    # special as one price capped at the max times the days the car is in, is
+    # now the decided behaviour; F63/flat-owed-at-entry is its inverse.
+    "F63/flat-owed-at-entry": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::test_all_weekend_pays_50",
+        "rules/time_window.py",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        "    return None\n",
+        '        return increment.charged_by(effect["rate"], rule.id, plan.currency)\n'
+        '    if effect["kind"] == "flat":  # PLANTED: owed and capped on the day of entry\n'
+        '        return lambda minutes, price=effect["price_minor"]: price\n'
+        "    return None\n",
+        "a 50.00 Friday-to-Sunday flat with a 30.00 daily max is owed in full on the "
+        "Friday and capped there, so the whole weekend pays 30.00, not 50.00",
+    ),
+    "F63/one-price-not-capped": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::test_saturday_only_pays_30",
+        "rules/daily_max.py",
+        "        ceiling = most * caps\n",
+        "        ceiling = max(running_total_minor, most * caps)  # PLANTED: never capped\n",
+        "a flat special is one price that no daily max holds, so with no time-based "
+        "rate in the plan a Saturday alone pays 50.00, not the day's 30.00",
+    ),
+    "F63/special-over-a-cheaper-hour": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_a_stay_inside_the_span_whose_normal_price_is_lower_pays_the_normal_price",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special is charged over a cheaper hour",
+        "a two-hour Saturday stay inside the weekend flat's span pays the flat held "
+        "to the day's max, 30.00, where by the hour it is 12.00",
+    ),
+    "F63/covered-past-its-limit": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_a_stay_that_starts_inside_the_span_and_runs_past_it_is_priced_by_the_hour",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    exit_side = None  # PLANTED: a stay past the exit limit is still covered\n",
+        "a stay that leaves an hour after the weekend flat's 20:00 limit is still "
+        "given the flat, 50.00, where the time-based rate prices it at 60.00",
+    ),
+    "F63/no-limit": (
+        "tests/test_f63_the_cheapest_price_always_wins.py::"
+        "test_the_90_day_limit_comes_before_any_special",
+        "engine.py",
+        "    if stay.duration_minutes <= limit:\n        return None\n",
+        "    return None  # PLANTED: no stay is too long\n",
+        "a stay a minute past 90 days is priced by the cheapest special instead of "
+        "refused for its length",
+    ),
+    "F63/rules-own-charges-decide": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    return (compared.fees[rule.id], compared.own[rule.id], named)\n",
+        "    return (compared.own[rule.id], compared.fees[rule.id], named)  # PLANTED\n",
+        "two ways are compared on what the rules charge, so where a cap makes the "
+        "dearer rule the cheaper stay, the driver pays the dearer stay",
+    ),
+    "F63/stated-order-decides": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        '        named = settings["order"].index(rule.id)\n',
+        '        return (settings["order"].index(rule.id),)  # PLANTED: the order chooses\n',
+        "under `stated_order` the first rule named is charged, the dearer included",
+    ),
+    "F63/whole-stay-not-said": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    if own[winner.id] >= own[rule.id]:\n",
+        "    if False:  # PLANTED: the losing line does not say what the stay comes to\n",
+        "the line says the 123.50 front-loaded rate applied instead of a 96.00 "
+        "weekend rate, and not that its stay comes to 42.00 -- a receipt that reads "
+        "backwards",
+    ),
+    "F63/tie-named-by-id-alone": (
+        "tests/test_f63_the_cheapest_price_always_wins.py",
+        "engine.py",
+        "    return (compared.fees[rule.id], compared.own[rule.id], named)\n",
+        "    return (compared.fees[rule.id], named)  # PLANTED: a tie named by id alone\n",
+        "two ways a cap brings to one fee are named by rule id, so the receipt names "
+        "the 50.00 flat where the 40.00 one charged less itself",
+    ),
+    # The work budget (F64). The first arm puts back what the review measured:
+    # every lookup asks the stage's rules again and finds the rule by comparing
+    # whole rules. The second finds it by comparing whole rules alone; the third
+    # asks a special that did not qualify for its line on every pass. The fourth
+    # runs the time budget on its own against the first, so the budget is shown
+    # to be a measurement too, not only the counters.
+    "F64": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in _qualifying(self._plan, self._stay, rule.stage)  # PLANTED\n",
+        "every pass asks each rule again whether it qualifies and finds it by "
+        "comparing whole rules, so the work of a quote grows with the cube of its "
+        "ways: 800 any-day specials take tens of seconds a stay",
+    ),
+    "F64/compared-whole": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in self._at[rule.stage]  # PLANTED: found by comparing whole rules\n",
+        "a rule is found among those that qualify by comparing it with each of them "
+        "field by field, so every pass does work in the square of the ways",
+    ),
+    "F64/why-not-every-pass": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py",
+        "engine.py",
+        "        if rule.id not in self._why_not:\n",
+        "        if True:  # PLANTED: a special that did not qualify is asked on every pass\n",
+        "a special that did not qualify is asked for its line again on every pass, "
+        "so beside 400 ways each is asked 401 times, once a pass",
+    ),
+    "F64/time-budget": (
+        "tests/test_f64_a_quote_prices_each_way_once_and_asks_nothing_per_pair.py::"
+        "test_400_qualifying_specials_are_priced_within_a_fixed_time_budget",
+        "engine.py",
+        "        return rule.id in ids\n",
+        "        return rule in _qualifying(self._plan, self._stay, rule.stage)  # PLANTED\n",
+        "the time budget alone does not see a quote whose work grows with the cube "
+        "of its ways",
+    ),
+    # And the special against the time-based rate under `stated_order` (F50,
+    # F63): the early return the old comparison made for that mode, put back.
+    # The planted call passes `qualified` since F64; the defect is unchanged.
+    "F50/stated-order-replaces": (
+        "tests/test_f50_the_cheaper_way_is_charged.py",
+        "engine.py",
+        "    if time_fee < special_fee:\n",
+        '    if plan.resolution[QUALIFY]["mode"] == "stated_order":  # PLANTED\n'
+        "        return _priced(plan, stay, special, qualified, compared)\n"
+        "    if time_fee < special_fee:\n",
+        "under `stated_order` a qualifying special replaces the time-based charge "
+        "whatever it costs, so a 9.00 early bird is charged against 7.00 by the hour",
+    ),
+    # A percent discount can never exceed 100% (F60, Gokhan 2026-10-16).
+    "F60/over-100-loads": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if amount["percent_bp"] > WHOLE_FEE_BP:',
+        "    if False:  # PLANTED: a discount over 100% loads",
+        "a 150% discount loads and validates clean, and every stay it takes below "
+        "zero is refused at the counter after the plan was saved",
+    ),
+    "F60/100-refused": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if amount["percent_bp"] > WHOLE_FEE_BP:',
+        '    if amount["percent_bp"] >= WHOLE_FEE_BP:  # PLANTED: 100% refused too',
+        "a 100% discount, a free stay the owner may well mean, is refused",
+    ),
+    "F60/no-code": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        "            code=INVALID_PERCENT_DISCOUNT_OVER_100,",
+        "            code=None,  # PLANTED: refused with no code",
+        "the plan is refused with a sentence and no code, so a plan store has "
+        "nothing to route on",
+    ),
+    "F60/code-not-sent": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "contract.py",
+        "    if code is not None:\n        body[\"code\"] = code",
+        "    if False:  # PLANTED: the code is not sent\n        body[\"code\"] = code",
+        "the refusal carries its code inside the engine and every door drops it",
+    ),
+    "F60/increase-bounded-too": (
+        "tests/test_f60_a_percent_discount_is_at_most_100_percent.py",
+        "rules/time_window.py",
+        '    if direction != "discount" or amount["kind"] != "percent":',
+        '    if amount["kind"] != "percent":  # PLANTED: an increase over 100% refused too',
+        "a percent increase over 100% is refused as if it were a discount, which "
+        "the decision did not ask for",
+    ),
+    # The fixed-discount limit, and what it must not become. The first arm is
+    # the shipped defect; the second is the review round's: a limit with no
+    # floor made a discount on a total below zero ADD money, turning a named
+    # refusal into a priced stay. The fourth limits a fixed increase too, which
+    # left all 649 tests green when the limit first shipped.
+    "F57/discount-not-limited": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '            return max(0, min(amount["minor"], running_total_minor))',
+        '            return amount["minor"]  # PLANTED: a fixed discount is not limited',
+        "a fixed discount larger than a short stay's charge takes the fee below zero, "
+        "and the stay is refused instead of priced at zero",
+    ),
+    "F57/discount-not-floored": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '            return max(0, min(amount["minor"], running_total_minor))',
+        '            return min(amount["minor"], running_total_minor)  # PLANTED: no floor',
+        "a fixed discount on a total below zero -- where a 150% discount took one "
+        "before it stopped loading (F60) -- takes off a negative amount, so the line "
+        "adds money",
+    ),
+    "F57/limit-not-said": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '        if magnitude < amount["minor"]:',
+        "        if False:  # PLANTED: the limit is applied and not said",
+        "the discount line says 5.00 off and the fee moves by 3.00, so the receipt "
+        "does not explain its own figure",
+    ),
+    "F57/increase-limited": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '        return amount["minor"]\n    return percent_of_minor(',
+        '        return min(amount["minor"], running_total_minor)  # PLANTED: increase limited\n'
+        "    return percent_of_minor(",
+        "a fixed increase is limited to the charge as a discount is, so 10.00 added "
+        "to a 3.00 stay charges 6.00 and an increase after a limited discount adds nothing",
+    ),
+    "F58/negative-length-read": (
+        "tests/test_f58_a_body_is_read_within_a_bound.py",
+        "service.py",
+        "        if length < 0:",
+        "        if False:  # PLANTED: a negative length is read to the end",
+        "a negative Content-Length is read to the end of the connection, so a caller "
+        "that keeps it open holds a server thread and gets no answer",
+    ),
+    "F58/no-socket-timeout": (
+        "tests/test_f58_a_body_is_read_within_a_bound.py",
+        "service.py",
+        "    timeout = SOCKET_TIMEOUT_SECONDS",
+        "    timeout = None  # PLANTED: no socket timeout",
+        "a connection has no socket timeout, so a caller that stops part-way through "
+        "a body holds its thread for as long as it keeps the connection open",
     ),
 }
 
