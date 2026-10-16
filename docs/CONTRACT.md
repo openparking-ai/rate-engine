@@ -51,13 +51,22 @@ reading breakdown lines meets three new line codes, `fill_level.special_not_rais
 cap no longer counts a day or a week the car is in for no time: an exit at
 exactly local midnight, at a 24-hour mark or at the start of a week adds no cap.
 A week costs no more than the daily max times the days the car is in it, so
-seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). A fixed
-discount takes off at most what the stay costs, so a stay cheaper than the
-discount is priced at zero, not refused (F57). Each lowers a fee or prices a
-stay that was refused; none raises one. The weekly cap's line and the discount's
-line say more in their text, and no line code or finding code was added. On the
-HTTP door, a negative Content-Length is a 400 and a connection that stops
-sending is closed after a timeout (F58).
+seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). These
+two only lower a fee. A fixed discount takes off at most what the stay costs
+when it is taken, and never less than nothing, so a stay cheaper than the
+discount is priced at zero, not refused (F57). **That one can raise a fee.** A
+fixed increase is still added in full, so a fixed discount larger than the
+charge, listed in `adjust_order` before a fixed increase, no longer takes its
+excess off that increase: at 3 an hour, 5 off then 4 added on a one-hour stay
+was 3 - 5 + 4 = 2 and is 0 + 4 = 4, while the other way round it is 7 - 5 = 2 on
+both. A caller whose plans list a fixed discount before a fixed increase should
+re-price those stays. Which way a fee moves, as said here, assumes no
+percentage discount over 100%, which the admin does not allow: with one, a fee
+can move either way, and a total it takes below zero is still refused
+(`CONFLICT_NEGATIVE_TOTAL`). The weekly cap's line and the discount's line say
+more in their text, and no line code or finding code was added. On the HTTP
+door, a negative Content-Length is a 400 and a connection that stops sending is
+closed after a timeout (F58).
 
 ### What changed in version 5
 
@@ -513,7 +522,7 @@ never failed is a decoration.
 | **F54** | A fill rule states the owner's two answers, `raises_specials` and `raises_vip_extra`, each "yes" or "no", and a rule that omits either or states anything else does not load, naming the field. `raises_specials` no leaves a charge a special priced unraised and says so; yes raises it. `raises_vip_extra` yes raises the space-class extra by the same percent on its own line; no leaves it as set. All four combinations, on each side of the threshold, price to the cent worked by hand, and flipping one answer moves the fee by exactly what that answer governs. |
 | **F55** | Where a discount and a fill rule both apply, the driver pays the CHEAPEST order, to the cent after rounding: the discounts first and the fill rule on what is left; the fill rule first; the discounts first with each part (time charge, space-class extra) carrying its share; and the fill rule between discounts. The plan's stated order does not decide the price. A tie charges the first of those, and one line says which order was charged and what the others would have charged. Every pair of the owner's two answers, a percent and a flat discount, each side of the threshold, prices to the cent worked by hand. |
 | **F56** | A cap counts only the days and weeks the car is in for more than zero time: an exit at exactly local midnight, at a 24-hour mark or at the start of a week adds no cap, and one minute past it does. A week costs no more than the daily max times the days the car is in it, so seven days and an hour at 30 a day and 100 a week is 100 + 30, not 100 twice. The two caps still compose in either order. |
-| **F57** | A fixed discount takes off at most what the stay costs. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge; it is never refused as a negative fee. A discount smaller than the charge is taken in full. |
+| **F57** | A fixed discount takes off at most what the stay costs when it is taken, and never less than nothing. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge, rather than refused as a negative fee; a discount smaller than the charge is taken in full. A fixed increase is added in full, so a fixed discount listed before it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the other way round 2. A fixed discount never adds money: on a total a percentage over 100% took below zero it takes off nothing, so 150% off then 5 off on a stay of 3 is refused as a negative fee. |
 | **F58** | The HTTP door reads a request body only within a bound. A negative Content-Length is a named 400 rather than a read to the end of the connection, and every connection carries a socket timeout, so a caller that stops part-way through a body is disconnected rather than holding a thread. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |

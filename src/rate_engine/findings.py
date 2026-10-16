@@ -74,10 +74,13 @@ CONFLICT_AMBIGUOUS_PLAN_SELECTION = "CONFLICT_AMBIGUOUS_PLAN_SELECTION"
 #: Every money field goes through `as_non_negative_minor`, and a cap reduces the
 #: total to a ceiling that is never below zero (`daily_max`: `max_minor x days`;
 #: `weekly_max`: the sum of its weeks' ceilings). A fixed discount takes off at
-#: most the running total. This said "unreachable" while a fixed discount larger
+#: most the running total, and nothing once the total is at or below zero, so it
+#: never adds money. This said "unreachable" while a fixed discount larger
 #: than a short stay's charge reached it, and that stay was refused rather than
 #: priced at zero. A percentage discount is still not limited: one over 100%
-#: reaches this refusal. It is registered either way because a rule type is the
+#: reaches this refusal, and a fixed discount after it does not undo that (a
+#: limit with no floor once turned 150% then 5.00 off into a priced stay with a
+#: discount line adding 1.50). It is registered either way because a rule type is the
 #: unit of growth here, and the first one that can return a negative Line should
 #: meet a named refusal rather than a mislabelled one.
 CONFLICT_NEGATIVE_TOTAL = "CONFLICT_NEGATIVE_TOTAL"

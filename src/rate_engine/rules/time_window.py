@@ -672,11 +672,22 @@ def _magnitude(effect: dict, running_total_minor: int) -> int:
     A fixed DISCOUNT takes off at most the running total. "5.00 off" on a stay
     that costs 3.00 makes it free, not minus 2.00 -- which the engine refused, so
     the stay was not priced at all.
+
+    And never less than nothing. A total already below zero -- only a percentage
+    discount over 100% gets it there -- is not something to limit a discount TO:
+    `min` alone made "5.00 off" on minus 1.50 a line ADDING 1.50, turning the
+    named refusal into a priced stay. The discount takes off nothing and the
+    total reaches `CONFLICT_NEGATIVE_TOTAL` as it did before the limit.
+
+    A fixed INCREASE is added in full, whatever the total. So a fixed discount
+    limited before it no longer takes its excess off the increase: "5.00 off"
+    then "4.00 added" on 3.00 is 0.00 + 4.00 = 4.00, where taking the whole 5.00
+    made it 2.00. The other way round it is 7.00 - 5.00 = 2.00 either way.
     """
     amount = effect["amount"]
     if amount["kind"] == "fixed":
         if effect["direction"] == "discount":
-            return min(amount["minor"], running_total_minor)
+            return max(0, min(amount["minor"], running_total_minor))
         return amount["minor"]
     return percent_of_minor(running_total_minor, amount["percent_bp"], effect["rounding"])
 
@@ -705,7 +716,9 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
             f"{format_minor(running_total_minor, currency)}"
         )
         if magnitude < amount["minor"]:
-            measure += f", limited to the {format_minor(running_total_minor, currency)} charged"
+            # The limit IS the magnitude: what is charged, or nothing when the
+            # total is already at or below zero.
+            measure += f", limited to the {format_minor(magnitude, currency)} charged"
     return Line(
         code=APPLIED,
         rule_id=rule.id,

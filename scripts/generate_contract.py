@@ -358,13 +358,22 @@ reading breakdown lines meets three new line codes, `fill_level.special_not_rais
 cap no longer counts a day or a week the car is in for no time: an exit at
 exactly local midnight, at a 24-hour mark or at the start of a week adds no cap.
 A week costs no more than the daily max times the days the car is in it, so
-seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). A fixed
-discount takes off at most what the stay costs, so a stay cheaper than the
-discount is priced at zero, not refused (F57). Each lowers a fee or prices a
-stay that was refused; none raises one. The weekly cap's line and the discount's
-line say more in their text, and no line code or finding code was added. On the
-HTTP door, a negative Content-Length is a 400 and a connection that stops
-sending is closed after a timeout (F58).
+seven days and an hour at 30 a day and 100 a week is 130, not 200 (F56). These
+two only lower a fee. A fixed discount takes off at most what the stay costs
+when it is taken, and never less than nothing, so a stay cheaper than the
+discount is priced at zero, not refused (F57). **That one can raise a fee.** A
+fixed increase is still added in full, so a fixed discount larger than the
+charge, listed in `adjust_order` before a fixed increase, no longer takes its
+excess off that increase: at 3 an hour, 5 off then 4 added on a one-hour stay
+was 3 - 5 + 4 = 2 and is 0 + 4 = 4, while the other way round it is 7 - 5 = 2 on
+both. A caller whose plans list a fixed discount before a fixed increase should
+re-price those stays. Which way a fee moves, as said here, assumes no
+percentage discount over 100%, which the admin does not allow: with one, a fee
+can move either way, and a total it takes below zero is still refused
+(`CONFLICT_NEGATIVE_TOTAL`). The weekly cap's line and the discount's line say
+more in their text, and no line code or finding code was added. On the HTTP
+door, a negative Content-Length is a 400 and a connection that stops sending is
+closed after a timeout (F58).
 
 ### What changed in version 5
 

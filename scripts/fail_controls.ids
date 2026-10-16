@@ -115,7 +115,9 @@ F56/exit-date-counted
 F56/rolling-day-past-the-week
 F56/week-by-weekly-max-alone
 F56/week-start-at-exit-counted
+F57/discount-not-floored
 F57/discount-not-limited
+F57/increase-limited
 F57/limit-not-said
 F58/negative-length-read
 F58/no-socket-timeout

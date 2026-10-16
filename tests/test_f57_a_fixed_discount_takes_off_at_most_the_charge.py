@@ -12,8 +12,24 @@ The discount is now limited to the running total, and the line says so. A
 discount smaller than the charge is taken in full, as before, with nothing said
 about a limit.
 
-`scripts/fail_controls.py` removes the limit, and separately removes the words
-that say it was applied, and requires this file to go red each time.
+**What the limit costs, pinned rather than left out.** A fixed INCREASE is added
+in full, so a fixed discount larger than the charge, listed before an increase,
+no longer takes its excess off it. The owner's admin lists specials in
+`adjust_order` in the order he typed them: "Weekend $5 off" then "Event fee $4"
+on a 60-minute Saturday stay at $3 was 3 - 5 + 4 = 2.00 and is 0 + 4 = 4.00;
+the other way round it is 7 - 5 = 2.00 on both. The first version of this file
+said nothing about it, and the contract said no correction raised a fee. Which
+semantics the owner wants is put to him in the batch's receipt; this pins what
+ships.
+
+**And a fixed discount never ADDS money.** `min` alone limited "5.00 off" to a
+total already below zero -- a 150% discount gets it there -- so the line took off
+minus 1.50, and a stay the engine refused as a negative fee was priced at zero
+under a line contradicting itself. The limit is floored at nothing.
+
+`scripts/fail_controls.py` removes the limit, removes the floor, removes the
+words that say it was applied, and limits a fixed increase too, and requires
+this file to go red each time.
 """
 
 from __future__ import annotations
@@ -23,9 +39,10 @@ import copy
 import pytest
 
 from rate_engine.contract import run_quote
-from rate_engine.engine import quote
+from rate_engine.engine import make_stay, quote
 from rate_engine.findings import Refused
-from rate_engine.plan import load_plan
+from rate_engine.plan import load_plan, parse_instant
+from rate_engine.rules import time_window
 from rate_engine.validator import probe_stays, validate_plan
 
 PLAN = {
@@ -57,11 +74,34 @@ PLAN = {
 SATURDAY = "2026-03-07T10:00:00-05:00"
 
 
-def _quote(exit_: str):
+def _quote(exit_: str, plan: dict | None = None):
     return run_quote(
-        {"plans": [copy.deepcopy(PLAN)], "entry_at": SATURDAY, "exit_at": exit_,
+        {"plans": [copy.deepcopy(plan or PLAN)], "entry_at": SATURDAY, "exit_at": exit_,
          "space_class": "standard", "currency": "USD"}
     )
+
+
+def _weekend_adjust(id_: str, label: str, direction: str, amount: dict) -> dict:
+    """A weekend ADJUST shaped like the plan's own, as the admin writes one."""
+    return {"id": id_, "type": "time_window", "stage": "ADJUST",
+            "space_classes": ["standard"], "label": label,
+            "applies_on": {"kind": "days_of_week", "days": ["sat", "sun"]},
+            "enter_from": "00:00", "enter_by": "23:59", "exit_by": "23:59",
+            "day_span": "any_span",
+            "effect": {"kind": "adjust", "direction": direction, "amount": amount,
+                       "rounding": "down"}}
+
+
+EVENT_FEE = _weekend_adjust(
+    "event", "Event fee $4", "increase", {"kind": "fixed", "minor": 400}
+)
+
+
+def _with(*adjusts: dict, order: list[str]) -> dict:
+    plan = copy.deepcopy(PLAN)
+    plan["rules"] += [copy.deepcopy(a) for a in adjusts]
+    plan["adjust_order"] = order
+    return plan
 
 
 def _discount_line(body: dict) -> dict:
@@ -112,3 +152,83 @@ def test_every_stay_the_plan_check_probes_is_priced():
             codes = [f.code for f in refused_stay.findings]
             refused.append((stay.entry_at.isoformat(), stay.duration_minutes, codes))
     assert refused == []
+
+
+# --- what the limit does to an increase after it --------------------------
+
+
+@pytest.mark.guarantee("F57")
+@pytest.mark.parametrize(
+    "order,fee,weekend_delta,limited",
+    [
+        # Listed discount first, as the admin writes it when the owner types
+        # "Weekend $5 off" above "Event fee $4": the discount stops at the 3.00
+        # charged and the 4.00 is added in full. It was 3 - 5 + 4 = 2.00.
+        (["weekend", "event"], 400, -300, True),
+        # Listed increase first: 3 + 4 = 7.00, and the whole 5.00 comes off.
+        (["event", "weekend"], 200, -500, False),
+    ],
+)
+def test_a_fixed_discount_listed_before_an_increase_no_longer_reduces_it(
+    order, fee, weekend_delta, limited
+):
+    status, body = _quote("2026-03-07T11:00:00-05:00", _with(EVENT_FEE, order=order))
+    assert status == 200, body
+    assert body["fee_minor"] == fee
+    weekend = _discount_line(body)
+    assert weekend["delta_minor"] == weekend_delta
+    assert ("limited to the 3.00 USD charged" in weekend["text"]) is limited, weekend["text"]
+    event = next(ln for ln in body["breakdown"] if ln["rule_id"] == "event")
+    assert event["delta_minor"] == 400, "a fixed increase is added in full"
+    assert sum(ln["delta_minor"] for ln in body["breakdown"]) == fee
+
+
+@pytest.mark.guarantee("F57")
+def test_a_fixed_increase_larger_than_the_charge_is_added_in_full():
+    """The limit is the DISCOUNT's. 10.00 added to a 3.00 stay is 13.00, with
+    nothing said about a limit; limiting an increase too would charge 6.00."""
+    big_fee = _weekend_adjust(
+        "event", "Event fee $10", "increase", {"kind": "fixed", "minor": 1000}
+    )
+    plan = copy.deepcopy(PLAN)
+    plan["rules"] = [r for r in plan["rules"] if r["id"] != "weekend"] + [big_fee]
+    status, body = _quote("2026-03-07T11:00:00-05:00", plan)
+    assert status == 200, body
+    assert body["fee_minor"] == 1300
+    event = next(ln for ln in body["breakdown"] if ln["rule_id"] == "event")
+    assert event["delta_minor"] == 1000
+    assert "limited" not in event["text"], event["text"]
+
+
+# --- a discount never adds money -------------------------------------------
+
+#: A percentage over 100% loads in the engine (the admin refuses it); it is the
+#: only way the running total is below zero when a fixed discount meets it.
+OVER_100 = _weekend_adjust(
+    "over", "150% off", "discount", {"kind": "percent", "percent_bp": 15000}
+)
+
+
+@pytest.mark.guarantee("F57")
+def test_150_percent_then_5_off_is_still_refused_as_a_negative_fee():
+    """3.00 less 150% is minus 1.50. The 5.00 off after it takes off nothing --
+    not minus 1.50 -- so the total stays below zero and the stay is refused,
+    named, as it was before the limit."""
+    status, body = _quote("2026-03-07T11:00:00-05:00", _with(OVER_100, order=["over", "weekend"]))
+    assert status == 422, f"a negative total was priced: {body}"
+    assert [f["code"] for f in body["findings"]] == ["CONFLICT_NEGATIVE_TOTAL"]
+    assert "(-150)" in body["findings"][0]["text"], body["findings"][0]["text"]
+
+
+@pytest.mark.guarantee("F57")
+@pytest.mark.parametrize("running_total", [-150, 0])
+def test_a_fixed_discount_on_nothing_or_less_takes_off_nothing(running_total):
+    """The line itself, on a total at or below zero: no money added, and the
+    limit it states is what it took off."""
+    plan = load_plan(copy.deepcopy(PLAN))
+    rule = next(r for r in plan.rules if r.id == "weekend")
+    stay = make_stay(parse_instant(SATURDAY, "entry"),
+                     parse_instant("2026-03-07T11:00:00-05:00", "exit"), "standard")
+    [line] = time_window.apply(rule, stay, plan, running_total)
+    assert line.delta_minor == 0, line.text
+    assert "limited to the 0.00 USD charged -- 0.00 USD off" in line.text, line.text

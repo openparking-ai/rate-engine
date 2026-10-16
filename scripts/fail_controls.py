@@ -1340,13 +1340,26 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a week holding one hour is allowed the whole weekly max, so seven days and "
         "an hour pay 100 twice instead of 100 + 30",
     ),
+    # The fixed-discount limit, and what it must not become. The first arm is
+    # the shipped defect; the second is the review round's: a limit with no
+    # floor made a discount on a total below zero ADD money, turning a named
+    # refusal into a priced stay. The fourth limits a fixed increase too, which
+    # left all 649 tests green when the limit first shipped.
     "F57/discount-not-limited": (
         "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
         "rules/time_window.py",
-        '            return min(amount["minor"], running_total_minor)',
+        '            return max(0, min(amount["minor"], running_total_minor))',
         '            return amount["minor"]  # PLANTED: a fixed discount is not limited',
         "a fixed discount larger than a short stay's charge takes the fee below zero, "
         "and the stay is refused instead of priced at zero",
+    ),
+    "F57/discount-not-floored": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '            return max(0, min(amount["minor"], running_total_minor))',
+        '            return min(amount["minor"], running_total_minor)  # PLANTED: no floor',
+        "a fixed discount on a total a 150% discount took below zero takes off a "
+        "negative amount, so the line adds money and a refused stay is priced at zero",
     ),
     "F57/limit-not-said": (
         "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
@@ -1355,6 +1368,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "        if False:  # PLANTED: the limit is applied and not said",
         "the discount line says 5.00 off and the fee moves by 3.00, so the receipt "
         "does not explain its own figure",
+    ),
+    "F57/increase-limited": (
+        "tests/test_f57_a_fixed_discount_takes_off_at_most_the_charge.py",
+        "rules/time_window.py",
+        '        return amount["minor"]\n    return percent_of_minor(',
+        '        return min(amount["minor"], running_total_minor)  # PLANTED: increase limited\n'
+        "    return percent_of_minor(",
+        "a fixed increase is limited to the charge as a discount is, so 10.00 added "
+        "to a 3.00 stay charges 6.00 and an increase after a limited discount adds nothing",
     ),
     "F58/negative-length-read": (
         "tests/test_f58_a_body_is_read_within_a_bound.py",

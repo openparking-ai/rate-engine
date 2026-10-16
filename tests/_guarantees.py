@@ -398,10 +398,15 @@ GUARANTEES: dict[str, str] = {
         "in either order."
     ),
     "F57": (
-        "A fixed discount takes off at most what the stay costs. A stay cheaper than "
-        "the discount is priced at zero and the line says the discount was limited "
-        "to the charge; it is never refused as a negative fee. A discount smaller "
-        "than the charge is taken in full."
+        "A fixed discount takes off at most what the stay costs when it is taken, and "
+        "never less than nothing. A stay cheaper than the discount is priced at zero "
+        "and the line says the discount was limited to the charge, rather than "
+        "refused as a negative fee; a discount smaller than the charge is taken in "
+        "full. A fixed increase is added in full, so a fixed discount listed before "
+        "it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the "
+        "other way round 2. A fixed discount never adds money: on a total a "
+        "percentage over 100% took below zero it takes off nothing, so 150% off then "
+        "5 off on a stay of 3 is refused as a negative fee."
     ),
     "F58": (
         "The HTTP door reads a request body only within a bound. A negative "
