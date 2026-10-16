@@ -422,6 +422,18 @@ weekly cap's line and the discount's line say more in their text, and no line
 code or finding code was added. On the HTTP door, a negative Content-Length is
 a 400 and a connection that stops sending is closed after a timeout (F58).
 
+**A special for another space class charges nothing (F22c).** A special is
+asked for its line whether it qualified or not, and a `time_window` or a
+`grace` scoped to one space class did not ask the stay's class when it was. So
+a stay of another class that met every time it states was told the special
+"applied": a window added its price beside the time-based rate -- at 8 the first
+hour and 4 an hour after, with a 30 flat for VIP spaces, two hours in a standard
+space was 42, not 12 -- and a grace told the stay it was free on a receipt that
+charged it. Such a special now gets its not-applied line, at zero, saying the
+stay's class is not one it covers. The class is said only when it is the only
+reason, so a special for another class that failed on its times keeps the line
+it had. This only lowers a fee. No line code or finding code was added.
+
 ### What changed in version 5
 
 **A plan may price on how full the garage was when the car came in.** A new rule

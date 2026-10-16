@@ -626,6 +626,63 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "because it is a Tuesday says nothing at all and the receipt cannot answer "
         "the question it was asked",
     ),
+    # A special for another space class. The engine asks every QUALIFY rule for
+    # its lines, and the appliers did not ask the class, so a VIP-only special a
+    # standard stay met on every time said "applied" and added its price. Each
+    # applier's check is taken out on its own, the sweep is shown seeing each on
+    # its own, and the inverse -- the class said where a time had already failed,
+    # which changes a line every such receipt carried -- is red too.
+    "F22c": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/time_window.py",
+        "    if not failed and not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a window does not ask the stay's class\n",
+        "a window for VIP spaces met on every time by a standard stay says "
+        "'applied' and adds its price beside the time-based rate, or stops the "
+        "quote where the caps check the base against the receipt",
+    ),
+    "F22c/grace-applies-for-another-class": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/grace.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a grace does not ask the stay's class\n",
+        "a grace for VIP spaces tells a five-minute standard stay there is no "
+        "charge and nothing further is added, on a receipt that charges it",
+    ),
+    "F22c/class-said-over-the-times": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/time_window.py",
+        "    if not failed and not rule.covers(stay.space_class):\n",
+        "    if not rule.covers(stay.space_class):  # PLANTED: the class replaces the times\n",
+        "a window for another class that failed on its times names the class "
+        "instead, so a line every such receipt carried changes",
+    ),
+    "F22c/class-said-over-the-minutes": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py",
+        "rules/grace.py",
+        "    if minutes > allowed:\n",
+        "    if minutes > allowed and rule.covers(stay.space_class):  # PLANTED\n",
+        "a grace for another class that the stay ran over names the class "
+        "instead, so a line every such receipt carried changes",
+    ),
+    "F22c/sweep-window": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py::"
+        "test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP",
+        "rules/time_window.py",
+        "    if not failed and not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a window does not ask the stay's class\n",
+        "the sweep alone does not see a window for another class adding its "
+        "price, which is how every earlier sweep missed it",
+    ),
+    "F22c/sweep-grace": (
+        "tests/test_f22c_a_special_for_another_class_charges_nothing.py::"
+        "test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP",
+        "rules/grace.py",
+        "    if not rule.covers(stay.space_class):\n",
+        "    if False:  # PLANTED: a grace does not ask the stay's class\n",
+        "the sweep alone does not see a grace for another class saying the stay "
+        "is free",
+    ),
     "F32": (
         "tests/test_f32_grace_is_terminal_and_free.py",
         "engine.py",

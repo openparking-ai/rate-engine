@@ -93,6 +93,24 @@ def apply(rule: Rule, stay, plan) -> list[Line]:
                 delta_minor=0,
             )
         ]
+    if not rule.covers(stay.space_class):
+        # `qualifies` asks the class and this did not, so a grace for VIP spaces
+        # told a five-minute standard stay "there is no charge, and nothing
+        # further is added" -- on a receipt that then charged it. The class is
+        # said only when it is the only reason, as `time_window` does.
+        covered = ", ".join(repr(c) for c in rule.space_classes)
+        return [
+            Line(
+                code=NOT_APPLIED,
+                rule_id=rule.id,
+                text=(
+                    f"Grace period {allowed} min NOT applied: the stay is in a "
+                    f"{stay.space_class!r} space and this grace covers {covered} only, "
+                    "so the stay prices from entry on the ordinary rate"
+                ),
+                delta_minor=0,
+            )
+        ]
     return [
         Line(
             code=APPLIED,

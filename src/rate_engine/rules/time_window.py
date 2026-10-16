@@ -683,6 +683,22 @@ def qualifies(rule: Rule, stay, plan) -> bool:
     return rule.covers(stay.space_class) and not _failures(rule, stay, plan)
 
 
+def _class_failure(rule: Rule, stay) -> str:
+    """Why a window does not apply to a stay in a class it does not cover.
+
+    `qualifies` has always asked the space class; `apply` did not, and the engine
+    asks every QUALIFY rule for its lines whether it qualified or not. So a window
+    scoped to VIP spaces that a standard car met on every time came back
+    "applied", with its price, on a stay it was never about -- charged beside the
+    time-based rate the stay was also given.
+    """
+    covered = ", ".join(repr(c) for c in rule.space_classes)
+    return (
+        f"the stay is in a {stay.space_class!r} space and this rule covers {covered} "
+        "only"
+    )
+
+
 # --- applying --------------------------------------------------------------
 
 
@@ -786,6 +802,11 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
     from ..plan import InvalidPlan
 
     failed = _failures(rule, stay, plan)
+    if not failed and not rule.covers(stay.space_class):
+        # The class is said only when it is the only reason. A window for another
+        # class that failed on its times already has a line, and that line is
+        # what such a receipt has always carried; this one replaces "applied".
+        failed = [_class_failure(rule, stay)]
     if failed:
         # The consequence differs by effect, and saying the wrong one would be a
         # sentence that is false on a receipt. A base that did not apply means the

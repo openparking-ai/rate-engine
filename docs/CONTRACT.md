@@ -106,6 +106,18 @@ weekly cap's line and the discount's line say more in their text, and no line
 code or finding code was added. On the HTTP door, a negative Content-Length is
 a 400 and a connection that stops sending is closed after a timeout (F58).
 
+**A special for another space class charges nothing (F22c).** A special is
+asked for its line whether it qualified or not, and a `time_window` or a
+`grace` scoped to one space class did not ask the stay's class when it was. So
+a stay of another class that met every time it states was told the special
+"applied": a window added its price beside the time-based rate -- at 8 the first
+hour and 4 an hour after, with a 30 flat for VIP spaces, two hours in a standard
+space was 42, not 12 -- and a grace told the stay it was free on a receipt that
+charged it. Such a special now gets its not-applied line, at zero, saying the
+stay's class is not one it covers. The class is said only when it is the only
+reason, so a special for another class that failed on its times keeps the line
+it had. This only lowers a fee. No line code or finding code was added.
+
 ### What changed in version 5
 
 **A plan may price on how full the garage was when the car came in.** A new rule
@@ -525,6 +537,7 @@ never failed is a decoration.
 | **F21** | A refusal's CODE names the cause that actually occurred. A negative total is CONFLICT_NEGATIVE_TOTAL, not the multi-rule conflict code it borrowed. |
 | **F22** | Whether a non-qualifying rule appears in the breakdown depends on its STAGE: a QUALIFY rule always speaks, at delta zero; a rule at another stage that does not cover the stay is silent. |
 | **F22b** | And the stage is not the whole answer. A rule TYPE may declare that it speaks when it did not qualify, so a weekend discount declining because it is a Tuesday says so on the receipt -- while a rule that was never about this space stays silent whatever it declared. |
+| **F22c** | A special for another space class charges nothing. A QUALIFY rule that does not cover the stay's class did not qualify, whatever its times, so it adds no money and gets its not-applied line at zero, which names the class only where the class is its only reason; the fee is what the plan without it charges. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
 | **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
 | **F25** | Whether a time window may run past midnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. `day_span` also says WHERE the exit limit falls: under a bounded span it is `exit_by` on the entry date plus the span, so a limit past midnight is a moment rather than a clock reading. `any_span` names no last day and keeps the clock reading. |

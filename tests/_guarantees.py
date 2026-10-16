@@ -155,6 +155,13 @@ GUARANTEES: dict[str, str] = {
         "is a Tuesday says so on the receipt -- while a rule that was never about "
         "this space stays silent whatever it declared."
     ),
+    "F22c": (
+        "A special for another space class charges nothing. A QUALIFY rule that does "
+        "not cover the stay's class did not qualify, whatever its times, so it adds "
+        "no money and gets its not-applied line at zero, which names the class only "
+        "where the class is its only reason; the fee is what the plan without it "
+        "charges."
+    ),
     "F23": (
         "The production invariant that the fee IS the ledger's sum is itself "
         "guarded: deleting it, no-opping it or unwiring it from the pricing path "
