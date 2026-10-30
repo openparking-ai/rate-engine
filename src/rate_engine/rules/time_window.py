@@ -337,6 +337,38 @@ def _amount(value: object, where: str) -> dict:
     )
 
 
+#: 100%, in basis points: the most a percent DISCOUNT may take off.
+WHOLE_FEE_BP = 10_000
+
+
+def _refuse_a_discount_over_the_whole_fee(direction: str, amount: dict, where: str) -> None:
+    """A percent discount can never exceed 100% (Gokhan, 2026-10-16).
+
+    Refused when the plan is LOADED, so `validate-plan` refuses it and so does
+    every store that saves a plan through it, and no stay is ever priced on it.
+    It used to load: a stay it took below zero was refused at the counter as a
+    negative fee, after the plan had been saved and the car had parked. 100%
+    itself loads -- the stay is free -- and an INCREASE is not bounded by this.
+    A FIXED discount larger than the charge is a different, older rule: it loads,
+    and takes off at most what the stay costs (F57).
+    """
+    from ..findings import INVALID_PERCENT_DISCOUNT_OVER_100
+    from ..plan import InvalidPlan
+
+    if direction != "discount" or amount["kind"] != "percent":
+        return
+    if amount["percent_bp"] > WHOLE_FEE_BP:
+        raise InvalidPlan(
+            f"{where}.percent_bp is {amount['percent_bp']} "
+            f"({percent_text(amount['percent_bp'])}) on a discount. A percent discount "
+            f"takes off at most the whole fee, which is {WHOLE_FEE_BP} "
+            f"({percent_text(WHOLE_FEE_BP)}); more than that would pay the driver to "
+            "park. Refused when the plan is loaded, so a plan carrying it is never "
+            "saved.",
+            code=INVALID_PERCENT_DISCOUNT_OVER_100,
+        )
+
+
 def _effect(value: object, where: str) -> dict:
     """WHAT this window does when it applies, validated. One of exactly three kinds."""
     from ..plan import InvalidPlan
@@ -402,10 +434,12 @@ def _effect(value: object, where: str) -> dict:
                 "fee lands on a fraction of a minor unit, and who keeps that fraction is "
                 "the owner's decision rather than the engine's."
             )
+        amount = _amount(value["amount"], f"{where}.amount")
+        _refuse_a_discount_over_the_whole_fee(direction, amount, f"{where}.amount")
         return {
             "kind": kind,
             "direction": direction,
-            "amount": _amount(value["amount"], f"{where}.amount"),
+            "amount": amount,
             "rounding": rounding,
         }
 
@@ -649,6 +683,22 @@ def qualifies(rule: Rule, stay, plan) -> bool:
     return rule.covers(stay.space_class) and not _failures(rule, stay, plan)
 
 
+def _class_failure(rule: Rule, stay) -> str:
+    """Why a window does not apply to a stay in a class it does not cover.
+
+    `qualifies` has always asked the space class; `apply` did not, and the engine
+    asks every QUALIFY rule for its lines whether it qualified or not. So a window
+    scoped to VIP spaces that a standard car met on every time came back
+    "applied", with its price, on a stay it was never about -- charged beside the
+    time-based rate the stay was also given.
+    """
+    covered = ", ".join(repr(c) for c in rule.space_classes)
+    return (
+        f"the stay is in a {stay.space_class!r} space and this rule covers {covered} "
+        "only"
+    )
+
+
 # --- applying --------------------------------------------------------------
 
 
@@ -668,9 +718,28 @@ def _magnitude(effect: dict, running_total_minor: int) -> int:
     question the day one of them is edited. This effect may state only
     `ADJUST_ROUNDINGS`; the applier implements more, and that difference is the
     loader's to hold, not the arithmetic's.
+
+    A fixed DISCOUNT takes off at most the running total. "5.00 off" on a stay
+    that costs 3.00 makes it free, not minus 2.00 -- which the engine refused, so
+    the stay was not priced at all.
+
+    And never less than nothing. A total already below zero is not something to
+    limit a discount TO: `min` alone made "5.00 off" on minus 1.50 a line ADDING
+    1.50, turning the named refusal into a priced stay. A percentage discount
+    over 100% got a total there, and no longer loads
+    (INVALID_PERCENT_DISCOUNT_OVER_100), so no rule this version ships reaches
+    it; the floor stays, so the first rule type that can is refused by name as a
+    negative fee rather than priced by a line that adds money.
+
+    A fixed INCREASE is added in full, whatever the total. So a fixed discount
+    limited before it no longer takes its excess off the increase: "5.00 off"
+    then "4.00 added" on 3.00 is 0.00 + 4.00 = 4.00, where taking the whole 5.00
+    made it 2.00. The other way round it is 7.00 - 5.00 = 2.00 either way.
     """
     amount = effect["amount"]
     if amount["kind"] == "fixed":
+        if effect["direction"] == "discount":
+            return max(0, min(amount["minor"], running_total_minor))
         return amount["minor"]
     return percent_of_minor(running_total_minor, amount["percent_bp"], effect["rounding"])
 
@@ -698,6 +767,10 @@ def _adjust_line(rule: Rule, plan, running_total_minor: int) -> Line:
             f"{format_minor(amount['minor'], currency)} {effect['direction']} on "
             f"{format_minor(running_total_minor, currency)}"
         )
+        if magnitude < amount["minor"]:
+            # The limit IS the magnitude: what is charged, or nothing when the
+            # total is already at or below zero.
+            measure += f", limited to the {format_minor(magnitude, currency)} charged"
     return Line(
         code=APPLIED,
         rule_id=rule.id,
@@ -728,7 +801,14 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
     """
     from ..plan import InvalidPlan
 
-    failed = _failures(rule, stay, plan)
+    if not rule.covers(stay.space_class):
+        # The class first, and alone. A window for another class is one the stay
+        # could never get, so its times are no reason: a VIP car told it came in
+        # after an early bird's entry limit reads that it was late for a special
+        # it was never eligible for. Whatever its times, the line names the class.
+        failed = [_class_failure(rule, stay)]
+    else:
+        failed = _failures(rule, stay, plan)
     if failed:
         # The consequence differs by effect, and saying the wrong one would be a
         # sentence that is false on a receipt. A base that did not apply means the
@@ -796,6 +876,39 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
     return [_adjust_line(rule, plan, running_total_minor)]
 
 
+def accrual(rule: Rule, stay, plan):
+    """How this window's charge builds up over the stay, when it priced the time.
+
+    A `rate` effect is a time-based rate, priced by `increment`, so it builds up
+    by `increment`'s own periods and a cap splits it by the day like any other.
+    An `adjust` effect never prices the time.
+
+    **A `flat` effect is one price for the stay it covers, and says None** (F63).
+    Gokhan, 2026-10-17: the cheapest price wins by comparing whole-stay
+    alternatives. A special spanning several days is one price for the stay; it
+    is compared with the normal price for the whole stay -- each calendar day
+    capped by the daily max, each week by the weekly max -- and the cheaper is
+    charged. With a $50 Friday-to-Sunday flat, a $30 daily max and an hourly
+    rate that reaches $30 within a day ($8 the first hour, $4 an hour after):
+    Saturday only pays $30, and Friday 18:00 to Sunday 18:00 pays $50, where by
+    the hour it is 28 + 30 + 30 = 88.
+
+    So no minute of the stay builds up to a flat price, and no cap splits it by
+    the day. A cap handed None holds it to the max for each day and week the car
+    is in -- Saturday alone, 30.00; the three days, 90.00, so the 50.00 stands --
+    and the engine compares that whole-stay figure with the time-based rate's
+    (`_the_cheapest_way`). On one day that is the day's max, as before. The
+    stay a flat covers is the stay it qualified for: all of its conditions, the
+    exit limit among them, or none (§8). A reading that owed the whole price on
+    the day of entry and capped it there made the full weekend 30.00 -- the
+    whole special capped at one day -- and the decision corrects it.
+    """
+    effect = rule.params["effect"]
+    if effect["kind"] == "rate":
+        return increment.charged_by(effect["rate"], rule.id, plan.currency)
+    return None
+
+
 # SPEAKS_UNQUALIFIED, and it is the reason the trait exists.
 #
 # A window at QUALIFY already speaks either way -- the engine asks every QUALIFY
@@ -810,4 +923,4 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
 # answerable, and it was missing from the breakdown. The type says so about
 # itself rather than the engine knowing its name; coverage still governs, so a
 # window scoped to VIP stays silent on a standard receipt.
-register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,))
+register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,), accrual=accrual)

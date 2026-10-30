@@ -12,7 +12,8 @@ a claim defect, and this module refuses to guess about money in every other plac
 
 **Reachability, stated honestly.** With the four rule types A1 ships a negative
 total cannot occur: every money field goes through `as_non_negative_minor`, and
-`daily_max` sets the total to exactly `max_minor x days`, which is non-negative.
+`daily_max` sets the total to the sum of its days, each at most `max_minor`, which
+is non-negative.
 The branch is registered and tested anyway, because a rule type is this module's
 unit of growth and the first one that can return a negative Line should meet a
 named refusal rather than a mislabelled one. The test reaches it the only way it

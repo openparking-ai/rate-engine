@@ -94,8 +94,10 @@ def test_the_rule_type_table_is_derived_from_the_registry():
 #: plan's window is a base and runs at QUALIFY either way.
 NARROW_A_RULE_TYPE = (
     "rules/time_window.py",
-    'register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,))',
-    'register("time_window", (QUALIFY,), build, apply, traits=(SPEAKS_UNQUALIFIED,))  # PLANTED',
+    'register("time_window", STAGES_RUN_AT, build, apply, traits=(SPEAKS_UNQUALIFIED,), '
+    "accrual=accrual)",
+    'register("time_window", (QUALIFY,), build, apply, traits=(SPEAKS_UNQUALIFIED,), '
+    "accrual=accrual)  # PLANTED",
 )
 
 #: And since the fill-rule round ADJUST has a second type, so emptying it takes
@@ -330,7 +332,9 @@ def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls
     session will find it.
     """
     interpolation = {name for name, kind in _blocks().items() if kind == 1}
-    assert interpolation == {"schema_version", "stages", "resolution", "guarantees"}
+    assert interpolation == {
+        "schema_version", "stages", "resolution", "guarantees", "max_stay",
+    }
     assert not (interpolation & CONTROLLED_ASSERTIONS)
 
 

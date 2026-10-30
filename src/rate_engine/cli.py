@@ -108,6 +108,8 @@ def _cmd_quote(args) -> int:
             print(f"      {finding['text']}\n")
         return 1
     print(f"\n  the request could not be read: {body['error']}\n")
+    if "code" in body:
+        print(f"    [invalid] {body['code']}\n")
     return 2
 
 
@@ -118,15 +120,23 @@ def _cmd_validate(args) -> int:
         return 0 if status == 200 else 1
     if status != 200:
         print(f"\n  the plan could not be read: {body['error']}\n")
+        if "code" in body:
+            print(f"    [invalid] {body['code']}\n")
         return 2
+    # The engine's own limit, the same for every plan (F62): shown where the
+    # owner checks the rates, so a stay that will need an operator is no surprise.
+    longest = body["max_stay_minutes"]
+    limit = f"  The longest stay priced is {longest // (24 * 60)} days ({longest} minutes)."
     if not body["findings"]:
-        print(f"\n  plan {body['plan_version']}: no gaps, no conflicts.\n")
+        print(f"\n  plan {body['plan_version']}: no gaps, no conflicts.")
+        print(f"{limit}\n")
         return 0
     print(
         f"\n  plan {body['plan_version']}: {body['gaps']} gap(s), "
         f"{body['conflicts']} conflict(s) -- "
         f"{body['outstanding']} outstanding, {body['settled']} settled"
     )
+    print(limit)
     # THE CORRECTED SENTENCE. What stood here said the engine "will refuse a stay
     # that hits an UNDECIDED gap", which is false in the direction that matters:
     # it refuses a stay that hits ANY of these, decided or not. That is the
