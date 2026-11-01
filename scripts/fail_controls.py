@@ -847,11 +847,12 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "at a rate that takes effect in July, and an instant before every set is "
         "taxed instead of refused",
     ),
+    # Re-anchored in F68 (one pass by instant, not every pair); same defect.
     "F43/same-instant": (
         "tests/test_f43_the_tax_set_in_force_is_chosen_by_the_instant.py",
         "tax.py",
-        "            if first.effective_from == second.effective_from:",
-        "            if False:  # PLANTED: two sets at one instant load",
+        "        if first is not second:",
+        "        if False:  # PLANTED: two sets at one instant load",
         "two sets taking effect at the same instant both load, so which one is in "
         "force is decided by their order in the list",
     ),
@@ -1835,6 +1836,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if caps > MAX_CAP_RULES_PER_PLAN:\n",
         "    if False:  # PLANTED: any number of caps loads\n",
         "a plan with any number of daily and weekly caps loads",
+    ),
+    # OP-6-4: tax sets loaded in one pass, and bounded.
+    "F68": (
+        "tests/test_op6_4_tax_sets_load_in_one_pass.py",
+        "tax.py",
+        "        first = first_at.setdefault(second.effective_from, second)\n"
+        "        if first is not second:\n",
+        "        for first in sets[:sets.index(second)]:  # PLANTED: every pair compared\n"
+        "            if first.effective_from != second.effective_from:\n"
+        "                continue\n",
+        "every pair of tax sets is compared, so a statement of ten thousand sets "
+        "takes the square of that",
+    ),
+    "F68/set-limit": (
+        "tests/test_op6_4_tax_sets_load_in_one_pass.py",
+        "tax.py",
+        "    if len(document) > MAX_TAX_SETS:\n",
+        "    if False:  # PLANTED: any number of tax sets loads\n",
+        "a statement with any number of tax sets loads",
     ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",

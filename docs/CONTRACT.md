@@ -426,6 +426,8 @@ the owner which stays will need an operator.
 | `MAX_CONCURRENT_VALIDATIONS` | 2 |
 | `MAX_CAP_RULES_PER_PLAN` | 16 |
 | `MAX_QUOTE_WORK` | 2,000,000 |
+| `MAX_TAX_SETS` | 500 |
+| `MAX_TAX_RULES_PER_SET` | 64 |
 <!--/gen:limits-->
 
 Every limit is far above any plan or tax statement a garage writes, and each
@@ -454,6 +456,10 @@ stated:
   caps' walks. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
   operator prices it, and `validate-plan` never reports it (F67).
+- **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
+  `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
+  sets taking effect at one instant are found in one pass, by the instant
+  (F68).
 
 ## The pipeline
 
@@ -732,6 +738,7 @@ never failed is a decoration.
 | **F65** | `validate-plan` does a bounded amount of work. Its probe stays times the plan's rules are counted before one probe is built, and a plan over `MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run nothing; the probes are then made one at a time and the findings computed once a request. A plan with more rules, space classes or dates than the published limits allow does not load, by the same code. Over HTTP, at most `MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once. |
 | **F66** | A quote loads only the plan version in force at entry, chosen by `effective_from` before any version is loaded. A stored version that no longer loads, or is too large to, refuses no stay it does not price; a tie at the chosen instant is still refused as ambiguous, and two versions sharing a `plan_version` are still refused. |
 | **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted -- the ways plus one, times the rules plus the days times the caps' walks -- and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The largest stress plan the tests price is well inside it, and prices as before. |
+| **F68** | A garage's tax sets load in one pass: two taking effect at one instant are found by the instant, not by comparing every pair, and are still refused, both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

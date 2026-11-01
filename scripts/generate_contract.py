@@ -791,6 +791,10 @@ stated:
   caps' walks. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
   operator prices it, and `validate-plan` never reports it (F67).
+- **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
+  `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
+  sets taking effect at one instant are found in one pass, by the instant
+  (F68).
 
 ## The pipeline
 

@@ -51,3 +51,9 @@ MAX_CAP_RULES_PER_PLAN = 16
 #: stress plan the tests price, 400 specials beside 400 that do not on a 90-day
 #: stay with a daily and a weekly cap, comes to about 430,000.
 MAX_QUOTE_WORK = 2_000_000
+
+#: The most tax sets one statement may hold, and the most rules in one set. A
+#: garage states a new set each time a tax changes, a handful a decade, and a set
+#: holds its few taxes and fees.
+MAX_TAX_SETS = 500
+MAX_TAX_RULES_PER_SET = 64

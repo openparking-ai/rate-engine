@@ -525,6 +525,12 @@ GUARANTEES: dict[str, str] = {
         "`GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The largest "
         "stress plan the tests price is well inside it, and prices as before."
     ),
+    "F68": (
+        "A garage's tax sets load in one pass: two taking effect at one instant are "
+        "found by the instant, not by comparing every pair, and are still refused, "
+        "both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most "
+        "`MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
