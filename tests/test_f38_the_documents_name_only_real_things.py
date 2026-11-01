@@ -89,7 +89,7 @@ def _owned_names() -> dict[str, set[str]]:
     """Everything this module actually holds, by category. Read from the code."""
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
-    from rate_engine import engine
+    from rate_engine import engine, limits
     from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED
     from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
@@ -154,6 +154,8 @@ def _owned_names() -> dict[str, set[str]]:
         "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED},
         # The engine's one stated limit (F62), read off the module that holds it.
         "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
+        # Every limit the contract publishes, read off the module that holds them.
+        "limit": {name for name in vars(limits) if name.isupper()},
     }
 
 

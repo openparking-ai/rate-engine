@@ -236,8 +236,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F12": (
         "tests/test_f12_a_decision_is_not_a_price.py",
         "contract.py",
-        "    outstanding_codes = {f.code for f in undecided(plan)}",
-        "    outstanding_codes = {f.code for f in validate_plan(plan)}  # PLANTED",
+        "    outstanding_codes = {f.code for f in undecided(plan, findings)}",
+        "    outstanding_codes = {f.code for f in findings}  # PLANTED",
         "the split collapses -- every finding reports as outstanding whatever the "
         "owner recorded, so decisions[] is write-only again and `undecided()` is "
         "back to being called by nothing",
@@ -1773,6 +1773,38 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # And the special against the time-based rate under `stated_order` (F50,
     # F63): the early return the old comparison made for that mode, put back.
     # The planted call passes `qualified` since F64; the defect is unchanged.
+    # OP-6-1: the validator's work, bounded.
+    "F65": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "validator.py",
+        "    _refuse_if_too_large(plan)\n",
+        "    pass  # PLANTED: the probe budget is not checked\n",
+        "a plan of a hundred event-day specials is validated probe by probe, about "
+        "400,000 of them, instead of being refused before the first",
+    ),
+    "F65/validated-twice": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "contract.py",
+        "    outstanding_codes = {f.code for f in undecided(plan, findings)}",
+        "    outstanding_codes = {f.code for f in undecided(plan)}  # PLANTED: twice",
+        "a validate-plan request runs every probe twice, once for the findings and "
+        "once more for the ones still outstanding",
+    ),
+    "F65/rule-limit": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "plan.py",
+        "    if len(raw_rules) > MAX_RULES_PER_PLAN:\n",
+        "    if False:  # PLANTED: any number of rules loads\n",
+        "a plan with any number of rules loads",
+    ),
+    "F65/pool": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "service.py",
+        "            runner = _one_of_few_validations\n",
+        "            pass  # PLANTED: every validation runs at once\n",
+        "any number of validations run at once over HTTP, each slowing every quote "
+        "in the process",
+    ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",

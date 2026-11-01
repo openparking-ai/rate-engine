@@ -41,12 +41,15 @@ then refuse every one of them. The refusal is held at quote time instead, by
 
 from __future__ import annotations
 
+import time
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from .engine import Stay, find_conflicts, find_gaps
-from .findings import Finding
-from .plan import Plan
+from .findings import INVALID_PLAN_TOO_LARGE, Finding
+from .limits import MAX_VALIDATION_WORK
+from .plan import InvalidPlan, Plan
 from .rules import NEEDS_OCCUPANCY, RULE_TRAITS
 from .rules.time_window import DAY_SPAN_LIMITS
 from .stages import ACCUMULATE, STAGES
@@ -212,13 +215,72 @@ def _occupancy_marks(plan: Plan) -> list[int | None]:
     return sorted(m for m in marks if 0 <= m <= FULL_BP)
 
 
+class ValidationTooLong(Exception):
+    """A validation ran past its wall-clock deadline and was abandoned.
+
+    Not a property of the plan -- `probe_work` within `MAX_VALIDATION_WORK` is
+    what a plan is judged by, and this only fires on a machine far slower than
+    that budget assumes -- so it is not a 400 about the plan: the doors answer
+    503, try again.
+    """
+
+
+def probe_work(plan: Plan) -> int:
+    """How much work `validate_plan` would do: probe stays times the plan's rules.
+
+    Counted from the axes without building one probe, and stopped as soon as it
+    passes `MAX_VALIDATION_WORK`, so an oversized plan is cheap to refuse. Every
+    probe asks every rule whether it qualifies, which is why the rules multiply.
+    """
+    entries = sorted(_entry_minutes_of_day(plan))
+    per_entry = (
+        len(plan.space_classes) * len(_entry_dates(plan)) * len(_occupancy_marks(plan))
+        * max(len(plan.rules), 1)
+    )
+    work = 0
+    for entry_minute in entries:
+        work += per_entry * len(_duration_marks(plan, entry_minute))
+        if work > MAX_VALIDATION_WORK:
+            break
+    return work
+
+
+def _refuse_if_too_large(plan: Plan) -> None:
+    work = probe_work(plan)
+    if work > MAX_VALIDATION_WORK:
+        raise InvalidPlan(
+            f"validate-plan would try more than {MAX_VALIDATION_WORK} probe-rule checks on "
+            f"this plan (over {work}): every space class, on every date and at every entry "
+            "time its rules name, for every stay length they make interesting, asking every "
+            "rule. Refused before any probe ran. Validate a plan with fewer stated dates, "
+            "times or space classes, or split it.",
+            code=INVALID_PLAN_TOO_LARGE,
+        )
+
+
+def iter_probe_stays(plan: Plan) -> Iterator[Stay]:
+    """`probe_stays`, one at a time: the same stays in the same order, never listed,
+    so a validation holds one probe in memory however many it tries."""
+    occupancy = _occupancy_marks(plan)
+    entries = sorted(_entry_minutes_of_day(plan))
+    durations = {m: sorted(_duration_marks(plan, m)) for m in entries}
+    for space_class in plan.space_classes:
+        for day in sorted(_entry_dates(plan)):
+            midnight = datetime(day.year, day.month, day.day, 0, 0, tzinfo=plan.timezone)
+            for entry_minute in entries:
+                entry_at = midnight + timedelta(minutes=entry_minute)
+                for minutes in durations[entry_minute]:
+                    for figure in occupancy:
+                        yield Stay(
+                            entry_at=entry_at,
+                            exit_at=entry_at + timedelta(minutes=minutes),
+                            space_class=space_class,
+                            occupancy_at_entry_bp=figure,
+                        )
+
+
 def probe_stays(plan: Plan) -> list[Stay]:
     """Stays either side of every boundary this plan DECLARES.
-
-    Two axes, both read out of the rules: when the stay ENTERS and how long it
-    lasts. Neither is a written list of scenarios -- a fixed list can only find
-    the gaps whoever wrote it already thought of -- and neither is a search: the
-    probes are the plan's own stated times, each side of each.
 
     THREE axes, all read out of the rules: which DAY the stay enters on, when it
     ENTERS on that day, and how long it LASTS. None is a written list of
@@ -233,36 +295,30 @@ def probe_stays(plan: Plan) -> list[Stay]:
     `validate_plan`'s docstring and the README say exactly that and no more --
     see the limit recorded there.
     """
-    stays: list[Stay] = []
-    occupancy = _occupancy_marks(plan)
-    for space_class in plan.space_classes:
-        for day in sorted(_entry_dates(plan)):
-            midnight = datetime(day.year, day.month, day.day, 0, 0, tzinfo=plan.timezone)
-            for entry_minute in sorted(_entry_minutes_of_day(plan)):
-                entry_at = midnight + timedelta(minutes=entry_minute)
-                for minutes in sorted(_duration_marks(plan, entry_minute)):
-                    for figure in occupancy:
-                        stays.append(
-                            Stay(
-                                entry_at=entry_at,
-                                exit_at=entry_at + timedelta(minutes=minutes),
-                                space_class=space_class,
-                                occupancy_at_entry_bp=figure,
-                            )
-                        )
-    return stays
+    return list(iter_probe_stays(plan))
 
 
-def validate_plan(plan: Plan) -> list[Finding]:
+def validate_plan(plan: Plan, deadline: float | None = None) -> list[Finding]:
     """Every distinct gap and conflict, deduplicated by (code, rule_ids).
 
     Deduplicated by identifier rather than by sentence: the same gap found at
     three probe durations says a slightly different number each time, and an
     owner should be asked about it once. Each carries the stay that found it
     (`probe`, U7g): the first probe, in probe order, that produced it.
+
+    **Bounded.** A plan whose probes would cost more than `MAX_VALIDATION_WORK`
+    is refused, `INVALID_PLAN_TOO_LARGE`, before one is built; the probes are
+    then made one at a time. `deadline`, a `time.monotonic()` reading, abandons
+    the run with `ValidationTooLong` once passed.
     """
+    _refuse_if_too_large(plan)
     seen: dict[tuple[str, tuple[str, ...]], Finding] = {}
-    for stay in probe_stays(plan):
+    for stay in iter_probe_stays(plan):
+        if deadline is not None and time.monotonic() > deadline:
+            raise ValidationTooLong(
+                "validate-plan ran past its deadline and was abandoned; nothing was "
+                "reported. Try again."
+            )
         for finding in find_gaps(plan, stay) + find_conflicts(plan, stay):
             # The FIRST probe that found it, in probe order: deterministic, and
             # the stay an owner can be told about -- when it came in and left.
@@ -273,12 +329,17 @@ def validate_plan(plan: Plan) -> list[Finding]:
     return [seen[key] for key in sorted(seen)]
 
 
-def undecided(plan: Plan) -> list[Finding]:
+def undecided(plan: Plan, findings: list[Finding] | None = None) -> list[Finding]:
     """The findings the owner has not recorded a decision for.
+
+    `findings` is `validate_plan(plan)` when the caller already holds it, so a
+    request that needs both runs the probes once rather than twice.
 
     A decision is matched on the finding's CODE, which is why the codes live in
     one registry. Substring-matching a decision against a sentence would let a
     reworded message quietly un-decide a gap an owner had already settled.
     """
     decided = {d["code"] for d in plan.decisions}
-    return [f for f in validate_plan(plan) if f.code not in decided]
+    if findings is None:
+        findings = validate_plan(plan)
+    return [f for f in findings if f.code not in decided]

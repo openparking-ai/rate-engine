@@ -167,6 +167,10 @@ F64
 F64/compared-whole
 F64/time-budget
 F64/why-not-every-pass
+F65
+F65/pool
+F65/rule-limit
+F65/validated-twice
 F6b/attribute-form
 F6b/imported-name-form
 F6c

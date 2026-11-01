@@ -412,6 +412,39 @@ the same for every plan: `validate-plan` never reports it as a gap in one, and
 answers it as `max_stay_minutes` beside the findings so a rate setup can show
 the owner which stays will need an operator.
 
+## How large a request may be
+
+<!--gen:limits kind=1-->
+| limit | value |
+| --- | --- |
+| `MAX_RULES_PER_PLAN` | 2,000 |
+| `MAX_SPACE_CLASSES` | 64 |
+| `MAX_DATES_PER_RULE` | 400 |
+| `MAX_DATES_PER_PLAN` | 2,000 |
+| `MAX_VALIDATION_WORK` | 200,000 |
+| `VALIDATION_DEADLINE_SECONDS` | 10.0 |
+| `MAX_CONCURRENT_VALIDATIONS` | 2 |
+<!--/gen:limits-->
+
+Every limit is far above any plan or tax statement a garage writes, and each
+exists because the work the engine does grows with it. A request over one is
+REFUSED with a 4xx and a sentence naming the limit -- never priced or validated
+on the part of it that fits, because the part left out would be a price nobody
+stated:
+
+- **A plan** with more rules, space classes or dates than the limits above does
+  not load: 400, `INVALID_PLAN_TOO_LARGE`. That is every door, since every door
+  loads the plan.
+- **`validate-plan`** counts its probe stays before it builds one -- every space
+  class, on every date and at every entry time the rules name, for every stay
+  length they make interesting -- times the plan's rules, since every probe asks
+  every rule. Over `MAX_VALIDATION_WORK` it answers 400, `INVALID_PLAN_TOO_LARGE`,
+  having run nothing. Within it, the probes are made one at a time and the run
+  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503, a backstop that only
+  a machine far slower than the budget assumes reaches. Over HTTP, at most
+  `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
+  away, so a rate setup checking plans cannot slow the quotes at an exit lane.
+
 ## The pipeline
 
 <!--gen:stages kind=1-->
@@ -564,6 +597,7 @@ cannot check its work.
 | `CONFLICT_OVERLAPPING_FILL_RULES` | conflict |
 | `FAULT_RULE_RETURNED_NOT_LINES` | fault |
 | `INVALID_PERCENT_DISCOUNT_OVER_100` | invalid -- the plan does not load |
+| `INVALID_PLAN_TOO_LARGE` | invalid -- the plan does not load |
 <!--/gen:findings-->
 
 ## A worked example
@@ -673,7 +707,8 @@ never failed is a decoration.
 | **F61** | A long stay is priced in the memory of a short one. A cap finds the stay's days and weeks as it walks them and lists none of them, each day's or week's amount goes into a running tally, the base remembers only its last few answers, and a cap's line spells out a bounded number of runs of equal amounts, then says how many more there were and what they came to. The work still grows with the stay, by a step a day: ten years take ten times the work of one, and a century no more a day than a year. The engine refuses a stay longer than 90 days before any of this work (F62); these are measured with that limit lifted, so they hold for the caps whatever it is set to. |
 | **F62** | The longest stay the engine prices is 90 days of 24 hours, entry to exit (Gokhan, 2026-10-16). Exactly 90 days is priced; 90 days and one second is REFUSED with GAP_STAY_LONGER_THAN_MAX_STAY, a 422 naming the limit, at every door -- before the plan is read, before a day of the stay is walked and before a base is asked what it charged, so a stay of about ten thousand years is refused with no more work than one of 90 days and a second. It is elapsed time, so a clock change does not move it. The limit is one constant, `MAX_STAY_DAYS`, read at every use, and `validate-plan` answers it as `max_stay_minutes` for a rate setup to show. |
 | **F63** | The cheapest price always wins (Gokhan, 2026-10-16): where more than one price could apply to the same time, the car pays the cheapest, and whole-stay alternatives are compared (2026-10-17). A flat special is one price for the stay it covers, held to the max for each day and week the car is in, and is compared with the time-based rate's whole stay, each calendar day capped by the daily max and each week by the weekly max: with a 50 Friday-to-Sunday flat, a 30 daily max and an hourly rate that reaches 30 within a day, Saturday only is 30 and Friday 18:00 to Sunday 18:00 is 50. A stay past a special's exit limit is not covered by it. Two specials, or two time-based rates, are compared on the whole fee, caps and all -- a rate of 100 the first hour and 0.50 after beats one of 2 an hour over two days at 30 a day, 42 against 60 -- and the losing line gives both figures where the rules' own prices do not say why. Under `stated_order` the cheapest way is charged too, the time-based rate included. On every stay swept, the fee is the least of the fees each way charges on its own. Additive rules are not made a choice: a surcharge and a fixed increase are still added in full. |
-| **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. No limit is set on the rules a plan may hold or the ways a stay may have. |
+| **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. The rules a plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65). |
+| **F65** | `validate-plan` does a bounded amount of work. Its probe stays times the plan's rules are counted before one probe is built, and a plan over `MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run nothing; the probes are then made one at a time and the findings computed once a request. A plan with more rules, space classes or dates than the published limits allow does not load, by the same code. Over HTTP, at most `MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
+from rate_engine import limits  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
 from rate_engine.engine import MAX_STAY_DAYS, max_stay_minutes  # noqa: E402
 from rate_engine.findings import (  # noqa: E402
@@ -336,6 +337,18 @@ def gen_max_stay() -> str:
         f"`MAX_STAY_DAYS` **{MAX_STAY_DAYS}**: the longest stay priced is {MAX_STAY_DAYS} "
         f"days of 24 hours from entry to exit, `max_stay_minutes` **{max_stay_minutes()}**.",
     )
+
+
+def gen_limits() -> str:
+    """Every limit in `rate_engine.limits`, read from the module itself, so a
+    limit added there is published here without this function being touched."""
+    rows = ["| limit | value |", "| --- | --- |"]
+    rows += [
+        f"| `{name}` | {value:,} |" if isinstance(value, int) else f"| `{name}` | {value} |"
+        for name, value in vars(limits).items()
+        if name.isupper() and isinstance(value, int | float)
+    ]
+    return block("limits", "\n".join(rows))
 
 
 TEMPLATE = """# The rate engine contract
@@ -748,6 +761,29 @@ the same for every plan: `validate-plan` never reports it as a gap in one, and
 answers it as `max_stay_minutes` beside the findings so a rate setup can show
 the owner which stays will need an operator.
 
+## How large a request may be
+
+{limits}
+
+Every limit is far above any plan or tax statement a garage writes, and each
+exists because the work the engine does grows with it. A request over one is
+REFUSED with a 4xx and a sentence naming the limit -- never priced or validated
+on the part of it that fits, because the part left out would be a price nobody
+stated:
+
+- **A plan** with more rules, space classes or dates than the limits above does
+  not load: 400, `INVALID_PLAN_TOO_LARGE`. That is every door, since every door
+  loads the plan.
+- **`validate-plan`** counts its probe stays before it builds one -- every space
+  class, on every date and at every entry time the rules name, for every stay
+  length they make interesting -- times the plan's rules, since every probe asks
+  every rule. Over `MAX_VALIDATION_WORK` it answers 400, `INVALID_PLAN_TOO_LARGE`,
+  having run nothing. Within it, the probes are made one at a time and the run
+  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503, a backstop that only
+  a machine far slower than the budget assumes reaches. Over HTTP, at most
+  `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
+  away, so a rate setup checking plans cannot slow the quotes at an exit lane.
+
 ## The pipeline
 
 {stages}
@@ -1126,6 +1162,7 @@ def render() -> str:
         window_limits=gen_window_limits(),
         resolution_inline=gen_resolution(),
         max_stay=gen_max_stay(),
+        limits=gen_limits(),
         findings=gen_findings(),
         example=gen_example(),
         guarantees=gen_guarantees(),

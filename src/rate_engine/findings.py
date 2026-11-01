@@ -149,6 +149,13 @@ FAULT_RULE_RETURNED_NOT_LINES = "FAULT_RULE_RETURNED_NOT_LINES"
 #: below zero was refused at the counter as `CONFLICT_NEGATIVE_TOTAL`.
 INVALID_PERCENT_DISCOUNT_OVER_100 = "INVALID_PERCENT_DISCOUNT_OVER_100"
 
+#: A plan larger than `limits` allows: too many rules, space classes or dates to
+#: load, or too many probe stays for `validate-plan` to try. Every limit is far
+#: above any plan a garage writes; one over it is refused, naming the limit,
+#: rather than priced or validated on a part of it. A code, so a plan store that
+#: refuses to save it can say why without reading a sentence.
+INVALID_PLAN_TOO_LARGE = "INVALID_PLAN_TOO_LARGE"
+
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
     GAP_NO_ACCUMULATE_RULE,
@@ -175,7 +182,10 @@ ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES + FAULT_CODES
 #: Codes a plan that does not load is refused with. Never a Finding -- see
 #: INVALID_PERCENT_DISCOUNT_OVER_100 -- so not in ALL_CODES, and a Finding
 #: built with one is refused like any unregistered code.
-INVALID_CODES: tuple[str, ...] = (INVALID_PERCENT_DISCOUNT_OVER_100,)
+INVALID_CODES: tuple[str, ...] = (
+    INVALID_PERCENT_DISCOUNT_OVER_100,
+    INVALID_PLAN_TOO_LARGE,
+)
 
 
 @dataclass(frozen=True)

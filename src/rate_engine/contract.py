@@ -18,15 +18,17 @@ from __future__ import annotations
 
 import json
 import textwrap
+import time
 from typing import Any
 
 from .breakdown import Ledger
 from .engine import Quote, Stay, make_stay, max_stay_minutes, quote
 from .findings import Refused
+from .limits import VALIDATION_DEADLINE_SECONDS
 from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
 from .tax import load_tax_sets, tax_lines
-from .validator import undecided, validate_plan
+from .validator import ValidationTooLong, undecided, validate_plan
 
 #: **2 in A2, and the bump is not decoration.** A plan written for version 1 does
 #: not load on this version: the `early_bird` rule type is gone, and an unknown
@@ -225,8 +227,9 @@ def validate_response(plan) -> dict[str, Any]:
     setup already asks for, so the setup can show the owner that a longer stay
     is refused, GAP_STAY_LONGER_THAN_MAX_STAY, and needs an operator.
     """
-    findings = validate_plan(plan)
-    outstanding_codes = {f.code for f in undecided(plan)}
+    findings = validate_plan(plan, deadline=time.monotonic() + VALIDATION_DEADLINE_SECONDS)
+    # The same findings, not a second run of every probe.
+    outstanding_codes = {f.code for f in undecided(plan, findings)}
     serialized = [
         {**f.to_json(), "decided": f.code not in outstanding_codes} for f in findings
     ]
@@ -302,11 +305,22 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
 
 
 def run_validate(document: object) -> tuple[int, dict[str, Any]]:
+    """The whole of `/v1/validate-plan` and of `rate-engine validate-plan`.
+
+    A plan too large to probe is a 400 with `INVALID_PLAN_TOO_LARGE`, refused
+    before a probe runs. A validation abandoned at its deadline is a 503: the
+    plan was within the budget, and the machine was slower than it assumes.
+    """
     try:
         plan = parse_validate_request(document)
     except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
-    return 200, validate_response(plan)
+    try:
+        return 200, validate_response(plan)
+    except InvalidPlan as exc:
+        return 400, invalid_response(exc)
+    except ValidationTooLong as exc:
+        return 503, {"schema_version": SCHEMA_VERSION, "error": str(exc)}
 
 
 def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:

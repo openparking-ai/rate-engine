@@ -498,8 +498,17 @@ GUARANTEES: dict[str, str] = {
         "found by its id and two rules are never compared field by field, a special "
         "that did not qualify is asked for its line once, and a way at most three "
         "times. 400 qualifying specials beside 400 that do not, on a 90-day stay with "
-        "a daily and a weekly max, are priced within a fixed time budget. No limit is "
-        "set on the rules a plan may hold or the ways a stay may have."
+        "a daily and a weekly max, are priced within a fixed time budget. The rules a "
+        "plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65)."
+    ),
+    "F65": (
+        "`validate-plan` does a bounded amount of work. Its probe stays times the plan's "
+        "rules are counted before one probe is built, and a plan over "
+        "`MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run "
+        "nothing; the probes are then made one at a time and the findings computed once "
+        "a request. A plan with more rules, space classes or dates than the published limits allow "
+        "does not load, by the same code. Over HTTP, at most "
+        "`MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

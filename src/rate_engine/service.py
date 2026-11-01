@@ -24,6 +24,7 @@ persistence. A plan arrives on the call and is gone when the response is written
 from __future__ import annotations
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .contract import (
@@ -34,6 +35,7 @@ from .contract import (
     run_validate,
     run_validate_tax_sets,
 )
+from .limits import MAX_CONCURRENT_VALIDATIONS
 from .rules import RULE_TYPES
 
 #: Refuse a body larger than this rather than reading it into memory. A plan is
@@ -44,6 +46,27 @@ MAX_BODY_BYTES = 1 << 20
 #: caller that stops sending part-way through a body would otherwise hold its
 #: thread for as long as it keeps the connection open.
 SOCKET_TIMEOUT_SECONDS = 30
+
+
+#: The validations running now, across every connection. Taken without waiting:
+#: a caller over the limit is told so at once rather than queued behind work that
+#: slows every quote in the process.
+_VALIDATIONS = threading.BoundedSemaphore(MAX_CONCURRENT_VALIDATIONS)
+
+
+def _one_of_few_validations(document: object) -> tuple[int, dict]:
+    """`run_validate`, unless `MAX_CONCURRENT_VALIDATIONS` are running already:
+    then a 503 at once, and nothing run."""
+    if not _VALIDATIONS.acquire(blocking=False):
+        return 503, {
+            "schema_version": SCHEMA_VERSION,
+            "error": f"{MAX_CONCURRENT_VALIDATIONS} plans are being validated already; "
+                     "try again in a moment.",
+        }
+    try:
+        return run_validate(document)
+    finally:
+        _VALIDATIONS.release()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -121,6 +144,8 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as exc:
             self._send(400, {"error": f"body is not JSON: {exc}"})
             return
+        if runner is run_validate:
+            runner = _one_of_few_validations
         status, body = runner(document)
         self._send(status, body)
 
