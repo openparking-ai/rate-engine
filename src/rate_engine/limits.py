@@ -57,3 +57,12 @@ MAX_QUOTE_WORK = 2_000_000
 #: holds its few taxes and fees.
 MAX_TAX_SETS = 500
 MAX_TAX_RULES_PER_SET = 64
+
+#: Seconds a caller has to send its whole request, from the moment the HTTP
+#: service accepts the connection. The per-read timeout alone let a caller that
+#: sends one byte every few seconds hold a thread for as long as it liked.
+REQUEST_DEADLINE_SECONDS = 30.0
+
+#: Connections the HTTP service handles at once, each on its own thread. One more
+#: is answered 503 at once and closed, rather than given a thread of its own.
+MAX_CONNECTIONS = 64

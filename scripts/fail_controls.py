@@ -1856,6 +1856,23 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if False:  # PLANTED: any number of tax sets loads\n",
         "a statement with any number of tax sets loads",
     ),
+    # OP-6-5: a whole-request deadline and a bounded set of threads.
+    "F69": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        self.rfile = io.BufferedReader(_ReadByDeadline(self.connection, deadline, "
+        "self.timeout))\n",
+        "        pass  # PLANTED: each read is timed on its own\n",
+        "a caller trickling its request a byte at a time holds its thread for as "
+        "long as it likes, since no single read waits out the per-read timeout",
+    ),
+    "F69/pool": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        if not self._slots.acquire(blocking=False):\n",
+        "        if False:  # PLANTED: every connection gets a thread\n",
+        "every connection gets a thread of its own, however many are open",
+    ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",

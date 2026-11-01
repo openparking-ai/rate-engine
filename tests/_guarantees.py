@@ -531,6 +531,12 @@ GUARANTEES: dict[str, str] = {
         "both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most "
         "`MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit."
     ),
+    "F69": (
+        "A caller holds an HTTP thread for a bounded time and the threads are "
+        "bounded. The whole request must arrive within `REQUEST_DEADLINE_SECONDS`, "
+        "however slowly it trickles in, or the connection is closed; at most "
+        "`MAX_CONNECTIONS` are served at once, and one more is answered 503 at once."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

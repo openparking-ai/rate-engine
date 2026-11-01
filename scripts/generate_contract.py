@@ -795,6 +795,10 @@ stated:
   `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
   sets taking effect at one instant are found in one pass, by the instant
   (F68).
+- **Over HTTP**, a caller has `REQUEST_DEADLINE_SECONDS` to send its whole
+  request, however it trickles in, and the service handles at most
+  `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and
+  closed (F69).
 
 ## The pipeline
 

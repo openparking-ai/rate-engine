@@ -23,8 +23,11 @@ persistence. A plan arrives on the call and is gone when the response is written
 
 from __future__ import annotations
 
+import io
 import json
+import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .contract import (
@@ -35,7 +38,11 @@ from .contract import (
     run_validate,
     run_validate_tax_sets,
 )
-from .limits import MAX_CONCURRENT_VALIDATIONS
+from .limits import (
+    MAX_CONCURRENT_VALIDATIONS,
+    MAX_CONNECTIONS,
+    REQUEST_DEADLINE_SECONDS,
+)
 from .rules import RULE_TYPES
 
 #: Refuse a body larger than this rather than reading it into memory. A plan is
@@ -44,7 +51,9 @@ MAX_BODY_BYTES = 1 << 20
 
 #: Seconds a connection may wait on one read or write before it is closed. A
 #: caller that stops sending part-way through a body would otherwise hold its
-#: thread for as long as it keeps the connection open.
+#: thread for as long as it keeps the connection open. A caller that keeps
+#: sending, slowly, is bounded by `REQUEST_DEADLINE_SECONDS` for the whole
+#: request instead.
 SOCKET_TIMEOUT_SECONDS = 30
 
 
@@ -52,6 +61,32 @@ SOCKET_TIMEOUT_SECONDS = 30
 #: a caller over the limit is told so at once rather than queued behind work that
 #: slows every quote in the process.
 _VALIDATIONS = threading.BoundedSemaphore(MAX_CONCURRENT_VALIDATIONS)
+
+
+class _ReadByDeadline(io.RawIOBase):
+    """The connection's reads, each allowed only the time left before `deadline`.
+
+    A per-read timeout restarts with every byte, so a caller trickling its
+    request a byte at a time held its thread indefinitely. Here every read waits
+    at most what is left of the request's whole allowance, and none once it is
+    spent; the `TimeoutError` ends the request and closes the connection, as a
+    per-read timeout always did (`BaseHTTPRequestHandler.handle_one_request`).
+    """
+
+    def __init__(self, connection: socket.socket, deadline: float, per_read: float) -> None:
+        self._connection = connection
+        self._deadline = deadline
+        self._per_read = per_read
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        left = self._deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("the request was not sent within its deadline")
+        self._connection.settimeout(min(left, self._per_read))
+        return self._connection.recv_into(buffer)
 
 
 def _one_of_few_validations(document: object) -> tuple[int, dict]:
@@ -75,6 +110,12 @@ class Handler(BaseHTTPRequestHandler):
     #: `StreamRequestHandler.setup` sets this on the connection's socket. A read
     #: that times out ends the request and closes the connection.
     timeout = SOCKET_TIMEOUT_SECONDS
+
+    def setup(self) -> None:
+        super().setup()
+        # The whole request, not each read, is what the caller is allowed.
+        deadline = time.monotonic() + REQUEST_DEADLINE_SECONDS
+        self.rfile = io.BufferedReader(_ReadByDeadline(self.connection, deadline, self.timeout))
 
     def _send(self, status: int, body: dict) -> None:
         # contract.encode is THE encoder. This used to call json.dumps itself,
@@ -153,8 +194,57 @@ class Handler(BaseHTTPRequestHandler):
         """Quiet by default. A pricing request carries a garage's rate card."""
 
 
+class _BoundedServer(ThreadingHTTPServer):
+    """A thread per connection, up to `MAX_CONNECTIONS` at once.
+
+    Past that, the connection is answered 503 straight from the accepting
+    thread and closed: a caller is told to come back rather than queued, and no
+    number of idle or slow connections can take more threads than this.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request, client_address) -> None:
+        if not self._slots.acquire(blocking=False):
+            _answer_busy(request)
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
+def _answer_busy(request: socket.socket) -> None:
+    """A 503 written without a thread, through the one encoder. Best effort: a
+    caller that cannot take a few hundred bytes at once is simply closed."""
+    payload = encode({
+        "schema_version": SCHEMA_VERSION,
+        "error": f"{MAX_CONNECTIONS} connections are being served already; "
+                 "try again in a moment.",
+    })
+    head = (
+        "HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\n"
+        f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n"
+    ).encode()
+    try:
+        request.settimeout(1.0)
+        request.sendall(head + payload)
+    except OSError:
+        pass
+
+
 def make_server(host: str = "127.0.0.1", port: int = 8080) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((host, port), Handler)
+    return _BoundedServer((host, port), Handler)
 
 
 def serve(host: str = "127.0.0.1", port: int = 8080) -> None:  # pragma: no cover - a loop
