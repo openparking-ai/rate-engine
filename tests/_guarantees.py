@@ -510,6 +510,13 @@ GUARANTEES: dict[str, str] = {
         "does not load, by the same code. Over HTTP, at most "
         "`MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once."
     ),
+    "F66": (
+        "A quote loads only the plan version in force at entry, chosen by "
+        "`effective_from` before any version is loaded. A stored version that no "
+        "longer loads, or is too large to, refuses no stay it does not price; a tie "
+        "at the chosen instant is still refused as ambiguous, and two versions "
+        "sharing a `plan_version` are still refused."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

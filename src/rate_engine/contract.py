@@ -102,7 +102,16 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
     raw_plans = body["plans"]
     if not isinstance(raw_plans, list) or not raw_plans:
         raise InvalidPlan("request.plans must be a non-empty list of plan documents.")
-    plans = [load_plan(p, f"request.plans[{i}]") for i, p in enumerate(raw_plans)]
+    entry_at = parse_instant(body["entry_at"], "request.entry_at")
+    exit_at = parse_instant(body["exit_at"], "request.exit_at")
+    # Only the version in force at entry is LOADED: the rest are read for their
+    # `effective_from` and their name and nothing else, so a garage's old or
+    # future version that no longer loads -- or is too large to -- refuses no
+    # stay it does not price.
+    plans = [
+        load_plan(raw_plans[i], f"request.plans[{i}]")
+        for i in _versions_to_load(raw_plans, entry_at)
+    ]
 
     currency = body["currency"]
     wrong = sorted({p.currency for p in plans if p.currency != currency})
@@ -112,17 +121,45 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
             "The engine will not convert; a rate quoted in the wrong currency is a "
             "wrong number that looks right."
         )
-    versions = [p.plan_version for p in plans]
-    if len(set(versions)) != len(versions):
+    names = [raw.get("plan_version") for raw in raw_plans]
+    names = [name for name in names if isinstance(name, str)]
+    if len(set(names)) != len(names):
         raise InvalidPlan("request.plans contains two versions with the same plan_version.")
 
     stay = make_stay(
-        parse_instant(body["entry_at"], "request.entry_at"),
-        parse_instant(body["exit_at"], "request.exit_at"),
+        entry_at,
+        exit_at,
         body["space_class"],
         body.get("occupancy_at_entry_bp"),
     )
     return plans, stay
+
+
+def _versions_to_load(raw_plans: list, entry_at) -> list[int]:
+    """Where in `raw_plans` the version `engine.select_plan` will choose sits.
+
+    Chosen by `effective_from` alone, before anything else is read: the latest
+    at or before entry, and every version sharing that instant, so a tie is
+    still refused as ambiguous by `select_plan`, naming them all. With none in
+    force, the earliest, so the refusal still names when the first takes effect.
+    A version whose `effective_from` cannot be read cannot be placed, and is
+    refused by name: whether it is the one in force would be a guess.
+    """
+    dated = []
+    for i, raw in enumerate(raw_plans):
+        where = f"request.plans[{i}]"
+        if not isinstance(raw, dict):
+            raise InvalidPlan(f"{where} must be an object, got {type(raw).__name__}.")
+        if "effective_from" not in raw:
+            raise InvalidPlan(
+                f"{where} is missing required field(s): effective_from. Without it the "
+                "version in force at entry cannot be chosen.",
+                missing_keys=("effective_from",),
+            )
+        dated.append((parse_instant(raw["effective_from"], f"{where}.effective_from"), i))
+    in_force = [(at, i) for at, i in dated if at <= entry_at]
+    chosen = max(at for at, _ in in_force) if in_force else min(at for at, _ in dated)
+    return [i for at, i in dated if at == chosen]
 
 
 def parse_validate_request(document: object):

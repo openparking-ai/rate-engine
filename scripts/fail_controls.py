@@ -1805,6 +1805,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "any number of validations run at once over HTTP, each slowing every quote "
         "in the process",
     ),
+    # OP-6-2: only the version in force at entry is loaded.
+    "F66": (
+        "tests/test_op6_2_only_the_version_in_force_is_loaded.py",
+        "contract.py",
+        "        for i in _versions_to_load(raw_plans, entry_at)\n",
+        "        for i in range(len(raw_plans))  # PLANTED: every version is loaded\n",
+        "every stored version is loaded before the one in force is chosen, so one "
+        "that no longer loads fails every quote for the garage",
+    ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",

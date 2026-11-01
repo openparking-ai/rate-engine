@@ -834,6 +834,16 @@ that may simply be absent is one somebody forgets while believing they set it â€
 and when it is stated it must name every ADJUST rule exactly once, because a rule
 left out would take a silent position in the sequence.
 
+**A quote loads only the version in force at entry.** A quote request carries
+every version of a garage's plan, in `plans`, and the engine chooses the one in
+force at entry (F3). It reads each version's `effective_from` -- and its
+`plan_version`, so two sharing a name are still refused -- and loads only the
+chosen one, or every version tied with it, so a tie is still refused as
+ambiguous. A version that is not chosen is not loaded, so one that no longer
+loads, or is too large to, refuses no stay it does not price (F66). A version
+whose `effective_from` cannot be read is refused by name: whether it is the one
+in force would be a guess.
+
 ## Gaps, conflicts, and the refusal
 
 A **gap** is a stay the plan cannot price. A **conflict** is something the plan
