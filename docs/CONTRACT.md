@@ -432,6 +432,7 @@ the owner which stays will need an operator.
 | `MAX_CONNECTIONS` | 64 |
 | `EARLIEST_YEAR` | 1,000 |
 | `LATEST_YEAR` | 9,000 |
+| `MAX_TAX_PERCENT_BP` | 10,000 |
 <!--/gen:limits-->
 
 Every limit is far above any plan or tax statement a garage writes, and each
@@ -463,7 +464,8 @@ stated:
 - **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
   `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
   sets taking effect at one instant are found in one pass, by the instant
-  (F68).
+  (F68). A tax rule's `percent_bp` is at most `MAX_TAX_PERCENT_BP`, 100% of
+  the money paid; more does not load (F71).
 - **Over HTTP**, a caller has `REQUEST_DEADLINE_SECONDS` to send its whole
   request, however it trickles in, and the service handles at most
   `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and
@@ -760,6 +762,7 @@ never failed is a decoration.
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
 | **F70** | Every request is answered. A stay outside the years `EARLIEST_YEAR` to `LATEST_YEAR`, or a special dated outside them, is a 400 naming the field, after the 90-day limit; a document nested too deeply to read, or an instant or length too far out to compute with, is a 400 on every door; over HTTP, any other failure is a 500 that carries nothing of the request. |
+| **F71** | A tax rate is at most 100% of the money paid: a tax rule whose `percent_bp` is over `MAX_TAX_PERCENT_BP` does not load, 400, naming the field. A rate of exactly 100% loads and is taken in full. |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 | **F9** | The published contract is DERIVED, never transcribed. Every generated block matches the code, and every block that ASSERTS something about its values is proven to move when those values contradict it. |

@@ -43,7 +43,7 @@ from datetime import datetime
 from .breakdown import Line
 from .currency import is_known
 from .findings import GAP_NO_TAX_SET_IN_FORCE, Finding, Refused
-from .limits import MAX_TAX_RULES_PER_SET, MAX_TAX_SETS
+from .limits import MAX_TAX_PERCENT_BP, MAX_TAX_RULES_PER_SET, MAX_TAX_SETS
 from .money import as_non_negative_minor, format_minor, refuse_non_integer_money
 from .percent import (
     BASIS_POINTS_PER_WHOLE,
@@ -111,6 +111,12 @@ def _rule(raw: object, where: str) -> TaxRule:
             "operator both read on the line."
         )
     percent_bp = _whole(raw["percent_bp"], f"{where}.percent_bp", positive=True)
+    if percent_bp > MAX_TAX_PERCENT_BP:
+        raise InvalidPlan(
+            f"{where}.percent_bp is {percent_bp}; a tax is at most {MAX_TAX_PERCENT_BP} "
+            "basis points, 100% of the money paid. A rate written as a percent rather "
+            "than in basis points is the usual cause: 8.875% is 888."
+        )
     rounding = raw["rounding"]
     if rounding not in TAX_ROUNDINGS:
         raise InvalidPlan(

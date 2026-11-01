@@ -794,7 +794,8 @@ stated:
 - **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
   `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
   sets taking effect at one instant are found in one pass, by the instant
-  (F68).
+  (F68). A tax rule's `percent_bp` is at most `MAX_TAX_PERCENT_BP`, 100% of
+  the money paid; more does not load (F71).
 - **Over HTTP**, a caller has `REQUEST_DEADLINE_SECONDS` to send its whole
   request, however it trickles in, and the service handles at most
   `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and

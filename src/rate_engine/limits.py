@@ -73,3 +73,8 @@ MAX_CONNECTIONS = 64
 #: or a date outside is refused with a 400, never left to crash the request.
 EARLIEST_YEAR = 1000
 LATEST_YEAR = 9000
+
+#: The largest tax rate a tax rule may state: 10,000 basis points, 100% of what
+#: was paid. No tax, surcharge or city fee is more than the money it is taken
+#: of, and an unbounded rate let one rule carry an amount no garage charges.
+MAX_TAX_PERCENT_BP = 10_000

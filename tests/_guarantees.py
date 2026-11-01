@@ -544,6 +544,11 @@ GUARANTEES: dict[str, str] = {
         "or length too far out to compute with, is a 400 on every door; over HTTP, "
         "any other failure is a 500 that carries nothing of the request."
     ),
+    "F71": (
+        "A tax rate is at most 100% of the money paid: a tax rule whose `percent_bp` "
+        "is over `MAX_TAX_PERCENT_BP` does not load, 400, naming the field. A rate of "
+        "exactly 100% loads and is taken in full."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

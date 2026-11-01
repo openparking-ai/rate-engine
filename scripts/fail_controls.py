@@ -1907,6 +1907,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "            if self._answered:\n",
         "a failure that is not a refusal drops the connection with no answer",
     ),
+    # OP-6-7: a tax rate is bounded.
+    "F71": (
+        "tests/test_op6_7_a_tax_rate_is_at_most_100_percent.py",
+        "tax.py",
+        "    if percent_bp > MAX_TAX_PERCENT_BP:\n",
+        "    if False:  # PLANTED: any tax rate loads\n",
+        "a tax rule of any number of basis points loads, and taxes a stay many "
+        "times over",
+    ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",
