@@ -799,6 +799,14 @@ stated:
   request, however it trickles in, and the service handles at most
   `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and
   closed (F69).
+- **Instants and nesting.** A stay is priced only between the years
+  `EARLIEST_YEAR` and `LATEST_YEAR`, and a special's dates are named only in
+  them; outside, 400, naming the field. The 90-day limit is asked first, so a
+  stay from year 1 to year 9999 is still refused for its length, 422. A
+  document nested too deeply to read, or carrying a date, time or length too
+  far out to compute with, is a 400 on every door, never a dropped connection;
+  and over HTTP, a failure that is not a refusal is a 500 that says only that
+  nothing was priced (F70).
 
 ## The pipeline
 

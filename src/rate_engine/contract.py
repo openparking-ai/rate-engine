@@ -16,9 +16,11 @@ operator believes is live ends up pricing something else.
 
 from __future__ import annotations
 
+import functools
 import json
 import textwrap
 import time
+from collections.abc import Callable
 from typing import Any
 
 from .breakdown import Ledger
@@ -312,6 +314,35 @@ def tax_response(lines) -> dict[str, Any]:
     }
 
 
+def _a_400_not_a_crash(run: Callable) -> Callable:
+    """A door that answers a document nested too deeply to walk, or carrying an
+    instant or a length too far out to compute with, with a 400 and a sentence.
+
+    Both were raised from deep inside the work -- `RecursionError` from walking
+    a plan's leaves, `OverflowError` from date arithmetic past year 9999 -- and
+    neither is a bug in the engine or a price: it is a request no garage sends.
+    Uncaught, the HTTP door dropped the connection and answered nothing.
+    """
+
+    @functools.wraps(run)
+    def guarded(document: object) -> tuple[int, dict[str, Any]]:
+        try:
+            return run(document)
+        except RecursionError:
+            return 400, invalid_response(InvalidPlan(
+                "the request is nested too deeply to read. A plan, a stay and a tax "
+                "statement are a few levels deep."
+            ))
+        except OverflowError as exc:
+            return 400, invalid_response(InvalidPlan(
+                f"the request carries a date, time or length too far from today to "
+                f"compute with ({exc})."
+            ))
+
+    return guarded
+
+
+@_a_400_not_a_crash
 def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     """Parse, price, serialize -- the whole of `/v1/quote` and of `rate-engine quote`.
 
@@ -327,7 +358,8 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     a `TypeError` too, and each one would come back to an operator as "your plan
     is invalid", which is a confident wrong answer in a module whose standing
     acceptance is that it is never wrong silently. The refusal is named; the bug
-    is still allowed to crash.
+    is still allowed to crash -- and over HTTP it is answered 500, saying only
+    that nothing was priced, rather than with a dropped connection (F70).
     """
     try:
         plans, stay = parse_quote_request(document)
@@ -335,12 +367,16 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
         return 400, invalid_response(exc)
     try:
         return 200, quote_response(quote(plans, stay))
+    except InvalidPlan as exc:
+        # A stay outside the years priced, refused after its length (F62, F70).
+        return 400, invalid_response(exc)
     except Refused as refused:
         # 422: the request was well-formed and the plan cannot price it. That is
         # not a server error and not a bad request -- it is the module working.
         return 422, refusal_response(refused)
 
 
+@_a_400_not_a_crash
 def run_validate(document: object) -> tuple[int, dict[str, Any]]:
     """The whole of `/v1/validate-plan` and of `rate-engine validate-plan`.
 
@@ -360,6 +396,7 @@ def run_validate(document: object) -> tuple[int, dict[str, Any]]:
         return 503, {"schema_version": SCHEMA_VERSION, "error": str(exc)}
 
 
+@_a_400_not_a_crash
 def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
     """The whole of `/v1/validate-tax-sets` and of `rate-engine validate-tax-sets`.
 
@@ -375,6 +412,7 @@ def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
     return 200, validate_tax_sets_response(sets)
 
 
+@_a_400_not_a_crash
 def run_tax(document: object) -> tuple[int, dict[str, Any]]:
     """The whole of `/v1/tax` and of `rate-engine tax`.
 

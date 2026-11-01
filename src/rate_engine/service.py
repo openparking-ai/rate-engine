@@ -122,13 +122,42 @@ class Handler(BaseHTTPRequestHandler):
         # one of three sites with two argument lists, which is how the published
         # byte-equality claim became false without anything going red.
         payload = encode(body)
+        self._answered = True
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
+    def _answering(self, handle) -> None:
+        """Run `handle`; if it raises, answer 500 rather than drop the connection.
+
+        A refusal is never a 500: every one this module makes is a 400 or a 422
+        with its sentence, and those return. This is for a bug, and it says no
+        more than that -- a traceback would carry a garage's rate card into a
+        response. A failed read or write is left to close the connection, and so
+        is a failure after the answer began, which could not be told apart.
+        """
+        self._answered = False
+        try:
+            handle()
+        except OSError:
+            raise
+        except Exception:
+            if self._answered:
+                raise
+            self._send(500, {
+                "schema_version": SCHEMA_VERSION,
+                "error": "the engine failed on this request; nothing was priced.",
+            })
+
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's spelling
+        self._answering(self._get)
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._answering(self._post)
+
+    def _get(self) -> None:
         if self.path.split("?")[0] != "/v1/health":
             self._send(404, {"error": "no such route"})
             return
@@ -141,7 +170,7 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
-    def do_POST(self) -> None:  # noqa: N802
+    def _post(self) -> None:
         route = self.path.split("?")[0]
         runner = {
             "/v1/quote": run_quote,
@@ -184,6 +213,11 @@ class Handler(BaseHTTPRequestHandler):
             document = json.loads(text or "null")
         except json.JSONDecodeError as exc:
             self._send(400, {"error": f"body is not JSON: {exc}"})
+            return
+        except RecursionError:
+            # Inside the 1 MiB bound a body can nest deeper than the parser
+            # recurses; that crashed the request and nothing was answered.
+            self._send(400, {"error": "body is nested too deeply to read."})
             return
         if runner is run_validate:
             runner = _one_of_few_validations

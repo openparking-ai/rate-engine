@@ -66,3 +66,10 @@ REQUEST_DEADLINE_SECONDS = 30.0
 #: Connections the HTTP service handles at once, each on its own thread. One more
 #: is answered 503 at once and closed, rather than given a thread of its own.
 MAX_CONNECTIONS = 64
+
+#: The calendar years a stay may be priced in, and a special's dates named in.
+#: Pricing works out local days and weeks around the stay, and near the ends of
+#: the calendar -- year 1 and year 9999 -- that arithmetic runs off them. A stay
+#: or a date outside is refused with a 400, never left to crash the request.
+EARLIEST_YEAR = 1000
+LATEST_YEAR = 9000

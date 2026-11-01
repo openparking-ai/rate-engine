@@ -1577,7 +1577,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
     # unchanged.
     # Re-anchored in F67 (the work budget sits between the conflicts and the
-    # pricing); the plant still drops it with the rest, so the defect is unchanged.
+    # pricing) and F70 (the calendar check after the limit); the plant still
+    # drops both with the rest, so the defect is unchanged.
     "F62/after-the-work": (
         "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
         "engine.py",
@@ -1585,6 +1586,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if too_long is not None:\n"
         "        # First of all, before a plan is read or a day walked (F62).\n"
         "        raise Refused([too_long])\n"
+        "    _refuse_beyond_the_calendar(stay)\n"
         "    plan = select_plan(plans, stay)\n"
         "    # Which rules qualify, asked once for the whole quote (`_Qualified`).\n"
         "    qualified = _Qualified(plan, stay)\n"
@@ -1872,6 +1874,38 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "        if not self._slots.acquire(blocking=False):\n",
         "        if False:  # PLANTED: every connection gets a thread\n",
         "every connection gets a thread of its own, however many are open",
+    ),
+    # OP-6-6: every request is answered.
+    "F70": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "engine.py",
+        "    _refuse_beyond_the_calendar(stay)\n",
+        "    pass  # PLANTED: a stay at the end of the calendar is priced\n",
+        "a short stay in year 9999 is priced, and the day arithmetic runs off the "
+        "calendar",
+    ),
+    "F70/overflow": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "contract.py",
+        "        except OverflowError as exc:\n",
+        "        except ZeroDivisionError as exc:  # PLANTED: an overflow escapes\n",
+        "an overflow deep in the date arithmetic escapes the door, and HTTP answers "
+        "nothing",
+    ),
+    "F70/deep-body": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "service.py",
+        "        except RecursionError:\n            # Inside the 1 MiB bound",
+        "        except ZeroDivisionError:  # PLANTED\n            # Inside the 1 MiB bound",
+        "a body nested deeper than the parser recurses crashes the request",
+    ),
+    "F70/500": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "service.py",
+        "        except Exception:\n            if self._answered:\n",
+        "        except ZeroDivisionError:  # PLANTED: a bug drops the connection\n"
+        "            if self._answered:\n",
+        "a failure that is not a refusal drops the connection with no answer",
     ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",

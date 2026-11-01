@@ -537,6 +537,13 @@ GUARANTEES: dict[str, str] = {
         "however slowly it trickles in, or the connection is closed; at most "
         "`MAX_CONNECTIONS` are served at once, and one more is answered 503 at once."
     ),
+    "F70": (
+        "Every request is answered. A stay outside the years `EARLIEST_YEAR` to "
+        "`LATEST_YEAR`, or a special dated outside them, is a 400 naming the field, "
+        "after the 90-day limit; a document nested too deeply to read, or an instant "
+        "or length too far out to compute with, is a 400 on every door; over HTTP, "
+        "any other failure is a 500 that carries nothing of the request."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

@@ -43,7 +43,7 @@ from .findings import (
     Finding,
     Refused,
 )
-from .limits import MAX_QUOTE_WORK
+from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK
 from .percent import percent_text
 from .plan import InvalidPlan, Plan
 from .rules import (
@@ -516,6 +516,23 @@ def _longer_than_priced(stay: Stay) -> Finding | None:
     )
 
 
+def _refuse_beyond_the_calendar(stay: Stay) -> None:
+    """Refuse, as a bad request, a stay outside `EARLIEST_YEAR`..`LATEST_YEAR`.
+
+    Asked after the 90-day limit, so a stay from year 1 to year 9999 is still
+    refused for its length (F62). A short stay near either end of the calendar
+    is not one any garage prices, and its days and weeks would be worked out
+    past the last date a `datetime` holds: that crashed the request, with no
+    answer at all.
+    """
+    for label, instant in (("entry_at", stay.entry_at), ("exit_at", stay.exit_at)):
+        if not EARLIEST_YEAR <= instant.year <= LATEST_YEAR:
+            raise InvalidPlan(
+                f"{label} {instant.isoformat()} is outside the years this engine prices "
+                f"a stay in, {EARLIEST_YEAR} to {LATEST_YEAR}."
+            )
+
+
 def make_stay(
     entry_at: datetime,
     exit_at: datetime,
@@ -804,6 +821,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     if too_long is not None:
         # First of all, before a plan is read or a day walked (F62).
         raise Refused([too_long])
+    _refuse_beyond_the_calendar(stay)
     plan = select_plan(plans, stay)
     # Which rules qualify, asked once for the whole quote (`_Qualified`).
     qualified = _Qualified(plan, stay)

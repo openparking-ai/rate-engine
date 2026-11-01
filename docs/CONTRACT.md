@@ -430,6 +430,8 @@ the owner which stays will need an operator.
 | `MAX_TAX_RULES_PER_SET` | 64 |
 | `REQUEST_DEADLINE_SECONDS` | 30.0 |
 | `MAX_CONNECTIONS` | 64 |
+| `EARLIEST_YEAR` | 1,000 |
+| `LATEST_YEAR` | 9,000 |
 <!--/gen:limits-->
 
 Every limit is far above any plan or tax statement a garage writes, and each
@@ -466,6 +468,14 @@ stated:
   request, however it trickles in, and the service handles at most
   `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and
   closed (F69).
+- **Instants and nesting.** A stay is priced only between the years
+  `EARLIEST_YEAR` and `LATEST_YEAR`, and a special's dates are named only in
+  them; outside, 400, naming the field. The 90-day limit is asked first, so a
+  stay from year 1 to year 9999 is still refused for its length, 422. A
+  document nested too deeply to read, or carrying a date, time or length too
+  far out to compute with, is a 400 on every door, never a dropped connection;
+  and over HTTP, a failure that is not a refusal is a 500 that says only that
+  nothing was priced (F70).
 
 ## The pipeline
 
@@ -749,6 +759,7 @@ never failed is a decoration.
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
+| **F70** | Every request is answered. A stay outside the years `EARLIEST_YEAR` to `LATEST_YEAR`, or a special dated outside them, is a 400 naming the field, after the 90-day limit; a document nested too deeply to read, or an instant or length too far out to compute with, is a 400 on every door; over HTTP, any other failure is a 500 that carries nothing of the request. |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 | **F9** | The published contract is DERIVED, never transcribed. Every generated block matches the code, and every block that ASSERTS something about its values is proven to move when those values contradict it. |
