@@ -36,12 +36,14 @@ from .findings import (
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
+    GAP_QUOTE_OVER_WORK_BUDGET,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_STAY_LONGER_THAN_MAX_STAY,
     GAP_UNDECLARED_SPACE_CLASS,
     Finding,
     Refused,
 )
+from .limits import MAX_QUOTE_WORK
 from .percent import percent_text
 from .plan import InvalidPlan, Plan
 from .rules import (
@@ -470,7 +472,8 @@ FULL_BP = 10_000
 #: stay -- a stay running to the year 9999 took fifteen seconds of CPU -- and
 #: the limit is checked before the plan is even read (F62). It does not bound
 #: the rest: a quote prices the stay once for each way of pricing it, so its
-#: work also grows with the ways the plan offers (F64).
+#: work also grows with the ways the plan offers (F64). `MAX_QUOTE_WORK` bounds
+#: that product, counted before any way is priced (F67).
 MAX_STAY_DAYS = 90
 
 #: Minutes in a day of 24 hours.
@@ -808,6 +811,10 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)
     if blocking:
         raise Refused(blocking)
+    too_much = _over_work_budget(plan, stay, qualified)
+    if too_much is not None:
+        # Before any way is priced, so refusing costs what counting does.
+        raise Refused([too_much])
 
     ledger = _the_cheapest_way(plan, stay, qualified)
 
@@ -827,6 +834,40 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
         )
     return Quote(
         fee_minor=fee, currency=plan.currency, plan_version=plan.plan_version, breakdown=ledger
+    )
+
+
+def quote_work(plan: Plan, stay: Stay, qualified: _Qualified) -> int:
+    """How much work pricing this stay would take, counted before any of it.
+
+    `_the_cheapest_way` prices the stay once for each way plus once more, and
+    each pass reads the plan's rules and has every cap walk the stay a day at a
+    time -- a weekly cap walking each daily cap's days again inside each week.
+    So: (ways + 1) x (rules + days x the caps' walks). An upper bound, never
+    less than the work done, read from the counts alone.
+    """
+    ways = len(qualified.at(QUALIFY)) + len(qualified.at(ACCUMULATE))
+    caps = qualified.at(CAP)
+    daily = sum(1 for rule in caps if rule.type == "daily_max")
+    weekly = sum(1 for rule in caps if rule.type == "weekly_max")
+    walks = daily + weekly * (1 + daily) + (len(caps) - daily - weekly)
+    days = stay.duration_minutes // MINUTES_IN_A_DAY + 2  # the days a stay can touch
+    return (ways + 1) * (len(plan.rules) + days * walks)
+
+
+def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding | None:
+    """The refusal for a quote over `MAX_QUOTE_WORK`, or None (OP-6-3)."""
+    work = quote_work(plan, stay, qualified)
+    if work <= MAX_QUOTE_WORK:
+        return None
+    return Finding(
+        code=GAP_QUOTE_OVER_WORK_BUDGET,
+        text=(
+            f"pricing this stay on plan {plan.plan_version} would take {work} steps -- "
+            "every way it can be priced, through every rule and every day its caps walk "
+            f"-- and this engine prices within {MAX_QUOTE_WORK}: it was not priced and "
+            "nothing was guessed -- an operator prices it"
+        ),
     )
 
 

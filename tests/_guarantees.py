@@ -517,6 +517,14 @@ GUARANTEES: dict[str, str] = {
         "at the chosen instant is still refused as ambiguous, and two versions "
         "sharing a `plan_version` are still refused."
     ),
+    "F67": (
+        "A quote does a bounded amount of work. A plan holds at most "
+        "`MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is "
+        "counted -- the ways plus one, times the rules plus the days times the caps' "
+        "walks -- and a stay over `MAX_QUOTE_WORK` is refused, 422 "
+        "`GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The largest "
+        "stress plan the tests price is well inside it, and prices as before."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

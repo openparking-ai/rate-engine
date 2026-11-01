@@ -37,6 +37,12 @@ GAP_STAY_EXCEEDS_MAX_DURATION = "GAP_STAY_EXCEEDS_MAX_DURATION"
 #: limit instead, as `max_stay_minutes`. A door that closes a stay unpriced on a
 #: refusal shows this one as needing an operator.
 GAP_STAY_LONGER_THAN_MAX_STAY = "GAP_STAY_LONGER_THAN_MAX_STAY"
+#: Pricing this stay on this plan would take more work than `MAX_QUOTE_WORK`
+#: allows: the ways it can be priced, times the plan's rules and the days its
+#: caps walk. Refused before any way is priced, nothing guessed, like the 90-day
+#: limit -- and like it, `validate-plan` never reports it: it is far above any
+#: plan a garage writes, and an operator prices the stay.
+GAP_QUOTE_OVER_WORK_BUDGET = "GAP_QUOTE_OVER_WORK_BUDGET"
 #: No plan version was in force at the stay's ENTRY time.
 GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 #: No tax set the garage stated was in force at the instant the tax was asked
@@ -164,6 +170,7 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_STAY_LONGER_THAN_MAX_STAY,
+    GAP_QUOTE_OVER_WORK_BUDGET,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (

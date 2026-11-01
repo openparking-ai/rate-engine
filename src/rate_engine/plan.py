@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .currency import excluded_reason, is_known
 from .limits import (
+    MAX_CAP_RULES_PER_PLAN,
     MAX_DATES_PER_PLAN,
     MAX_DATES_PER_RULE,
     MAX_RULES_PER_PLAN,
@@ -39,7 +40,7 @@ from .limits import (
 )
 from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
-from .stages import ADJUST, RESOLVING
+from .stages import ADJUST, CAP, RESOLVING
 
 
 class InvalidPlan(ValueError):
@@ -382,6 +383,9 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         seen.add(rule.id)
 
     _check_dates(rules, where)
+    caps = sum(1 for rule in rules if rule.stage == CAP)
+    if caps > MAX_CAP_RULES_PER_PLAN:
+        raise _too_large(f"{where}.rules", caps, MAX_CAP_RULES_PER_PLAN, "CAP rules")
     _check_stated_orders(resolution, rules, where)
 
     adjust_order = document["adjust_order"]

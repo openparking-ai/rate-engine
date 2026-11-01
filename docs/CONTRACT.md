@@ -424,6 +424,8 @@ the owner which stays will need an operator.
 | `MAX_VALIDATION_WORK` | 200,000 |
 | `VALIDATION_DEADLINE_SECONDS` | 10.0 |
 | `MAX_CONCURRENT_VALIDATIONS` | 2 |
+| `MAX_CAP_RULES_PER_PLAN` | 16 |
+| `MAX_QUOTE_WORK` | 2,000,000 |
 <!--/gen:limits-->
 
 Every limit is far above any plan or tax statement a garage writes, and each
@@ -444,6 +446,14 @@ stated:
   a machine far slower than the budget assumes reaches. Over HTTP, at most
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
+- **A quote** prices the stay once for each way it can be priced, plus once
+  more, and every cap walks the stay a day at a time on each pass -- a weekly
+  cap walking each daily cap's days again inside each week. A plan holds at
+  most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
+  counted: the ways plus one, times the plan's rules plus the days times the
+  caps' walks. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
+  operator prices it, and `validate-plan` never reports it (F67).
 
 ## The pipeline
 
@@ -601,6 +611,7 @@ cannot check its work.
 | `GAP_NO_TAX_SET_IN_FORCE` | gap |
 | `GAP_NO_OCCUPANCY_AT_ENTRY` | gap |
 | `GAP_STAY_LONGER_THAN_MAX_STAY` | gap |
+| `GAP_QUOTE_OVER_WORK_BUDGET` | gap |
 | `CONFLICT_AMBIGUOUS_PLAN_SELECTION` | conflict |
 | `CONFLICT_NEGATIVE_TOTAL` | conflict |
 | `CONFLICT_UNORDERED_ADJUSTMENTS` | conflict |
@@ -720,6 +731,7 @@ never failed is a decoration.
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. The rules a plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65). |
 | **F65** | `validate-plan` does a bounded amount of work. Its probe stays times the plan's rules are counted before one probe is built, and a plan over `MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run nothing; the probes are then made one at a time and the findings computed once a request. A plan with more rules, space classes or dates than the published limits allow does not load, by the same code. Over HTTP, at most `MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once. |
 | **F66** | A quote loads only the plan version in force at entry, chosen by `effective_from` before any version is loaded. A stored version that no longer loads, or is too large to, refuses no stay it does not price; a tie at the chosen instant is still refused as ambiguous, and two versions sharing a `plan_version` are still refused. |
+| **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted -- the ways plus one, times the rules plus the days times the caps' walks -- and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The largest stress plan the tests price is well inside it, and prices as before. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

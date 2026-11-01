@@ -783,6 +783,14 @@ stated:
   a machine far slower than the budget assumes reaches. Over HTTP, at most
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
+- **A quote** prices the stay once for each way it can be priced, plus once
+  more, and every cap walks the stay a day at a time on each pass -- a weekly
+  cap walking each daily cap's days again inside each week. A plan holds at
+  most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
+  counted: the ways plus one, times the plan's rules plus the days times the
+  caps' walks. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
+  operator prices it, and `validate-plan` never reports it (F67).
 
 ## The pipeline
 

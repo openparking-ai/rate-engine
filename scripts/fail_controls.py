@@ -1575,6 +1575,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
     # unchanged.
+    # Re-anchored in F67 (the work budget sits between the conflicts and the
+    # pricing); the plant still drops it with the rest, so the defect is unchanged.
     "F62/after-the-work": (
         "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
         "engine.py",
@@ -1589,6 +1591,10 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
+        "    too_much = _over_work_budget(plan, stay, qualified)\n"
+        "    if too_much is not None:\n"
+        "        # Before any way is priced, so refusing costs what counting does.\n"
+        "        raise Refused([too_much])\n"
         "\n"
         "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
         "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
@@ -1813,6 +1819,22 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "        for i in range(len(raw_plans))  # PLANTED: every version is loaded\n",
         "every stored version is loaded before the one in force is chosen, so one "
         "that no longer loads fails every quote for the garage",
+    ),
+    # OP-6-3: a quote's work, counted and bounded.
+    "F67": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "engine.py",
+        "    too_much = _over_work_budget(plan, stay, qualified)\n",
+        "    too_much = None  # PLANTED: the work is not counted\n",
+        "a quote of 300 specials beside eight daily and eight weekly caps on a "
+        "90-day stay runs for tens of seconds instead of being refused",
+    ),
+    "F67/cap-limit": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "plan.py",
+        "    if caps > MAX_CAP_RULES_PER_PLAN:\n",
+        "    if False:  # PLANTED: any number of caps loads\n",
+        "a plan with any number of daily and weekly caps loads",
     ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",

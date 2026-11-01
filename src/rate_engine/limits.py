@@ -39,3 +39,15 @@ VALIDATION_DEADLINE_SECONDS = 10.0
 #: quote in the process shares, so a few at a time keeps an exit close's quote
 #: answering while a rate setup checks a plan; one more is answered 503 at once.
 MAX_CONCURRENT_VALIDATIONS = 2
+
+#: The most CAP rules (daily and weekly maximums) one plan may hold. Every cap
+#: walks the stay a day at a time on every way it is priced, and a weekly cap
+#: walks each daily cap's days again inside each week. Real plans hold one or two.
+MAX_CAP_RULES_PER_PLAN = 16
+
+#: How much work one quote may do, counted before any way is priced: the ways
+#: plus one, times the plan's rules plus the days of the stay times the caps
+#: that walk them (a weekly cap walking each daily cap's days). The largest
+#: stress plan the tests price, 400 specials beside 400 that do not on a 90-day
+#: stay with a daily and a weekly cap, comes to about 430,000.
+MAX_QUOTE_WORK = 2_000_000
