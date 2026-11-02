@@ -31,9 +31,16 @@ from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .currency import excluded_reason, is_known
+from .limits import (
+    MAX_CAP_RULES_PER_PLAN,
+    MAX_DATES_PER_PLAN,
+    MAX_DATES_PER_RULE,
+    MAX_RULES_PER_PLAN,
+    MAX_SPACE_CLASSES,
+)
 from .money import refuse_non_integer_money
 from .rules import RULE_TYPES, Rule, build_rule
-from .stages import ADJUST, RESOLVING
+from .stages import ADJUST, CAP, RESOLVING
 
 
 class InvalidPlan(ValueError):
@@ -221,6 +228,34 @@ def _check_stated_orders(resolution: dict[str, dict], rules, where: str) -> None
             )
 
 
+def _too_large(field: str, count: int, limit: int, what: str) -> InvalidPlan:
+    from .findings import INVALID_PLAN_TOO_LARGE
+
+    return InvalidPlan(
+        f"{field} holds {count} {what}; this engine loads at most {limit}. The limit is "
+        "far above any garage's plan, and a plan over it is refused whole rather than "
+        "read in part -- the part left out would be a price nobody stated.",
+        code=INVALID_PLAN_TOO_LARGE,
+    )
+
+
+def _check_dates(rules, where: str) -> None:
+    """Every date a rule names is a day `validate-plan` probes the whole plan on,
+    so the dates are bounded per rule and across the plan."""
+    total = 0
+    for i, rule in enumerate(rules):
+        applies_on = rule.params.get("applies_on")
+        if not applies_on or applies_on["kind"] != "dates":
+            continue
+        count = len(applies_on["dates"])
+        if count > MAX_DATES_PER_RULE:
+            raise _too_large(f"{where}.rules[{i}].applies_on.dates", count,
+                             MAX_DATES_PER_RULE, "dates")
+        total += count
+    if total > MAX_DATES_PER_PLAN:
+        raise _too_large(f"{where}.rules", total, MAX_DATES_PER_PLAN, "dates across its rules")
+
+
 def parse_instant(value: object, label: str) -> datetime:
     """Parse an offset-aware ISO 8601 instant, or refuse."""
     if not isinstance(value, str):
@@ -325,12 +360,18 @@ def load_plan(document: object, where: str = "plan") -> Plan:
         raise InvalidPlan(f"{where}.space_classes must be a non-empty list of strings.")
     if len(set(space_classes)) != len(space_classes):
         raise InvalidPlan(f"{where}.space_classes contains a duplicate.")
+    if len(space_classes) > MAX_SPACE_CLASSES:
+        raise _too_large(f"{where}.space_classes", len(space_classes), MAX_SPACE_CLASSES,
+                         "space classes")
 
     resolution = _resolution(document, where)
 
     raw_rules = document["rules"]
     if not isinstance(raw_rules, list) or not raw_rules:
         raise InvalidPlan(f"{where}.rules must be a non-empty list.")
+    # Counted before a rule is built, so an oversized plan costs nothing to refuse.
+    if len(raw_rules) > MAX_RULES_PER_PLAN:
+        raise _too_large(f"{where}.rules", len(raw_rules), MAX_RULES_PER_PLAN, "rules")
     rules = tuple(
         build_rule(raw, tuple(space_classes), f"{where}.rules[{i}]")
         for i, raw in enumerate(raw_rules)
@@ -341,6 +382,10 @@ def load_plan(document: object, where: str = "plan") -> Plan:
             raise InvalidPlan(f"{where}.rules contains two rules with id {rule.id!r}.")
         seen.add(rule.id)
 
+    _check_dates(rules, where)
+    caps = sum(1 for rule in rules if rule.stage == CAP)
+    if caps > MAX_CAP_RULES_PER_PLAN:
+        raise _too_large(f"{where}.rules", caps, MAX_CAP_RULES_PER_PLAN, "CAP rules")
     _check_stated_orders(resolution, rules, where)
 
     adjust_order = document["adjust_order"]

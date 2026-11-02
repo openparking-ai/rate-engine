@@ -28,8 +28,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
+from rate_engine import limits  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
-from rate_engine.engine import MAX_STAY_DAYS, max_stay_minutes  # noqa: E402
+from rate_engine.engine import MAX_STAY_DAYS, PASS_COSTS, max_stay_minutes  # noqa: E402
 from rate_engine.findings import (  # noqa: E402
     CONFLICT_CODES,
     FAULT_CODES,
@@ -336,6 +337,25 @@ def gen_max_stay() -> str:
         f"`MAX_STAY_DAYS` **{MAX_STAY_DAYS}**: the longest stay priced is {MAX_STAY_DAYS} "
         f"days of 24 hours from entry to exit, `max_stay_minutes` **{max_stay_minutes()}**.",
     )
+
+
+def gen_quote_costs() -> str:
+    """The weights a quote's work is counted in, read from the engine's table."""
+    rows = ["| a quote's step | counted as |", "| --- | --- |"]
+    rows += [f"| `{name}` | {value} |" for name, value in PASS_COSTS.items()]
+    return block("quote_costs", "\n".join(rows))
+
+
+def gen_limits() -> str:
+    """Every limit in `rate_engine.limits`, read from the module itself, so a
+    limit added there is published here without this function being touched."""
+    rows = ["| limit | value |", "| --- | --- |"]
+    rows += [
+        f"| `{name}` | {value:,} |" if isinstance(value, int) else f"| `{name}` | {value} |"
+        for name, value in vars(limits).items()
+        if name.isupper() and isinstance(value, int | float)
+    ]
+    return block("limits", "\n".join(rows))
 
 
 TEMPLATE = """# The rate engine contract
@@ -748,6 +768,73 @@ the same for every plan: `validate-plan` never reports it as a gap in one, and
 answers it as `max_stay_minutes` beside the findings so a rate setup can show
 the owner which stays will need an operator.
 
+## How large a request may be
+
+{limits}
+
+Every limit is far above any plan or tax statement a garage writes, and each
+exists because the work the engine does grows with it. A request over one is
+REFUSED with a 4xx and a sentence naming the limit -- never priced or validated
+on the part of it that fits, because the part left out would be a price nobody
+stated:
+
+- **A plan** with more rules, space classes or dates than the limits above does
+  not load: 400, `INVALID_PLAN_TOO_LARGE`, on every door that loads it. A quote
+  loads only the version in force at entry, so an oversized version that is not
+  in force refuses nothing (F66, below).
+- **`validate-plan`** counts its probe stays before it builds one -- every space
+  class, on every date and at every entry time the rules name, for every stay
+  length they make interesting -- times the plan's rules, since every probe asks
+  every rule. Over `MAX_VALIDATION_WORK` it answers 400, `INVALID_PLAN_TOO_LARGE`,
+  having run nothing. Within it, the probes are made one at a time and the run
+  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503 and `Retry-After`,
+  try again. That is the clock: a plan just inside the budget validates in about
+  3 s alone, so a busy or much slower machine can reach it. Over HTTP, at most
+  `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
+  away, so a rate setup checking plans cannot slow the quotes at an exit lane.
+- **A quote** prices the stay once for each way it can be priced, plus once
+  more for the receipt. On each pass it reads every rule, applies the ones that
+  qualify, and has every cap walk the stay a day at a time -- a weekly cap
+  walking each daily cap's days again inside each week. A plan holds at most
+  `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
+  counted: every pass, each step weighted by what it was measured to cost, in
+  steps of about 0.2 microseconds (below; the receipt's pass is counted as the
+  dearest way's, and a fill rule beside other ADJUST rules prices every order
+  of them on each pass). Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
+  operator prices it, and `validate-plan` never reports it. **And a deadline:**
+  a quote still pricing `QUOTE_DEADLINE_SECONDS` after its work was counted
+  begins no further pass and is answered **503** with `Retry-After`, its body
+  carrying `"retry": true` and `retry_after_seconds`: busy, not refused --
+  nothing was priced, and the same request may be sent again rather than the
+  stay closed unpriced. It is the one answer to a quote that depends on the
+  clock (F5), and it is not only for a shape nobody measured or a far slower
+  machine: on the 4-core box that measured the budget, a plan just inside it
+  that prices in about 0.4 s alone was stopped 14 times in 16 with four such
+  quotes running at once. A typical plan prices in 0.1 to 6 ms there, 170 to
+  10,000 times inside the deadline. The count, not the clock, is what a plan is
+  judged by (F67).
+
+{quote_costs}
+
+- **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
+  `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
+  sets taking effect at one instant are found in one pass, by the instant
+  (F68). A tax rule's `percent_bp` is at most `MAX_TAX_PERCENT_BP`, 100% of
+  the money paid; more does not load (F71).
+- **Over HTTP**, a caller has `REQUEST_DEADLINE_SECONDS` to send its whole
+  request, however it trickles in, and the service handles at most
+  `MAX_CONNECTIONS` connections at once; one more is answered 503 at once and
+  closed (F69).
+- **Instants and nesting.** A stay is priced only between the years
+  `EARLIEST_YEAR` and `LATEST_YEAR`, and a special's dates are named only in
+  them; outside, 400, naming the field. The 90-day limit is asked first, so a
+  stay from year 1 to year 9999 is still refused for its length, 422. A
+  document nested too deeply to read, or carrying a date, time or length too
+  far out to compute with, is a 400 on every door, never a dropped connection;
+  and over HTTP, a failure that is not a refusal is a 500 that says only that
+  nothing was priced (F70).
+
 ## The pipeline
 
 {stages}
@@ -797,6 +884,16 @@ required-and-nullable like `max_duration_minutes` and `week_starts_on` — a fie
 that may simply be absent is one somebody forgets while believing they set it —
 and when it is stated it must name every ADJUST rule exactly once, because a rule
 left out would take a silent position in the sequence.
+
+**A quote loads only the version in force at entry.** A quote request carries
+every version of a garage's plan, in `plans`, and the engine chooses the one in
+force at entry (F3). It reads each version's `effective_from` -- and its
+`plan_version`, so two sharing a name are still refused -- and loads only the
+chosen one, or every version tied with it, so a tie is still refused as
+ambiguous. A version that is not chosen is not loaded, so one that no longer
+loads, or is too large to, refuses no stay it does not price (F66). A version
+whose `effective_from` cannot be read is refused by name: whether it is the one
+in force would be a guess.
 
 ## Gaps, conflicts, and the refusal
 
@@ -1126,6 +1223,8 @@ def render() -> str:
         window_limits=gen_window_limits(),
         resolution_inline=gen_resolution(),
         max_stay=gen_max_stay(),
+        limits=gen_limits(),
+        quote_costs=gen_quote_costs(),
         findings=gen_findings(),
         example=gen_example(),
         guarantees=gen_guarantees(),

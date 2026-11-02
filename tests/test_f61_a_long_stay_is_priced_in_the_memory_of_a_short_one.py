@@ -90,9 +90,14 @@ CAPS = {
 @pytest.fixture(autouse=True, scope="module")
 def _the_engines_limit_lifted():
     """The caps measured on stays past the engine's 90-day limit (F62): lifted
-    to about 2,700 years for this module, and put back after it."""
+    to about 2,700 years for this module, and put back after it. The quote's
+    work budget and its deadline (F67) bound the days a cap walks, so they are
+    lifted with it: this module measures the walk itself, with the per-day
+    budget below."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(engine, "MAX_STAY_DAYS", 1_000_000)
+        patch.setattr(engine, "MAX_QUOTE_WORK", 10**12)
+        patch.setattr(engine, "QUOTE_DEADLINE_SECONDS", 1e9)
         yield
 
 

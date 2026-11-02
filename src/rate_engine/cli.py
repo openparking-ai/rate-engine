@@ -101,6 +101,11 @@ def _cmd_quote(args) -> int:
         print(breakdown_text(ledger, body["currency"]))
         print(f"\n  FEE  {format_minor(body['fee_minor'], body['currency'])}\n")
         return 0
+    if status == 503:
+        # Busy, not refused: nothing was priced, and the same request may be
+        # sent again (F67).
+        print(f"\n  not priced, try again: {body['error']}\n")
+        return 1
     if body.get("refused"):
         print("\n  REFUSED -- nothing was guessed.\n")
         for finding in body["findings"]:
@@ -118,6 +123,10 @@ def _cmd_validate(args) -> int:
     if args.json:
         _write_exact(encode(body))
         return 0 if status == 200 else 1
+    if status == 503:
+        # The plan was read; the validation did not finish (F65).
+        print(f"\n  the plan was not validated: {body['error']}\n")
+        return 2
     if status != 200:
         print(f"\n  the plan could not be read: {body['error']}\n")
         if "code" in body:
@@ -212,6 +221,11 @@ def _cmd_tax(args) -> int:
             print("\n  no tax lines")
         print(f"\n  TAX  {format_minor(body['total_minor'], args.currency)}\n")
         return 0
+    if status == 503:
+        # Busy, not refused: nothing was priced, and the same request may be
+        # sent again (F67).
+        print(f"\n  not priced, try again: {body['error']}\n")
+        return 1
     if body.get("refused"):
         print("\n  REFUSED -- nothing was guessed.\n")
         for finding in body["findings"]:

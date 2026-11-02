@@ -96,6 +96,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from ..breakdown import Line
+from ..limits import EARLIEST_YEAR, LATEST_YEAR
 from ..money import as_non_negative_minor, format_minor
 from ..percent import percent_of_minor, percent_text, was_rounded
 from ..stages import ADJUST, QUALIFY
@@ -204,6 +205,11 @@ def _dates(value: dict, where: str) -> tuple[date, ...]:
                 "the compact and week-date spellings ISO 8601 also allows are refused, "
                 "because a date the breakdown renders differently from the way the plan "
                 "states it is a decision an operator cannot check."
+            )
+        if not EARLIEST_YEAR <= day.year <= LATEST_YEAR:
+            raise InvalidPlan(
+                f"{where}.dates carries {item!r}, outside the years this engine prices "
+                f"in, {EARLIEST_YEAR} to {LATEST_YEAR}."
             )
         parsed.append(day)
     if len(set(parsed)) != len(parsed):

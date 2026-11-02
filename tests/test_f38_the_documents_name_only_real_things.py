@@ -89,7 +89,7 @@ def _owned_names() -> dict[str, set[str]]:
     """Everything this module actually holds, by category. Read from the code."""
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
-    from rate_engine import engine
+    from rate_engine import engine, limits
     from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED
     from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
@@ -154,6 +154,10 @@ def _owned_names() -> dict[str, set[str]]:
         "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED},
         # The engine's one stated limit (F62), read off the module that holds it.
         "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
+        # Every limit the contract publishes, read off the module that holds them.
+        "limit": {name for name in vars(limits) if name.isupper()},
+        # The steps a quote's work is counted in (F67), read off the engine's table.
+        "quote step": set(engine.PASS_COSTS),
     }
 
 
@@ -222,6 +226,18 @@ def _response_fields() -> set[str]:
     status, validated = run_validate({"plan": plan})
     assert status == 200, validated
     fields |= set(validated)
+
+    # And the busy answer, a 503 that says try again (F67), produced by a quote
+    # stopped at its deadline -- the deadline set in the past for it.
+    import pytest as _pytest
+
+    from rate_engine import engine
+
+    with _pytest.MonkeyPatch.context() as patch:
+        patch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
+        status, busy = run_quote(request)
+    assert status == 503, busy
+    fields |= set(busy)
 
     # And the tax door's answer, taken the same way: a figure with a line in it.
     from rate_engine.contract import run_tax

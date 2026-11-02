@@ -37,6 +37,12 @@ GAP_STAY_EXCEEDS_MAX_DURATION = "GAP_STAY_EXCEEDS_MAX_DURATION"
 #: limit instead, as `max_stay_minutes`. A door that closes a stay unpriced on a
 #: refusal shows this one as needing an operator.
 GAP_STAY_LONGER_THAN_MAX_STAY = "GAP_STAY_LONGER_THAN_MAX_STAY"
+#: Pricing this stay on this plan would take more work than `MAX_QUOTE_WORK`
+#: allows: the ways it can be priced, times the plan's rules and the days its
+#: caps walk. Refused before any way is priced, nothing guessed, like the 90-day
+#: limit -- and like it, `validate-plan` never reports it: it is far above any
+#: plan a garage writes, and an operator prices the stay.
+GAP_QUOTE_OVER_WORK_BUDGET = "GAP_QUOTE_OVER_WORK_BUDGET"
 #: No plan version was in force at the stay's ENTRY time.
 GAP_NO_PLAN_IN_FORCE_AT_ENTRY = "GAP_NO_PLAN_IN_FORCE_AT_ENTRY"
 #: No tax set the garage stated was in force at the instant the tax was asked
@@ -149,6 +155,13 @@ FAULT_RULE_RETURNED_NOT_LINES = "FAULT_RULE_RETURNED_NOT_LINES"
 #: below zero was refused at the counter as `CONFLICT_NEGATIVE_TOTAL`.
 INVALID_PERCENT_DISCOUNT_OVER_100 = "INVALID_PERCENT_DISCOUNT_OVER_100"
 
+#: A plan larger than `limits` allows: too many rules, space classes or dates to
+#: load, or too many probe stays for `validate-plan` to try. Every limit is far
+#: above any plan a garage writes; one over it is refused, naming the limit,
+#: rather than priced or validated on a part of it. A code, so a plan store that
+#: refuses to save it can say why without reading a sentence.
+INVALID_PLAN_TOO_LARGE = "INVALID_PLAN_TOO_LARGE"
+
 GAP_CODES: tuple[str, ...] = (
     GAP_UNDECLARED_SPACE_CLASS,
     GAP_NO_ACCUMULATE_RULE,
@@ -157,6 +170,7 @@ GAP_CODES: tuple[str, ...] = (
     GAP_NO_TAX_SET_IN_FORCE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_STAY_LONGER_THAN_MAX_STAY,
+    GAP_QUOTE_OVER_WORK_BUDGET,
 )
 
 CONFLICT_CODES: tuple[str, ...] = (
@@ -175,7 +189,10 @@ ALL_CODES: tuple[str, ...] = GAP_CODES + CONFLICT_CODES + FAULT_CODES
 #: Codes a plan that does not load is refused with. Never a Finding -- see
 #: INVALID_PERCENT_DISCOUNT_OVER_100 -- so not in ALL_CODES, and a Finding
 #: built with one is refused like any unregistered code.
-INVALID_CODES: tuple[str, ...] = (INVALID_PERCENT_DISCOUNT_OVER_100,)
+INVALID_CODES: tuple[str, ...] = (
+    INVALID_PERCENT_DISCOUNT_OVER_100,
+    INVALID_PLAN_TOO_LARGE,
+)
 
 
 @dataclass(frozen=True)

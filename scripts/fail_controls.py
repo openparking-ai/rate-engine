@@ -236,8 +236,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F12": (
         "tests/test_f12_a_decision_is_not_a_price.py",
         "contract.py",
-        "    outstanding_codes = {f.code for f in undecided(plan)}",
-        "    outstanding_codes = {f.code for f in validate_plan(plan)}  # PLANTED",
+        "    outstanding_codes = {f.code for f in undecided(plan, findings)}",
+        "    outstanding_codes = {f.code for f in findings}  # PLANTED",
         "the split collapses -- every finding reports as outstanding whatever the "
         "owner recorded, so decisions[] is write-only again and `undecided()` is "
         "back to being called by nothing",
@@ -847,11 +847,12 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "at a rate that takes effect in July, and an instant before every set is "
         "taxed instead of refused",
     ),
+    # Re-anchored in F68 (one pass by instant, not every pair); same defect.
     "F43/same-instant": (
         "tests/test_f43_the_tax_set_in_force_is_chosen_by_the_instant.py",
         "tax.py",
-        "            if first.effective_from == second.effective_from:",
-        "            if False:  # PLANTED: two sets at one instant load",
+        "        if first is not second:",
+        "        if False:  # PLANTED: two sets at one instant load",
         "two sets taking effect at the same instant both load, so which one is in "
         "force is decided by their order in the list",
     ),
@@ -1575,6 +1576,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
     # unchanged.
+    # Re-anchored in F67 (the work budget and the deadline sit between the
+    # conflicts and the pricing) and F70 (the calendar check after the limit);
+    # the plant still drops them with the rest, so the defect is unchanged.
     "F62/after-the-work": (
         "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
         "engine.py",
@@ -1582,6 +1586,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if too_long is not None:\n"
         "        # First of all, before a plan is read or a day walked (F62).\n"
         "        raise Refused([too_long])\n"
+        "    _refuse_beyond_the_calendar(stay)\n"
         "    plan = select_plan(plans, stay)\n"
         "    # Which rules qualify, asked once for the whole quote (`_Qualified`).\n"
         "    qualified = _Qualified(plan, stay)\n"
@@ -1589,6 +1594,11 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)\n"
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
+        "    too_much = _over_work_budget(plan, stay, qualified)\n"
+        "    if too_much is not None:\n"
+        "        # Before any way is priced, so refusing costs what counting does.\n"
+        "        raise Refused([too_much])\n"
+        "    qualified.deadline = monotonic() + QUOTE_DEADLINE_SECONDS\n"
         "\n"
         "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
         "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
@@ -1773,6 +1783,194 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     # And the special against the time-based rate under `stated_order` (F50,
     # F63): the early return the old comparison made for that mode, put back.
     # The planted call passes `qualified` since F64; the defect is unchanged.
+    # OP-6-1: the validator's work, bounded.
+    "F65": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "validator.py",
+        "    _refuse_if_too_large(plan)\n",
+        "    pass  # PLANTED: the probe budget is not checked\n",
+        "a plan of a hundred event-day specials is validated probe by probe, about "
+        "400,000 of them, instead of being refused before the first",
+    ),
+    "F65/validated-twice": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "contract.py",
+        "    outstanding_codes = {f.code for f in undecided(plan, findings)}",
+        "    outstanding_codes = {f.code for f in undecided(plan)}  # PLANTED: twice",
+        "a validate-plan request runs every probe twice, once for the findings and "
+        "once more for the ones still outstanding",
+    ),
+    "F65/rule-limit": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "plan.py",
+        "    if len(raw_rules) > MAX_RULES_PER_PLAN:\n",
+        "    if False:  # PLANTED: any number of rules loads\n",
+        "a plan with any number of rules loads",
+    ),
+    "F65/pool": (
+        "tests/test_op6_1_validation_is_bounded.py",
+        "service.py",
+        "            runner = _one_of_few_validations\n",
+        "            pass  # PLANTED: every validation runs at once\n",
+        "any number of validations run at once over HTTP, each slowing every quote "
+        "in the process",
+    ),
+    # OP-6-2: only the version in force at entry is loaded.
+    "F66": (
+        "tests/test_op6_2_only_the_version_in_force_is_loaded.py",
+        "contract.py",
+        "        for i in _versions_to_load(raw_plans, entry_at)\n",
+        "        for i in range(len(raw_plans))  # PLANTED: every version is loaded\n",
+        "every stored version is loaded before the one in force is chosen, so one "
+        "that no longer loads fails every quote for the garage",
+    ),
+    # OP-6-3: a quote's work, counted and bounded.
+    "F67": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "engine.py",
+        "    too_much = _over_work_budget(plan, stay, qualified)\n",
+        "    too_much = None  # PLANTED: the work is not counted\n",
+        "a quote of 300 specials beside eight daily and eight weekly caps on a "
+        "90-day stay runs for tens of seconds instead of being refused",
+    ),
+    "F67/cap-day-weight": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py::"
+        "test_the_slowest_quote_inside_the_budget_is_priced_quickly",
+        "engine.py",
+        '    "daily_day_timed": 45,\n    "weekly_day_timed": 8,\n    "pair_day_timed": 35,\n',
+        '    "daily_day_timed": 1,  # PLANTED: a day of a cap\'s walk costs a rule read\n'
+        '    "weekly_day_timed": 1,\n    "pair_day_timed": 1,\n',
+        "a day of a cap's walk beside a time-based way is counted as one rule read, so "
+        "caps on a long stay fit the budget with many ways and a quote takes seconds",
+    ),
+    "F67/adjust-weight": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py::"
+        "test_the_slowest_quote_inside_the_budget_is_priced_quickly",
+        "engine.py",
+        '    "adjust": 55,\n',
+        '    "adjust": 1,  # PLANTED: a discount costs a rule read\n',
+        "a discount that applies is counted as one rule read, so 1,000 specials "
+        "beside 999 discounts fit the budget and a quote takes ten seconds",
+    ),
+    "F67/deadline": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "engine.py",
+        "    if qualified.deadline is not None and monotonic() > qualified.deadline:\n",
+        "    if False:  # PLANTED: no deadline between passes\n",
+        "a quote whose shape costs more than was measured runs for as long as it "
+        "takes, past the deadline",
+    ),
+    "F67/deadline-retryable": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "contract.py",
+        "        # Stopped by the clock, not refused: busy, try again (F67).\n"
+        "        return 503, busy_response(exc)\n",
+        "        # PLANTED: a busy engine answers like a gap, and the car goes to an operator\n"
+        '        return 422, {"schema_version": SCHEMA_VERSION, "refused": True, '
+        '"error": str(exc)}\n',
+        "a quote stopped by the clock is answered as a refusal, so the platform closes "
+        "the stay unpriced instead of trying again a moment later",
+    ),
+    "F67/retry-after": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "service.py",
+        '            self.send_header("Retry-After", str(RETRY_AFTER_SECONDS))\n',
+        "            pass  # PLANTED: a 503 does not say when to try again\n",
+        "a 503 over HTTP carries no Retry-After, so a caller cannot tell busy from broken",
+    ),
+    "F67/cap-limit": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "plan.py",
+        "    if caps > MAX_CAP_RULES_PER_PLAN:\n",
+        "    if False:  # PLANTED: any number of caps loads\n",
+        "a plan with any number of daily and weekly caps loads",
+    ),
+    # OP-6-4: tax sets loaded in one pass, and bounded.
+    "F68": (
+        "tests/test_op6_4_tax_sets_load_in_one_pass.py",
+        "tax.py",
+        "        first = first_at.setdefault(second.effective_from, second)\n"
+        "        if first is not second:\n",
+        "        for first in sets[:sets.index(second)]:  # PLANTED: every pair compared\n"
+        "            if first.effective_from != second.effective_from:\n"
+        "                continue\n",
+        "every pair of tax sets is compared, so a statement of ten thousand sets "
+        "takes the square of that",
+    ),
+    "F68/set-limit": (
+        "tests/test_op6_4_tax_sets_load_in_one_pass.py",
+        "tax.py",
+        "    if len(document) > MAX_TAX_SETS:\n",
+        "    if False:  # PLANTED: any number of tax sets loads\n",
+        "a statement with any number of tax sets loads",
+    ),
+    # OP-6-5: a whole-request deadline and a bounded set of threads.
+    "F69": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        self.rfile = io.BufferedReader(_ReadByDeadline(self.connection, deadline, "
+        "self.timeout))\n",
+        "        pass  # PLANTED: each read is timed on its own\n",
+        "a caller trickling its request a byte at a time holds its thread for as "
+        "long as it likes, since no single read waits out the per-read timeout",
+    ),
+    "F69/stalled": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        self._connection.settimeout(min(left, self._per_read))\n",
+        "        self._connection.settimeout(self._per_read)  # PLANTED: not the time left\n",
+        "a read waits the whole per-read timeout rather than the time left, so a "
+        "caller that sends half a request and goes silent holds its thread for the "
+        "deadline and 30 s more",
+    ),
+    "F69/pool": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        if not self._slots.acquire(blocking=False):\n",
+        "        if False:  # PLANTED: every connection gets a thread\n",
+        "every connection gets a thread of its own, however many are open",
+    ),
+    # OP-6-6: every request is answered.
+    "F70": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "engine.py",
+        "    _refuse_beyond_the_calendar(stay)\n",
+        "    pass  # PLANTED: a stay at the end of the calendar is priced\n",
+        "a short stay in year 9999 is priced, and the day arithmetic runs off the "
+        "calendar",
+    ),
+    "F70/overflow": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "contract.py",
+        "        except OverflowError as exc:\n",
+        "        except ZeroDivisionError as exc:  # PLANTED: an overflow escapes\n",
+        "an overflow deep in the date arithmetic escapes the door, and HTTP answers "
+        "nothing",
+    ),
+    "F70/deep-body": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "service.py",
+        "        except RecursionError:\n            # Inside the 1 MiB bound",
+        "        except ZeroDivisionError:  # PLANTED\n            # Inside the 1 MiB bound",
+        "a body nested deeper than the parser recurses crashes the request",
+    ),
+    "F70/500": (
+        "tests/test_op6_6_every_request_is_answered.py",
+        "service.py",
+        "        except Exception:\n            if self._answered:\n",
+        "        except ZeroDivisionError:  # PLANTED: a bug drops the connection\n"
+        "            if self._answered:\n",
+        "a failure that is not a refusal drops the connection with no answer",
+    ),
+    # OP-6-7: a tax rate is bounded.
+    "F71": (
+        "tests/test_op6_7_a_tax_rate_is_at_most_100_percent.py",
+        "tax.py",
+        "    if percent_bp > MAX_TAX_PERCENT_BP:\n",
+        "    if False:  # PLANTED: any tax rate loads\n",
+        "a tax rule of any number of basis points loads, and taxes a stay many "
+        "times over",
+    ),
     "F50/stated-order-replaces": (
         "tests/test_f50_the_cheaper_way_is_charged.py",
         "engine.py",

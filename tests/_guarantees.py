@@ -50,7 +50,12 @@ GUARANTEES: dict[str, str] = {
     ),
     "F5": (
         "Determinism. The same plan version and the same stay produce the same fee "
-        "AND the same breakdown, always, on any machine and at any wall-clock time."
+        "AND the same breakdown, on any machine and at any wall-clock time -- with one "
+        "exception, which is never a price: a quote still pricing at "
+        "`QUOTE_DEADLINE_SECONDS` is stopped and answered 503, try again (F67), and on "
+        "a busy machine that can happen to a plan near `MAX_QUOTE_WORK`. Whenever a "
+        "quote is answered with a fee or a refusal, that answer never depends on the "
+        "machine or the clock."
     ),
     "F6": (
         "The test function IS the production path. `/v1/quote` and the CLI emit the "
@@ -498,8 +503,62 @@ GUARANTEES: dict[str, str] = {
         "found by its id and two rules are never compared field by field, a special "
         "that did not qualify is asked for its line once, and a way at most three "
         "times. 400 qualifying specials beside 400 that do not, on a 90-day stay with "
-        "a daily and a weekly max, are priced within a fixed time budget. No limit is "
-        "set on the rules a plan may hold or the ways a stay may have."
+        "a daily and a weekly max, are priced within a fixed time budget. The rules a "
+        "plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65)."
+    ),
+    "F65": (
+        "`validate-plan` does a bounded amount of work. Its probe stays times the plan's "
+        "rules are counted before one probe is built, and a plan over "
+        "`MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run "
+        "nothing; the probes are then made one at a time and the findings computed once "
+        "a request. A plan with more rules, space classes or dates than the published limits allow "
+        "does not load, by the same code. Over HTTP, at most "
+        "`MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once."
+    ),
+    "F66": (
+        "A quote loads only the plan version in force at entry, chosen by "
+        "`effective_from` before any version is loaded. A stored version that no "
+        "longer loads, or is too large to, refuses no stay it does not price; a tie "
+        "at the chosen instant is still refused as ambiguous, and two versions "
+        "sharing a `plan_version` are still refused."
+    ),
+    "F67": (
+        "A quote does a bounded amount of work. A plan holds at most "
+        "`MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is "
+        "counted, every pass and every step weighted by what it was measured to cost "
+        "(the published table), and a stay over `MAX_QUOTE_WORK` is refused, 422 "
+        "`GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. A quote "
+        "still pricing at `QUOTE_DEADLINE_SECONDS` begins no further pass and is "
+        "answered 503 with `Retry-After`: busy, not refused, so the stay is tried again "
+        "rather than sent to an operator. The largest plan inside the budget, for each shape the "
+        "tests generate -- specials, time-based ways, discounts, surcharges, the fill "
+        "rule and caps, on stays from two hours to 90 days -- is priced within a fixed "
+        "time; the largest stress plan the tests price is inside it, and prices as "
+        "before."
+    ),
+    "F68": (
+        "A garage's tax sets load in one pass: two taking effect at one instant are "
+        "found by the instant, not by comparing every pair, and are still refused, "
+        "both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most "
+        "`MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit."
+    ),
+    "F69": (
+        "A caller holds an HTTP thread for a bounded time and the threads are "
+        "bounded. The whole request must arrive within `REQUEST_DEADLINE_SECONDS`, "
+        "however slowly it trickles in, or the connection is closed; at most "
+        "`MAX_CONNECTIONS` are served at once, and one more is answered 503 at once."
+    ),
+    "F70": (
+        "Every request is answered. A stay outside the years `EARLIEST_YEAR` to "
+        "`LATEST_YEAR`, or a special dated outside them, is a 400 naming the field, "
+        "after the 90-day limit; a document nested too deeply to read, or an instant "
+        "or length too far out to compute with, is a 400 on every door; over HTTP, "
+        "any other failure is a 500 that carries nothing of the request."
+    ),
+    "F71": (
+        "A tax rate is at most 100% of the money paid: a tax rule whose `percent_bp` "
+        "is over `MAX_TAX_PERCENT_BP` does not load, 400, naming the field. A rate of "
+        "exactly 100% loads and is taken in full."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

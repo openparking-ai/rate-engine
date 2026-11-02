@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 
 from .breakdown import Ledger, Line
 from .findings import (
@@ -36,12 +37,14 @@ from .findings import (
     GAP_NO_ACCUMULATE_RULE,
     GAP_NO_OCCUPANCY_AT_ENTRY,
     GAP_NO_PLAN_IN_FORCE_AT_ENTRY,
+    GAP_QUOTE_OVER_WORK_BUDGET,
     GAP_STAY_EXCEEDS_MAX_DURATION,
     GAP_STAY_LONGER_THAN_MAX_STAY,
     GAP_UNDECLARED_SPACE_CLASS,
     Finding,
     Refused,
 )
+from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK, QUOTE_DEADLINE_SECONDS
 from .percent import percent_text
 from .plan import InvalidPlan, Plan
 from .rules import (
@@ -130,6 +133,9 @@ class _Qualified:
         self._at: dict[str, tuple] = {}
         self._ids: dict[str, frozenset[str]] = {}
         self._why_not: dict[str, list[Line]] = {}
+        #: A `monotonic()` reading past which no further pass is begun (F67),
+        #: set by `quote`; None asks nothing.
+        self.deadline: float | None = None
 
     def rules(self, stage: str) -> tuple:
         """The plan's rules at `stage`, in plan order, qualified or not."""
@@ -470,7 +476,8 @@ FULL_BP = 10_000
 #: stay -- a stay running to the year 9999 took fifteen seconds of CPU -- and
 #: the limit is checked before the plan is even read (F62). It does not bound
 #: the rest: a quote prices the stay once for each way of pricing it, so its
-#: work also grows with the ways the plan offers (F64).
+#: work also grows with the ways the plan offers (F64). `MAX_QUOTE_WORK` bounds
+#: that product, counted before any way is priced (F67).
 MAX_STAY_DAYS = 90
 
 #: Minutes in a day of 24 hours.
@@ -511,6 +518,23 @@ def _longer_than_priced(stay: Stay) -> Finding | None:
             "not priced and nothing was guessed -- an operator prices it"
         ),
     )
+
+
+def _refuse_beyond_the_calendar(stay: Stay) -> None:
+    """Refuse, as a bad request, a stay outside `EARLIEST_YEAR`..`LATEST_YEAR`.
+
+    Asked after the 90-day limit, so a stay from year 1 to year 9999 is still
+    refused for its length (F62). A short stay near either end of the calendar
+    is not one any garage prices, and its days and weeks would be worked out
+    past the last date a `datetime` holds: that crashed the request, with no
+    answer at all.
+    """
+    for label, instant in (("entry_at", stay.entry_at), ("exit_at", stay.exit_at)):
+        if not EARLIEST_YEAR <= instant.year <= LATEST_YEAR:
+            raise InvalidPlan(
+                f"{label} {instant.isoformat()} is outside the years this engine prices "
+                f"a stay in, {EARLIEST_YEAR} to {LATEST_YEAR}."
+            )
 
 
 def make_stay(
@@ -801,6 +825,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     if too_long is not None:
         # First of all, before a plan is read or a day walked (F62).
         raise Refused([too_long])
+    _refuse_beyond_the_calendar(stay)
     plan = select_plan(plans, stay)
     # Which rules qualify, asked once for the whole quote (`_Qualified`).
     qualified = _Qualified(plan, stay)
@@ -808,6 +833,11 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     blocking = find_gaps(plan, stay, qualified) + find_conflicts(plan, stay, qualified)
     if blocking:
         raise Refused(blocking)
+    too_much = _over_work_budget(plan, stay, qualified)
+    if too_much is not None:
+        # Before any way is priced, so refusing costs what counting does.
+        raise Refused([too_much])
+    qualified.deadline = monotonic() + QUOTE_DEADLINE_SECONDS
 
     ledger = _the_cheapest_way(plan, stay, qualified)
 
@@ -830,6 +860,140 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     )
 
 
+#: What a quote's work costs, in counted steps of about 0.2 microseconds, by
+#: what each step does (F67). Measured, one pricing pass at a time, on plans
+#: that multiply each kind of rule; every weight is at or above what was
+#: measured, so the count is an upper bound and the slowest quote within
+#: `MAX_QUOTE_WORK` takes about 0.6 s. Counting every rule as one step was
+#: wrong by fifty times for a discount: 1,000 specials beside 999 of them fit
+#: the budget and took 10.8 s.
+PASS_COSTS: dict[str, int] = {
+    # Once a pass, whatever the plan: the way priced, the ledger begun.
+    "pass": 500,
+    # Each rule, every pass, by what it does there.
+    "rule": 1,
+    "special_not_qualified": 8,
+    "adjust": 55,
+    "adjust_not_qualified": 30,
+    "surcharge": 20,
+    "surcharge_not_qualified": 10,
+    # Once a quote, for each way that lost: its line on the receipt.
+    "resolved": 50,
+    # Each cap, and each weekly cap beside each daily cap, every pass; then each
+    # day a cap walks, every pass. A pass whose way prices the time by the
+    # period (a time-based rate, or a special with a `rate` effect) splits the
+    # charge by the day and costs several times what a flat special's does.
+    "cap_timed": 140,
+    "cap_pair_timed": 45,
+    "daily_day_timed": 45,
+    "weekly_day_timed": 8,
+    "pair_day_timed": 35,
+    "cap_flat": 100,
+    "cap_pair_flat": 35,
+    "daily_day_flat": 6,
+    "weekly_day_flat": 2,
+    "pair_day_flat": 13,
+}
+
+
+def _priced_by_the_period(rule) -> bool:
+    """Whether a way prices the time by the period, which the caps then split."""
+    if rule.stage == ACCUMULATE:
+        return True
+    effect = rule.params.get("effect")
+    return isinstance(effect, dict) and effect.get("kind") == "rate"
+
+
+def quote_work(plan: Plan, stay: Stay, qualified: _Qualified) -> int:
+    """How much work pricing this stay would take, counted before any of it.
+
+    `_the_cheapest_way` prices the stay once for each way plus once more for
+    the receipt, and each pass reads every rule, applies the ones that qualify
+    and has every cap walk the stay a day at a time -- a weekly cap walking each
+    daily cap's days again inside each week. Each of those is weighted by what
+    it was measured to cost (`PASS_COSTS`), the receipt's pass counted as the
+    dearest way's. With a fill rule beside other ADJUST rules, every order of
+    them is priced on each pass (`_adjusted`), so that pass applies them about
+    twice their number of times over. An upper bound, read from the counts.
+    """
+    costs = PASS_COSTS
+    ways = list(qualified.at(QUALIFY)) + list(qualified.at(ACCUMULATE))
+
+    rules = 0
+    for rule in plan.rules:
+        applies = qualified.has(rule)
+        if rule.stage == ADJUST:
+            rules += costs["adjust"] if applies else costs["adjust_not_qualified"]
+        elif rule.stage == SURCHARGE:
+            rules += costs["surcharge"] if applies else costs["surcharge_not_qualified"]
+        elif rule.stage == QUALIFY and not applies:
+            rules += costs["special_not_qualified"]
+        else:
+            rules += costs["rule"]
+
+    adjust = qualified.rules(ADJUST)
+    fills = [r for r in adjust if r.type == "fill_level" and qualified.has(r)]
+    others = len(adjust) - len(fills)
+    if fills and others:
+        orders = 3 + 2 * (others - 1)
+        rules += orders * (others + 1) * costs["adjust"]
+
+    caps = qualified.at(CAP)
+    daily = sum(1 for rule in caps if rule.type == "daily_max")
+    weekly = sum(1 for rule in caps if rule.type == "weekly_max")
+    days = stay.duration_minutes // MINUTES_IN_A_DAY + 2  # the days a stay can touch
+    fixed = costs["pass"] + rules
+
+    def walk(kind: str) -> int:
+        each_pass = len(caps) * costs[f"cap_{kind}"] + weekly * daily * costs[f"cap_pair_{kind}"]
+        return each_pass + days * (
+            daily * costs[f"daily_day_{kind}"]
+            + weekly * costs[f"weekly_day_{kind}"]
+            + weekly * daily * costs[f"pair_day_{kind}"]
+        )
+
+    timed, flat = fixed + walk("timed"), fixed + walk("flat")
+    passes = [timed if _priced_by_the_period(way) else flat for way in ways]
+    receipt = max(passes, default=timed)
+    return sum(passes) + receipt + len(ways) * costs["resolved"]
+
+
+def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding | None:
+    """The refusal for a quote over `MAX_QUOTE_WORK`, or None (OP-6-3)."""
+    work = quote_work(plan, stay, qualified)
+    if work <= MAX_QUOTE_WORK:
+        return None
+    return Finding(
+        code=GAP_QUOTE_OVER_WORK_BUDGET,
+        text=(
+            f"pricing this stay on plan {plan.plan_version} would take {work} steps -- "
+            "every way it can be priced, through every rule and every day its caps walk "
+            f"-- and this engine prices within {MAX_QUOTE_WORK}: it was not priced and "
+            "nothing was guessed -- an operator prices it"
+        ),
+    )
+
+
+class QuoteTooLong(Exception):
+    """A quote still pricing at `QUOTE_DEADLINE_SECONDS`, stopped between passes.
+
+    Not a refusal of the stay. The work was counted and is within
+    `MAX_QUOTE_WORK`; the clock ran out because the machine was busy -- a few
+    large quotes at once are enough -- or slower than the budget assumes. The
+    same request may well price a moment later, so the doors answer 503 with
+    `Retry-After`, never the 422 gap that sends a car to an operator (F67).
+    """
+
+
+def _past_the_deadline(plan: Plan) -> QuoteTooLong:
+    return QuoteTooLong(
+        f"pricing this stay on plan {plan.plan_version} was still running after "
+        f"{QUOTE_DEADLINE_SECONDS} s, this engine's deadline for a quote, and was stopped "
+        "between two of its passes: nothing was priced and nothing was guessed. The "
+        "engine was busy; try again in a moment."
+    )
+
+
 def _priced(
     plan: Plan, stay: Stay, base, qualified: _Qualified, compared: _Compared | None = None
 ) -> Ledger:
@@ -846,6 +1010,8 @@ def _priced(
     Which rules qualify is `qualified`, the quote's own, asked once for every
     pass: a pass asks no rule whether it qualifies, and finds a rule by its id.
     """
+    if qualified.deadline is not None and monotonic() > qualified.deadline:
+        raise _past_the_deadline(plan)
     ledger = Ledger()
     entry_local = stay.entry_at.astimezone(plan.timezone)
     ledger.add(

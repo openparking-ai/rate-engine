@@ -16,17 +16,21 @@ operator believes is live ends up pricing something else.
 
 from __future__ import annotations
 
+import functools
 import json
 import textwrap
+import time
+from collections.abc import Callable
 from typing import Any
 
 from .breakdown import Ledger
-from .engine import Quote, Stay, make_stay, max_stay_minutes, quote
+from .engine import Quote, QuoteTooLong, Stay, make_stay, max_stay_minutes, quote
 from .findings import Refused
+from .limits import VALIDATION_DEADLINE_SECONDS
 from .money import NotMinorUnits
 from .plan import InvalidPlan, load_plan, parse_instant
 from .tax import load_tax_sets, tax_lines
-from .validator import undecided, validate_plan
+from .validator import ValidationTooLong, undecided, validate_plan
 
 #: **2 in A2, and the bump is not decoration.** A plan written for version 1 does
 #: not load on this version: the `early_bird` rule type is gone, and an unknown
@@ -100,7 +104,16 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
     raw_plans = body["plans"]
     if not isinstance(raw_plans, list) or not raw_plans:
         raise InvalidPlan("request.plans must be a non-empty list of plan documents.")
-    plans = [load_plan(p, f"request.plans[{i}]") for i, p in enumerate(raw_plans)]
+    entry_at = parse_instant(body["entry_at"], "request.entry_at")
+    exit_at = parse_instant(body["exit_at"], "request.exit_at")
+    # Only the version in force at entry is LOADED: the rest are read for their
+    # `effective_from` and their name and nothing else, so a garage's old or
+    # future version that no longer loads -- or is too large to -- refuses no
+    # stay it does not price.
+    plans = [
+        load_plan(raw_plans[i], f"request.plans[{i}]")
+        for i in _versions_to_load(raw_plans, entry_at)
+    ]
 
     currency = body["currency"]
     wrong = sorted({p.currency for p in plans if p.currency != currency})
@@ -110,17 +123,45 @@ def parse_quote_request(document: object) -> tuple[list, Stay]:
             "The engine will not convert; a rate quoted in the wrong currency is a "
             "wrong number that looks right."
         )
-    versions = [p.plan_version for p in plans]
-    if len(set(versions)) != len(versions):
+    names = [raw.get("plan_version") for raw in raw_plans]
+    names = [name for name in names if isinstance(name, str)]
+    if len(set(names)) != len(names):
         raise InvalidPlan("request.plans contains two versions with the same plan_version.")
 
     stay = make_stay(
-        parse_instant(body["entry_at"], "request.entry_at"),
-        parse_instant(body["exit_at"], "request.exit_at"),
+        entry_at,
+        exit_at,
         body["space_class"],
         body.get("occupancy_at_entry_bp"),
     )
     return plans, stay
+
+
+def _versions_to_load(raw_plans: list, entry_at) -> list[int]:
+    """Where in `raw_plans` the version `engine.select_plan` will choose sits.
+
+    Chosen by `effective_from` alone, before anything else is read: the latest
+    at or before entry, and every version sharing that instant, so a tie is
+    still refused as ambiguous by `select_plan`, naming them all. With none in
+    force, the earliest, so the refusal still names when the first takes effect.
+    A version whose `effective_from` cannot be read cannot be placed, and is
+    refused by name: whether it is the one in force would be a guess.
+    """
+    dated = []
+    for i, raw in enumerate(raw_plans):
+        where = f"request.plans[{i}]"
+        if not isinstance(raw, dict):
+            raise InvalidPlan(f"{where} must be an object, got {type(raw).__name__}.")
+        if "effective_from" not in raw:
+            raise InvalidPlan(
+                f"{where} is missing required field(s): effective_from. Without it the "
+                "version in force at entry cannot be chosen.",
+                missing_keys=("effective_from",),
+            )
+        dated.append((parse_instant(raw["effective_from"], f"{where}.effective_from"), i))
+    in_force = [(at, i) for at, i in dated if at <= entry_at]
+    chosen = max(at for at, _ in in_force) if in_force else min(at for at, _ in dated)
+    return [i for at, i in dated if at == chosen]
 
 
 def parse_validate_request(document: object):
@@ -199,6 +240,25 @@ def invalid_response(error: Exception) -> dict[str, Any]:
     return body
 
 
+#: Seconds a caller is told to wait before asking again after a 503. Sent as
+#: `retry_after_seconds` in the body and, over HTTP, as `Retry-After`.
+RETRY_AFTER_SECONDS = 1
+
+
+def busy_response(error: Exception) -> dict[str, Any]:
+    """503: the engine was too busy to answer, and nothing was priced or refused.
+
+    `retry` says the same request may be sent again as it is. A stay is never
+    closed unpriced on one of these: that is what a 422 refusal is for.
+    """
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "error": str(error),
+        "retry": True,
+        "retry_after_seconds": RETRY_AFTER_SECONDS,
+    }
+
+
 def validate_response(plan) -> dict[str, Any]:
     """Every finding, split into the ones the owner still has to look at and the
     ones they have already acknowledged.
@@ -225,8 +285,9 @@ def validate_response(plan) -> dict[str, Any]:
     setup already asks for, so the setup can show the owner that a longer stay
     is refused, GAP_STAY_LONGER_THAN_MAX_STAY, and needs an operator.
     """
-    findings = validate_plan(plan)
-    outstanding_codes = {f.code for f in undecided(plan)}
+    findings = validate_plan(plan, deadline=time.monotonic() + VALIDATION_DEADLINE_SECONDS)
+    # The same findings, not a second run of every probe.
+    outstanding_codes = {f.code for f in undecided(plan, findings)}
     serialized = [
         {**f.to_json(), "decided": f.code not in outstanding_codes} for f in findings
     ]
@@ -272,6 +333,35 @@ def tax_response(lines) -> dict[str, Any]:
     }
 
 
+def _a_400_not_a_crash(run: Callable) -> Callable:
+    """A door that answers a document nested too deeply to walk, or carrying an
+    instant or a length too far out to compute with, with a 400 and a sentence.
+
+    Both were raised from deep inside the work -- `RecursionError` from walking
+    a plan's leaves, `OverflowError` from date arithmetic past year 9999 -- and
+    neither is a bug in the engine or a price: it is a request no garage sends.
+    Uncaught, the HTTP door dropped the connection and answered nothing.
+    """
+
+    @functools.wraps(run)
+    def guarded(document: object) -> tuple[int, dict[str, Any]]:
+        try:
+            return run(document)
+        except RecursionError:
+            return 400, invalid_response(InvalidPlan(
+                "the request is nested too deeply to read. A plan, a stay and a tax "
+                "statement are a few levels deep."
+            ))
+        except OverflowError as exc:
+            return 400, invalid_response(InvalidPlan(
+                f"the request carries a date, time or length too far from today to "
+                f"compute with ({exc})."
+            ))
+
+    return guarded
+
+
+@_a_400_not_a_crash
 def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     """Parse, price, serialize -- the whole of `/v1/quote` and of `rate-engine quote`.
 
@@ -287,7 +377,8 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     a `TypeError` too, and each one would come back to an operator as "your plan
     is invalid", which is a confident wrong answer in a module whose standing
     acceptance is that it is never wrong silently. The refusal is named; the bug
-    is still allowed to crash.
+    is still allowed to crash -- and over HTTP it is answered 500, saying only
+    that nothing was priced, rather than with a dropped connection (F70).
     """
     try:
         plans, stay = parse_quote_request(document)
@@ -295,20 +386,39 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
         return 400, invalid_response(exc)
     try:
         return 200, quote_response(quote(plans, stay))
+    except InvalidPlan as exc:
+        # A stay outside the years priced, refused after its length (F62, F70).
+        return 400, invalid_response(exc)
+    except QuoteTooLong as exc:
+        # Stopped by the clock, not refused: busy, try again (F67).
+        return 503, busy_response(exc)
     except Refused as refused:
         # 422: the request was well-formed and the plan cannot price it. That is
         # not a server error and not a bad request -- it is the module working.
         return 422, refusal_response(refused)
 
 
+@_a_400_not_a_crash
 def run_validate(document: object) -> tuple[int, dict[str, Any]]:
+    """The whole of `/v1/validate-plan` and of `rate-engine validate-plan`.
+
+    A plan too large to probe is a 400 with `INVALID_PLAN_TOO_LARGE`, refused
+    before a probe runs. A validation abandoned at its deadline is a 503: the
+    plan was within the budget, and the machine was slower than it assumes.
+    """
     try:
         plan = parse_validate_request(document)
     except (InvalidPlan, NotMinorUnits, ValueError) as exc:
         return 400, invalid_response(exc)
-    return 200, validate_response(plan)
+    try:
+        return 200, validate_response(plan)
+    except InvalidPlan as exc:
+        return 400, invalid_response(exc)
+    except ValidationTooLong as exc:
+        return 503, busy_response(exc)
 
 
+@_a_400_not_a_crash
 def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
     """The whole of `/v1/validate-tax-sets` and of `rate-engine validate-tax-sets`.
 
@@ -324,6 +434,7 @@ def run_validate_tax_sets(document: object) -> tuple[int, dict[str, Any]]:
     return 200, validate_tax_sets_response(sets)
 
 
+@_a_400_not_a_crash
 def run_tax(document: object) -> tuple[int, dict[str, Any]]:
     """The whole of `/v1/tax` and of `rate-engine tax`.
 

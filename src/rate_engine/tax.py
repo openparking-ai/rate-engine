@@ -43,6 +43,7 @@ from datetime import datetime
 from .breakdown import Line
 from .currency import is_known
 from .findings import GAP_NO_TAX_SET_IN_FORCE, Finding, Refused
+from .limits import MAX_TAX_PERCENT_BP, MAX_TAX_RULES_PER_SET, MAX_TAX_SETS
 from .money import as_non_negative_minor, format_minor, refuse_non_integer_money
 from .percent import (
     BASIS_POINTS_PER_WHOLE,
@@ -110,6 +111,12 @@ def _rule(raw: object, where: str) -> TaxRule:
             "operator both read on the line."
         )
     percent_bp = _whole(raw["percent_bp"], f"{where}.percent_bp", positive=True)
+    if percent_bp > MAX_TAX_PERCENT_BP:
+        raise InvalidPlan(
+            f"{where}.percent_bp is {percent_bp}; a tax is at most {MAX_TAX_PERCENT_BP} "
+            "basis points, 100% of the money paid. A basis point is a hundredth of a "
+            "percent: 8% is 800 and 100% is 10000."
+        )
     rounding = raw["rounding"]
     if rounding not in TAX_ROUNDINGS:
         raise InvalidPlan(
@@ -133,6 +140,12 @@ def _set(raw: object, where: str) -> TaxSet:
         raise InvalidPlan(
             f"{where}.rules must be a list. An EMPTY list is how a garage states that "
             "it charges no tax from this set's effective_from."
+        )
+    if len(raw_rules) > MAX_TAX_RULES_PER_SET:
+        raise InvalidPlan(
+            f"{where}.rules holds {len(raw_rules)} rules; a tax set holds at most "
+            f"{MAX_TAX_RULES_PER_SET}. Refused whole rather than read in part: a tax "
+            "left out would be a charge nobody stated."
         )
     rules = tuple(_rule(r, f"{where}.rules[{i}]") for i, r in enumerate(raw_rules))
 
@@ -169,19 +182,28 @@ def load_tax_sets(document: object, where: str = "tax_sets") -> tuple[TaxSet, ..
             "tax states a set with no rules; a garage that has stated nothing has "
             "not said it charges no tax."
         )
+    if len(document) > MAX_TAX_SETS:
+        raise InvalidPlan(
+            f"{where} holds {len(document)} tax sets; this engine loads at most "
+            f"{MAX_TAX_SETS}. Refused whole rather than read in part: the set in force "
+            "could be one left out."
+        )
     sets = tuple(_set(raw, f"{where}[{i}]") for i, raw in enumerate(document))
 
     # Compared as INSTANTS: `10:00-05:00` and `15:00+00:00` are one moment, and two
     # sets taking effect then are ambiguous whichever way the offsets are written.
-    for i, first in enumerate(sets):
-        for second in sets[i + 1:]:
-            if first.effective_from == second.effective_from:
-                raise InvalidPlan(
-                    f"{first.where} and {second.where} both take effect at "
-                    f"{first.effective_from.isoformat()}. Which one is in force would "
-                    "be decided by their order in the list, and this module does not "
-                    "decide money by list order: refused, both named."
-                )
+    # An aware datetime hashes by its instant, so one pass finds them; comparing
+    # every pair took the square of the sets.
+    first_at: dict[datetime, TaxSet] = {}
+    for second in sets:
+        first = first_at.setdefault(second.effective_from, second)
+        if first is not second:
+            raise InvalidPlan(
+                f"{first.where} and {second.where} both take effect at "
+                f"{first.effective_from.isoformat()}. Which one is in force would "
+                "be decided by their order in the list, and this module does not "
+                "decide money by list order: refused, both named."
+            )
     return sets
 
 
