@@ -114,8 +114,8 @@ def _rule(raw: object, where: str) -> TaxRule:
     if percent_bp > MAX_TAX_PERCENT_BP:
         raise InvalidPlan(
             f"{where}.percent_bp is {percent_bp}; a tax is at most {MAX_TAX_PERCENT_BP} "
-            "basis points, 100% of the money paid. A rate written as a percent rather "
-            "than in basis points is the usual cause: 8.875% is 888."
+            "basis points, 100% of the money paid. A basis point is a hundredth of a "
+            "percent: 8% is 800 and 100% is 10000."
         )
     rounding = raw["rounding"]
     if rounding not in TAX_ROUNDINGS:
