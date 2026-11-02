@@ -129,6 +129,16 @@ def _stay():
     return make_stay(parse_instant(ENTRY, "entry"), parse_instant(EXIT, "exit"), "standard")
 
 
+@pytest.fixture(autouse=True)
+def _the_quote_deadline_lifted(monkeypatch):
+    """This module times its own work against its own budget, and counts it.
+    The engine's one-second deadline between passes (F67) is a backstop on the
+    machine's clock: on a slower runner it would turn this module's timing into
+    a refusal, so it is lifted here. The work budget, which is not a clock, is
+    not."""
+    monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", 1e9)
+
+
 class _OverBudget(AssertionError):
     pass
 

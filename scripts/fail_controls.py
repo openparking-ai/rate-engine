@@ -1576,9 +1576,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     ),
     # Re-anchored in F64 (`quote` asks once which rules qualify); the defect is
     # unchanged.
-    # Re-anchored in F67 (the work budget sits between the conflicts and the
-    # pricing) and F70 (the calendar check after the limit); the plant still
-    # drops both with the rest, so the defect is unchanged.
+    # Re-anchored in F67 (the work budget and the deadline sit between the
+    # conflicts and the pricing) and F70 (the calendar check after the limit);
+    # the plant still drops them with the rest, so the defect is unchanged.
     "F62/after-the-work": (
         "tests/test_f62_a_stay_longer_than_90_days_is_refused_before_any_work.py",
         "engine.py",
@@ -1598,6 +1598,7 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if too_much is not None:\n"
         "        # Before any way is priced, so refusing costs what counting does.\n"
         "        raise Refused([too_much])\n"
+        "    qualified.deadline = monotonic() + QUOTE_DEADLINE_SECONDS\n"
         "\n"
         "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
         "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
@@ -1835,11 +1836,29 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F67/cap-day-weight": (
         "tests/test_op6_3_a_quote_does_bounded_work.py::"
         "test_the_slowest_quote_inside_the_budget_is_priced_quickly",
-        "limits.py",
-        "QUOTE_CAP_DAY_WEIGHT = 16\n",
-        "QUOTE_CAP_DAY_WEIGHT = 1  # PLANTED: a cap's day costs a rule read\n",
-        "a day of a cap's walk is counted as one rule read, so eight daily and eight "
-        "weekly caps fit the budget with 259 specials and a quote takes seconds",
+        "engine.py",
+        '    "daily_day_timed": 45,\n    "weekly_day_timed": 8,\n    "pair_day_timed": 35,\n',
+        '    "daily_day_timed": 1,  # PLANTED: a day of a cap\'s walk costs a rule read\n'
+        '    "weekly_day_timed": 1,\n    "pair_day_timed": 1,\n',
+        "a day of a cap's walk beside a time-based way is counted as one rule read, so "
+        "caps on a long stay fit the budget with many ways and a quote takes seconds",
+    ),
+    "F67/adjust-weight": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py::"
+        "test_the_slowest_quote_inside_the_budget_is_priced_quickly",
+        "engine.py",
+        '    "adjust": 55,\n',
+        '    "adjust": 1,  # PLANTED: a discount costs a rule read\n',
+        "a discount that applies is counted as one rule read, so 1,000 specials "
+        "beside 999 discounts fit the budget and a quote takes ten seconds",
+    ),
+    "F67/deadline": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "engine.py",
+        "    if qualified.deadline is not None and monotonic() > qualified.deadline:\n",
+        "    if False:  # PLANTED: no deadline between passes\n",
+        "a quote whose shape costs more than was measured runs for as long as it "
+        "takes, past the deadline",
     ),
     "F67/cap-limit": (
         "tests/test_op6_3_a_quote_does_bounded_work.py",

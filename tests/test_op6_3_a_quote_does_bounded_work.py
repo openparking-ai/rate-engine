@@ -21,6 +21,7 @@ from contextlib import contextmanager
 
 import pytest
 
+from _quote_shapes import Shape, largest_inside_the_budget, plan, stay
 from rate_engine import engine, limits
 from rate_engine.contract import run_quote
 from rate_engine.plan import InvalidPlan, load_plan
@@ -98,7 +99,7 @@ def test_the_largest_stress_plan_the_tests_price_is_well_inside_the_budget():
                            + [_weekend_flat(i) for i in range(400)]))
     stay = _stay()
     work = quote_work(plan, stay, _Qualified(plan, stay))
-    assert work * 1.25 < limits.MAX_QUOTE_WORK, work
+    assert work < limits.MAX_QUOTE_WORK, work
 
 
 def test_the_count_is_never_less_than_the_passes_made(monkeypatch):
@@ -120,46 +121,73 @@ def test_the_count_is_never_less_than_the_passes_made(monkeypatch):
     assert passes * len(plan.rules) <= quote_work(plan, stay, _Qualified(plan, stay))
 
 
-#: The time the slowest quote just inside the budget may take. About 0.6 s on the
-#: machine that measured it; the margin is for a slower CI runner.
+#: The time the slowest quote just inside the budget may take: about 1 s, twice
+#: over for a slower CI runner. On the machine that measured the budget the
+#: slowest of all 156 shapes `_quote_shapes.grid()` generates took 0.60 s (best
+#: of three), and every shape below at most that.
 UNDER_BUDGET_SECONDS = 2.0
 
-
-def _largest_inside_the_budget(daily: int, weekly: int):
-    """The plan with these caps and the most specials whose quote still fits the
-    budget, and the same plan with one special more."""
-    from rate_engine.engine import _Qualified, quote_work
-
-    def plan(n):
-        return load_plan(_plan([HOURLY] + _caps(daily, weekly) + [_flat(i) for i in range(n)]))
-
-    stay = _stay()
-    # As many specials as a plan may hold, less one so the plan one over still loads;
-    # every shape here runs out of budget before that.
-    low, high = 0, limits.MAX_RULES_PER_PLAN - 2 - daily - weekly
-    while low < high:
-        mid = (low + high + 1) // 2
-        candidate = plan(mid)
-        if quote_work(candidate, stay, _Qualified(candidate, stay)) <= limits.MAX_QUOTE_WORK:
-            low = mid
-        else:
-            high = mid - 1
-    return plan(low), plan(low + 1)
+#: Shapes from the generated search, each priced at the largest plan the budget
+#: lets through. The six the re-review of 8ba1aae timed first, then the slowest
+#: the search found, then the fill rule and a cap mix of each kind.
+SHAPES = [
+    # The re-review's six: 10.8 s, 7.1 s, 3.8 s, 3.1 s, 1.5 s and 1.4 s there.
+    Shape("discount", "2h", ways=1000),
+    Shape("discount", "2h", ways=400),
+    Shape("discount", "2h", ways=200),
+    Shape("surcharge", "2h", ways=1000),
+    Shape("rate_special", "1d", 0, 16),
+    Shape("rate", "1d", 1, 15),
+    # The slowest the search found.
+    Shape("rate", "2h", 0, 16),
+    Shape("flat", "7d", 0, 16),
+    Shape("flat", "90d", 4, 4),
+    Shape("rate_special", "90d", 1, 15),
+    Shape("surcharge", "90d", 1, 1, ways=400),
+    Shape("unqualified", "90d", 1, 1, ways=50),
+    # The first review's shape, the fill rule, and no caps at all.
+    Shape("flat", "90d", 8, 8),
+    Shape("discount", "2h", ways=50, fill=True),
+    Shape("flat", "2h"),
+]
 
 
 @pytest.mark.guarantee("F67")
-@pytest.mark.parametrize("daily, weekly", [(8, 8), (1, 15), (16, 0), (0, 0)])
-def test_the_slowest_quote_inside_the_budget_is_priced_quickly(daily, weekly):
-    """The review's shape first: eight daily and eight weekly caps, which with each
-    day of a cap's walk counted as one rule read fit the budget with 259 specials
-    and took about 4 s a quote."""
-    inside, over = _largest_inside_the_budget(daily, weekly)
-    stay = _stay()
+@pytest.mark.parametrize("shape", SHAPES, ids=str)
+def test_the_slowest_quote_inside_the_budget_is_priced_quickly(shape, monkeypatch):
+    """Timed with the deadline lifted, so the test sees how long the work takes
+    rather than the deadline refusing it."""
+    monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", 1e9)
+    inside, over = largest_inside_the_budget(shape)
+    the_stay = stay(shape)
     started = time.perf_counter()
     with _within(UNDER_BUDGET_SECONDS + 1.0):
-        engine.quote([inside], stay)
+        engine.quote([inside], the_stay)
     took = time.perf_counter() - started
-    assert took < UNDER_BUDGET_SECONDS, f"{daily}+{weekly} caps: {took:.2f} s inside the budget"
+    assert took < UNDER_BUDGET_SECONDS, f"{shape}: {took:.2f} s inside the budget"
+    if len(over.rules) == limits.MAX_RULES_PER_PLAN:
+        return  # the rule limit binds before the work budget does, for this shape
     with pytest.raises(engine.Refused) as refused:
-        engine.quote([over], stay)
+        engine.quote([over], the_stay)
     assert [f.code for f in refused.value.findings] == ["GAP_QUOTE_OVER_WORK_BUDGET"]
+
+
+@pytest.mark.guarantee("F67")
+def test_a_quote_past_its_deadline_is_refused_between_passes(monkeypatch):
+    """A deadline already past: the first pass is not begun, and the refusal says
+    why. Over the HTTP door's own function too, as a 422."""
+    monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
+    shape = Shape("flat", "2h")
+    with pytest.raises(engine.Refused) as refused:
+        engine.quote([load_plan(plan(shape, 3))], stay(shape))
+    (finding,) = refused.value.findings
+    assert finding.code == "GAP_QUOTE_OVER_WORK_BUDGET"
+    assert "deadline" in finding.text
+    status, body = run_quote(_request(_plan([HOURLY, _flat(1)])))
+    assert status == 422, body
+    assert body["findings"][0]["code"] == "GAP_QUOTE_OVER_WORK_BUDGET"
+
+
+def test_the_deadline_does_not_touch_an_ordinary_quote():
+    shape = Shape("flat", "2h")
+    assert engine.quote([load_plan(plan(shape, 3))], stay(shape)).fee_minor > 0

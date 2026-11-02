@@ -426,7 +426,7 @@ the owner which stays will need an operator.
 | `MAX_CONCURRENT_VALIDATIONS` | 2 |
 | `MAX_CAP_RULES_PER_PLAN` | 16 |
 | `MAX_QUOTE_WORK` | 3,000,000 |
-| `QUOTE_CAP_DAY_WEIGHT` | 16 |
+| `QUOTE_DEADLINE_SECONDS` | 1.0 |
 | `MAX_TAX_SETS` | 500 |
 | `MAX_TAX_RULES_PER_SET` | 64 |
 | `REQUEST_DEADLINE_SECONDS` | 30.0 |
@@ -456,14 +456,46 @@ stated:
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
 - **A quote** prices the stay once for each way it can be priced, plus once
-  more, and every cap walks the stay a day at a time on each pass -- a weekly
-  cap walking each daily cap's days again inside each week. A plan holds at
-  most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
-  counted: the ways plus one, times the plan's rules plus the days times the
-  caps' walks, each day a cap walks counted as `QUOTE_CAP_DAY_WEIGHT` rule
-  reads, since that is what it costs. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  more for the receipt. On each pass it reads every rule, applies the ones that
+  qualify, and has every cap walk the stay a day at a time -- a weekly cap
+  walking each daily cap's days again inside each week. A plan holds at most
+  `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
+  counted: every pass, each step weighted by what it was measured to cost, in
+  steps of about 0.2 microseconds (below; the receipt's pass is counted as the
+  dearest way's, and a fill rule beside other ADJUST rules prices every order
+  of them on each pass). Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
-  operator prices it, and `validate-plan` never reports it (F67).
+  operator prices it, and `validate-plan` never reports it. **And a deadline:**
+  a quote still pricing `QUOTE_DEADLINE_SECONDS` after its work was counted
+  begins no further pass and is refused the same way, 422,
+  `GAP_QUOTE_OVER_WORK_BUDGET`, its sentence saying it was stopped at the
+  deadline. That is a backstop for a shape that costs more than was measured,
+  or a machine far slower, and the one answer here that depends on the clock;
+  the count is what a plan is judged by (F67).
+
+<!--gen:quote_costs kind=1-->
+| a quote's step | counted as |
+| --- | --- |
+| `pass` | 500 |
+| `rule` | 1 |
+| `special_not_qualified` | 8 |
+| `adjust` | 55 |
+| `adjust_not_qualified` | 30 |
+| `surcharge` | 20 |
+| `surcharge_not_qualified` | 10 |
+| `resolved` | 50 |
+| `cap_timed` | 140 |
+| `cap_pair_timed` | 45 |
+| `daily_day_timed` | 45 |
+| `weekly_day_timed` | 8 |
+| `pair_day_timed` | 35 |
+| `cap_flat` | 100 |
+| `cap_pair_flat` | 35 |
+| `daily_day_flat` | 6 |
+| `weekly_day_flat` | 2 |
+| `pair_day_flat` | 13 |
+<!--/gen:quote_costs-->
+
 - **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
   `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
   sets taking effect at one instant are found in one pass, by the instant
@@ -758,7 +790,7 @@ never failed is a decoration.
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. The rules a plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65). |
 | **F65** | `validate-plan` does a bounded amount of work. Its probe stays times the plan's rules are counted before one probe is built, and a plan over `MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run nothing; the probes are then made one at a time and the findings computed once a request. A plan with more rules, space classes or dates than the published limits allow does not load, by the same code. Over HTTP, at most `MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once. |
 | **F66** | A quote loads only the plan version in force at entry, chosen by `effective_from` before any version is loaded. A stored version that no longer loads, or is too large to, refuses no stay it does not price; a tie at the chosen instant is still refused as ambiguous, and two versions sharing a `plan_version` are still refused. |
-| **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted -- the ways plus one, times the rules plus the days times the caps' walks, a day of a walk weighted as `QUOTE_CAP_DAY_WEIGHT` rule reads -- and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The slowest plan shapes just inside the budget, caps or none, are priced within a fixed time budget; the largest stress plan the tests price is inside it, and prices as before. |
+| **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted, every pass and every step weighted by what it was measured to cost (the published table), and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. A quote still pricing at `QUOTE_DEADLINE_SECONDS` begins no further pass and is refused the same way. The largest plan inside the budget, for each shape the tests generate -- specials, time-based ways, discounts, surcharges, the fill rule and caps, on stays from two hours to 90 days -- is priced within a fixed time; the largest stress plan the tests price is inside it, and prices as before. |
 | **F68** | A garage's tax sets load in one pass: two taking effect at one instant are found by the instant, not by comparing every pair, and are still refused, both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. |
 | **F69** | A caller holds an HTTP thread for a bounded time and the threads are bounded. The whole request must arrive within `REQUEST_DEADLINE_SECONDS`, however slowly it trickles in, or the connection is closed; at most `MAX_CONNECTIONS` are served at once, and one more is answered 503 at once. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |

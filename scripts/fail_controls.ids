@@ -173,8 +173,10 @@ F65/rule-limit
 F65/validated-twice
 F66
 F67
+F67/adjust-weight
 F67/cap-day-weight
 F67/cap-limit
+F67/deadline
 F68
 F68/set-limit
 F69

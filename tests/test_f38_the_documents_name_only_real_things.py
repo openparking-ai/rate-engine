@@ -156,6 +156,8 @@ def _owned_names() -> dict[str, set[str]]:
         "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
         # Every limit the contract publishes, read off the module that holds them.
         "limit": {name for name in vars(limits) if name.isupper()},
+        # The steps a quote's work is counted in (F67), read off the engine's table.
+        "quote step": set(engine.PASS_COSTS),
     }
 
 

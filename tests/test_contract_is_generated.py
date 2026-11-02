@@ -334,6 +334,7 @@ def test_interpolation_blocks_are_marked_as_such_and_not_given_invented_controls
     interpolation = {name for name, kind in _blocks().items() if kind == 1}
     assert interpolation == {
         "schema_version", "stages", "resolution", "guarantees", "max_stay", "limits",
+        "quote_costs",
     }
     assert not (interpolation & CONTROLLED_ASSERTIONS)
 

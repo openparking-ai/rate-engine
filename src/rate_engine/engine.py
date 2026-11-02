@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 
 from .breakdown import Ledger, Line
 from .findings import (
@@ -43,7 +44,7 @@ from .findings import (
     Finding,
     Refused,
 )
-from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK, QUOTE_CAP_DAY_WEIGHT
+from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK, QUOTE_DEADLINE_SECONDS
 from .percent import percent_text
 from .plan import InvalidPlan, Plan
 from .rules import (
@@ -132,6 +133,9 @@ class _Qualified:
         self._at: dict[str, tuple] = {}
         self._ids: dict[str, frozenset[str]] = {}
         self._why_not: dict[str, list[Line]] = {}
+        #: A `monotonic()` reading past which no further pass is begun (F67),
+        #: set by `quote`; None asks nothing.
+        self.deadline: float | None = None
 
     def rules(self, stage: str) -> tuple:
         """The plan's rules at `stage`, in plan order, qualified or not."""
@@ -833,6 +837,7 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     if too_much is not None:
         # Before any way is priced, so refusing costs what counting does.
         raise Refused([too_much])
+    qualified.deadline = monotonic() + QUOTE_DEADLINE_SECONDS
 
     ledger = _the_cheapest_way(plan, stay, qualified)
 
@@ -855,23 +860,102 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     )
 
 
+#: What a quote's work costs, in counted steps of about 0.2 microseconds, by
+#: what each step does (F67). Measured, one pricing pass at a time, on plans
+#: that multiply each kind of rule; every weight is at or above what was
+#: measured, so the count is an upper bound and the slowest quote within
+#: `MAX_QUOTE_WORK` takes about 0.6 s. Counting every rule as one step was
+#: wrong by fifty times for a discount: 1,000 specials beside 999 of them fit
+#: the budget and took 10.8 s.
+PASS_COSTS: dict[str, int] = {
+    # Once a pass, whatever the plan: the way priced, the ledger begun.
+    "pass": 500,
+    # Each rule, every pass, by what it does there.
+    "rule": 1,
+    "special_not_qualified": 8,
+    "adjust": 55,
+    "adjust_not_qualified": 30,
+    "surcharge": 20,
+    "surcharge_not_qualified": 10,
+    # Once a quote, for each way that lost: its line on the receipt.
+    "resolved": 50,
+    # Each cap, and each weekly cap beside each daily cap, every pass; then each
+    # day a cap walks, every pass. A pass whose way prices the time by the
+    # period (a time-based rate, or a special with a `rate` effect) splits the
+    # charge by the day and costs several times what a flat special's does.
+    "cap_timed": 140,
+    "cap_pair_timed": 45,
+    "daily_day_timed": 45,
+    "weekly_day_timed": 8,
+    "pair_day_timed": 35,
+    "cap_flat": 100,
+    "cap_pair_flat": 35,
+    "daily_day_flat": 6,
+    "weekly_day_flat": 2,
+    "pair_day_flat": 13,
+}
+
+
+def _priced_by_the_period(rule) -> bool:
+    """Whether a way prices the time by the period, which the caps then split."""
+    if rule.stage == ACCUMULATE:
+        return True
+    effect = rule.params.get("effect")
+    return isinstance(effect, dict) and effect.get("kind") == "rate"
+
+
 def quote_work(plan: Plan, stay: Stay, qualified: _Qualified) -> int:
     """How much work pricing this stay would take, counted before any of it.
 
-    `_the_cheapest_way` prices the stay once for each way plus once more, and
-    each pass reads the plan's rules and has every cap walk the stay a day at a
-    time -- a weekly cap walking each daily cap's days again inside each week.
-    So: (ways + 1) x (rules + days x the caps' walks x `QUOTE_CAP_DAY_WEIGHT`),
-    a day of a cap's walk costing as much as that many rule reads. An upper
-    bound, never less than the work done, read from the counts alone.
+    `_the_cheapest_way` prices the stay once for each way plus once more for
+    the receipt, and each pass reads every rule, applies the ones that qualify
+    and has every cap walk the stay a day at a time -- a weekly cap walking each
+    daily cap's days again inside each week. Each of those is weighted by what
+    it was measured to cost (`PASS_COSTS`), the receipt's pass counted as the
+    dearest way's. With a fill rule beside other ADJUST rules, every order of
+    them is priced on each pass (`_adjusted`), so that pass applies them about
+    twice their number of times over. An upper bound, read from the counts.
     """
-    ways = len(qualified.at(QUALIFY)) + len(qualified.at(ACCUMULATE))
+    costs = PASS_COSTS
+    ways = list(qualified.at(QUALIFY)) + list(qualified.at(ACCUMULATE))
+
+    rules = 0
+    for rule in plan.rules:
+        applies = qualified.has(rule)
+        if rule.stage == ADJUST:
+            rules += costs["adjust"] if applies else costs["adjust_not_qualified"]
+        elif rule.stage == SURCHARGE:
+            rules += costs["surcharge"] if applies else costs["surcharge_not_qualified"]
+        elif rule.stage == QUALIFY and not applies:
+            rules += costs["special_not_qualified"]
+        else:
+            rules += costs["rule"]
+
+    adjust = qualified.rules(ADJUST)
+    fills = [r for r in adjust if r.type == "fill_level" and qualified.has(r)]
+    others = len(adjust) - len(fills)
+    if fills and others:
+        orders = 3 + 2 * (others - 1)
+        rules += orders * (others + 1) * costs["adjust"]
+
     caps = qualified.at(CAP)
     daily = sum(1 for rule in caps if rule.type == "daily_max")
     weekly = sum(1 for rule in caps if rule.type == "weekly_max")
-    walks = daily + weekly * (1 + daily) + (len(caps) - daily - weekly)
     days = stay.duration_minutes // MINUTES_IN_A_DAY + 2  # the days a stay can touch
-    return (ways + 1) * (len(plan.rules) + days * walks * QUOTE_CAP_DAY_WEIGHT)
+    fixed = costs["pass"] + rules
+
+    def walk(kind: str) -> int:
+        each_pass = len(caps) * costs[f"cap_{kind}"] + weekly * daily * costs[f"cap_pair_{kind}"]
+        return each_pass + days * (
+            daily * costs[f"daily_day_{kind}"]
+            + weekly * costs[f"weekly_day_{kind}"]
+            + weekly * daily * costs[f"pair_day_{kind}"]
+        )
+
+    timed, flat = fixed + walk("timed"), fixed + walk("flat")
+    passes = [timed if _priced_by_the_period(way) else flat for way in ways]
+    receipt = max(passes, default=timed)
+    return sum(passes) + receipt + len(ways) * costs["resolved"]
 
 
 def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding | None:
@@ -886,6 +970,19 @@ def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding 
             "every way it can be priced, through every rule and every day its caps walk "
             f"-- and this engine prices within {MAX_QUOTE_WORK}: it was not priced and "
             "nothing was guessed -- an operator prices it"
+        ),
+    )
+
+
+def _past_the_deadline(plan: Plan) -> Finding:
+    """The refusal for a quote still pricing at `QUOTE_DEADLINE_SECONDS` (F67)."""
+    return Finding(
+        code=GAP_QUOTE_OVER_WORK_BUDGET,
+        text=(
+            f"pricing this stay on plan {plan.plan_version} was still running after "
+            f"{QUOTE_DEADLINE_SECONDS} s, this engine's deadline for a quote, and was "
+            "stopped between two of its passes: it was not priced and nothing was "
+            "guessed -- an operator prices it"
         ),
     )
 
@@ -906,6 +1003,8 @@ def _priced(
     Which rules qualify is `qualified`, the quote's own, asked once for every
     pass: a pass asks no rule whether it qualifies, and finds a rule by its id.
     """
+    if qualified.deadline is not None and monotonic() > qualified.deadline:
+        raise Refused([_past_the_deadline(plan)])
     ledger = Ledger()
     entry_local = stay.entry_at.astimezone(plan.timezone)
     ledger.add(

@@ -30,7 +30,7 @@ import rate_engine  # noqa: F401,E402  (registers the rule types)
 from _guarantees import GUARANTEES  # noqa: E402
 from rate_engine import limits  # noqa: E402
 from rate_engine.contract import SCHEMA_VERSION, breakdown_text, run_quote  # noqa: E402
-from rate_engine.engine import MAX_STAY_DAYS, max_stay_minutes  # noqa: E402
+from rate_engine.engine import MAX_STAY_DAYS, PASS_COSTS, max_stay_minutes  # noqa: E402
 from rate_engine.findings import (  # noqa: E402
     CONFLICT_CODES,
     FAULT_CODES,
@@ -337,6 +337,13 @@ def gen_max_stay() -> str:
         f"`MAX_STAY_DAYS` **{MAX_STAY_DAYS}**: the longest stay priced is {MAX_STAY_DAYS} "
         f"days of 24 hours from entry to exit, `max_stay_minutes` **{max_stay_minutes()}**.",
     )
+
+
+def gen_quote_costs() -> str:
+    """The weights a quote's work is counted in, read from the engine's table."""
+    rows = ["| a quote's step | counted as |", "| --- | --- |"]
+    rows += [f"| `{name}` | {value} |" for name, value in PASS_COSTS.items()]
+    return block("quote_costs", "\n".join(rows))
 
 
 def gen_limits() -> str:
@@ -785,14 +792,25 @@ stated:
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
 - **A quote** prices the stay once for each way it can be priced, plus once
-  more, and every cap walks the stay a day at a time on each pass -- a weekly
-  cap walking each daily cap's days again inside each week. A plan holds at
-  most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
-  counted: the ways plus one, times the plan's rules plus the days times the
-  caps' walks, each day a cap walks counted as `QUOTE_CAP_DAY_WEIGHT` rule
-  reads, since that is what it costs. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  more for the receipt. On each pass it reads every rule, applies the ones that
+  qualify, and has every cap walk the stay a day at a time -- a weekly cap
+  walking each daily cap's days again inside each week. A plan holds at most
+  `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
+  counted: every pass, each step weighted by what it was measured to cost, in
+  steps of about 0.2 microseconds (below; the receipt's pass is counted as the
+  dearest way's, and a fill rule beside other ADJUST rules prices every order
+  of them on each pass). Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
-  operator prices it, and `validate-plan` never reports it (F67).
+  operator prices it, and `validate-plan` never reports it. **And a deadline:**
+  a quote still pricing `QUOTE_DEADLINE_SECONDS` after its work was counted
+  begins no further pass and is refused the same way, 422,
+  `GAP_QUOTE_OVER_WORK_BUDGET`, its sentence saying it was stopped at the
+  deadline. That is a backstop for a shape that costs more than was measured,
+  or a machine far slower, and the one answer here that depends on the clock;
+  the count is what a plan is judged by (F67).
+
+{quote_costs}
+
 - **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most
   `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. Two
   sets taking effect at one instant are found in one pass, by the instant
@@ -1200,6 +1218,7 @@ def render() -> str:
         resolution_inline=gen_resolution(),
         max_stay=gen_max_stay(),
         limits=gen_limits(),
+        quote_costs=gen_quote_costs(),
         findings=gen_findings(),
         example=gen_example(),
         guarantees=gen_guarantees(),
