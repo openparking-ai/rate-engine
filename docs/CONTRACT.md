@@ -451,8 +451,9 @@ stated:
   length they make interesting -- times the plan's rules, since every probe asks
   every rule. Over `MAX_VALIDATION_WORK` it answers 400, `INVALID_PLAN_TOO_LARGE`,
   having run nothing. Within it, the probes are made one at a time and the run
-  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503, a backstop that only
-  a machine far slower than the budget assumes reaches. Over HTTP, at most
+  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503 and `Retry-After`,
+  try again. That is the clock: a plan just inside the budget validates in about
+  3 s alone, so a busy or much slower machine can reach it. Over HTTP, at most
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
 - **A quote** prices the stay once for each way it can be priced, plus once
@@ -467,11 +468,16 @@ stated:
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
   operator prices it, and `validate-plan` never reports it. **And a deadline:**
   a quote still pricing `QUOTE_DEADLINE_SECONDS` after its work was counted
-  begins no further pass and is refused the same way, 422,
-  `GAP_QUOTE_OVER_WORK_BUDGET`, its sentence saying it was stopped at the
-  deadline. That is a backstop for a shape that costs more than was measured,
-  or a machine far slower, and the one answer here that depends on the clock;
-  the count is what a plan is judged by (F67).
+  begins no further pass and is answered **503** with `Retry-After`, its body
+  carrying `"retry": true` and `retry_after_seconds`: busy, not refused --
+  nothing was priced, and the same request may be sent again rather than the
+  stay closed unpriced. It is the one answer to a quote that depends on the
+  clock (F5), and it is not only for a shape nobody measured or a far slower
+  machine: on the 4-core box that measured the budget, a plan just inside it
+  that prices in about 0.4 s alone was stopped 14 times in 16 with four such
+  quotes running at once. A typical plan prices in 0.1 to 6 ms there, 170 to
+  10,000 times inside the deadline. The count, not the clock, is what a plan is
+  judged by (F67).
 
 <!--gen:quote_costs kind=1-->
 | a quote's step | counted as |
@@ -771,7 +777,7 @@ never failed is a decoration.
 | **F48** | A tie at the cheapest charge is PRICED, not refused. Two rules qualifying at one resolving stage and charging the same amount under `cheapest_wins` validate clean; the stay is priced at that amount, the lowest rule id is named as applied, and every other says it charged the same. A cheaper rule still wins whatever its id. Replaces F11, which refused the tie. |
 | **F49** | Every `validate-plan` finding names the stay that found it: `probe`, the entry and exit of the first probe stay that produced it, and that stay produces it. A refusal at quote time carries no `probe` key. |
 | **F4b** | That sentence is true at EVERY leaf of a plan, not at the fields the engine happens to read -- proven by probing every position in the document, so a field added in a later round is covered the day it exists. |
-| **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, always, on any machine and at any wall-clock time. |
+| **F5** | Determinism. The same plan version and the same stay produce the same fee AND the same breakdown, on any machine and at any wall-clock time -- with one exception, which is never a price: a quote still pricing at `QUOTE_DEADLINE_SECONDS` is stopped and answered 503, try again (F67), and on a busy machine that can happen to a plan near `MAX_QUOTE_WORK`. Whenever a quote is answered with a fee or a refusal, that answer never depends on the machine or the clock. |
 | **F50** | Under either resolution mode a special that qualifies is never dearer than the time-based rate: the stay is priced through the whole pipeline both ways -- with the special, and by the time-based rate alone -- and charged the lower, a tie keeping the special. The breakdown says which way was used and what the other would have charged (`compared_minor`). Grace still prices a stay alone, `stated_order` no longer lets a dearer special replace the time-based charge (F63), and a stay the time-based rate alone cannot price is priced by the special. When the time-based rate is charged, every other special still has its line, as on the special's way: its own reason, or that it qualified and a cheaper special was compared instead -- never that one was applied. |
 | **F51** | A fill rule prices on how full the garage was AT ENTRY. It applies at its threshold and above and not one basis point below; it raises the charge for the time -- the total after the base and the caps, less any discount taken before it -- and nothing else, and a plan ordering it before another ADJUST rule does not load; its line says how full the garage was and by how much the charge rose, and below the threshold says it was not raised. A stay in a class it covers with no figure is refused with GAP_NO_OCCUPANCY_AT_ENTRY; a plan without one prices the same with or without the figure. Two fill rules applying to one stay are CONFLICT_OVERLAPPING_FILL_RULES whatever `adjust_order` says. A threshold, a percent or a figure out of range, not a whole number, or a bool is refused by name. |
 | **F52** | A VIP surcharge may be a percent of the stay's time-based charge -- the total after the base and the caps -- rounded the way the rule says, and never of another surcharge, so two surcharges total the same in any order. The flat form prices exactly as it did. A rule stating both forms, or a percent out of range, is refused by name. |
@@ -790,7 +796,7 @@ never failed is a decoration.
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. The rules a plan may hold are bounded by `MAX_RULES_PER_PLAN`, far above that (F65). |
 | **F65** | `validate-plan` does a bounded amount of work. Its probe stays times the plan's rules are counted before one probe is built, and a plan over `MAX_VALIDATION_WORK` is refused, 400 `INVALID_PLAN_TOO_LARGE`, having run nothing; the probes are then made one at a time and the findings computed once a request. A plan with more rules, space classes or dates than the published limits allow does not load, by the same code. Over HTTP, at most `MAX_CONCURRENT_VALIDATIONS` run at once and one more is answered 503 at once. |
 | **F66** | A quote loads only the plan version in force at entry, chosen by `effective_from` before any version is loaded. A stored version that no longer loads, or is too large to, refuses no stay it does not price; a tie at the chosen instant is still refused as ambiguous, and two versions sharing a `plan_version` are still refused. |
-| **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted, every pass and every step weighted by what it was measured to cost (the published table), and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. A quote still pricing at `QUOTE_DEADLINE_SECONDS` begins no further pass and is refused the same way. The largest plan inside the budget, for each shape the tests generate -- specials, time-based ways, discounts, surcharges, the fill rule and caps, on stays from two hours to 90 days -- is priced within a fixed time; the largest stress plan the tests price is inside it, and prices as before. |
+| **F67** | A quote does a bounded amount of work. A plan holds at most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is counted, every pass and every step weighted by what it was measured to cost (the published table), and a stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. A quote still pricing at `QUOTE_DEADLINE_SECONDS` begins no further pass and is answered 503 with `Retry-After`: busy, not refused, so the stay is tried again rather than sent to an operator. The largest plan inside the budget, for each shape the tests generate -- specials, time-based ways, discounts, surcharges, the fill rule and caps, on stays from two hours to 90 days -- is priced within a fixed time; the largest stress plan the tests price is inside it, and prices as before. |
 | **F68** | A garage's tax sets load in one pass: two taking effect at one instant are found by the instant, not by comparing every pair, and are still refused, both named. A statement holds at most `MAX_TAX_SETS` sets and a set at most `MAX_TAX_RULES_PER_SET` rules; more is refused, 400, naming the limit. |
 | **F69** | A caller holds an HTTP thread for a bounded time and the threads are bounded. The whole request must arrive within `REQUEST_DEADLINE_SECONDS`, however slowly it trickles in, or the connection is closed; at most `MAX_CONNECTIONS` are served at once, and one more is answered 503 at once. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |

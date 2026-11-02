@@ -227,6 +227,18 @@ def _response_fields() -> set[str]:
     assert status == 200, validated
     fields |= set(validated)
 
+    # And the busy answer, a 503 that says try again (F67), produced by a quote
+    # stopped at its deadline -- the deadline set in the past for it.
+    import pytest as _pytest
+
+    from rate_engine import engine
+
+    with _pytest.MonkeyPatch.context() as patch:
+        patch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
+        status, busy = run_quote(request)
+    assert status == 503, busy
+    fields |= set(busy)
+
     # And the tax door's answer, taken the same way: a figure with a line in it.
     from rate_engine.contract import run_tax
 

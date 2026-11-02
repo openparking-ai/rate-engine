@@ -31,7 +31,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .contract import (
+    RETRY_AFTER_SECONDS,
     SCHEMA_VERSION,
+    busy_response,
     encode,
     run_quote,
     run_tax,
@@ -93,11 +95,10 @@ def _one_of_few_validations(document: object) -> tuple[int, dict]:
     """`run_validate`, unless `MAX_CONCURRENT_VALIDATIONS` are running already:
     then a 503 at once, and nothing run."""
     if not _VALIDATIONS.acquire(blocking=False):
-        return 503, {
-            "schema_version": SCHEMA_VERSION,
-            "error": f"{MAX_CONCURRENT_VALIDATIONS} plans are being validated already; "
-                     "try again in a moment.",
-        }
+        return 503, busy_response(RuntimeError(
+            f"{MAX_CONCURRENT_VALIDATIONS} plans are being validated already; "
+            "try again in a moment."
+        ))
     try:
         return run_validate(document)
     finally:
@@ -126,6 +127,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
+        if status == 503:
+            # Busy, not refused: the same request may be sent again (F67).
+            self.send_header("Retry-After", str(RETRY_AFTER_SECONDS))
         self.end_headers()
         self.wfile.write(payload)
 
@@ -265,14 +269,13 @@ class _BoundedServer(ThreadingHTTPServer):
 def _answer_busy(request: socket.socket) -> None:
     """A 503 written without a thread, through the one encoder. Best effort: a
     caller that cannot take a few hundred bytes at once is simply closed."""
-    payload = encode({
-        "schema_version": SCHEMA_VERSION,
-        "error": f"{MAX_CONNECTIONS} connections are being served already; "
-                 "try again in a moment.",
-    })
+    payload = encode(busy_response(RuntimeError(
+        f"{MAX_CONNECTIONS} connections are being served already; try again in a moment."
+    )))
     head = (
         "HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\n"
-        f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n"
+        f"Content-Length: {len(payload)}\r\nRetry-After: {RETRY_AFTER_SECONDS}\r\n"
+        "Connection: close\r\n\r\n"
     ).encode()
     try:
         request.settimeout(1.0)

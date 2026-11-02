@@ -974,16 +974,23 @@ def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding 
     )
 
 
-def _past_the_deadline(plan: Plan) -> Finding:
-    """The refusal for a quote still pricing at `QUOTE_DEADLINE_SECONDS` (F67)."""
-    return Finding(
-        code=GAP_QUOTE_OVER_WORK_BUDGET,
-        text=(
-            f"pricing this stay on plan {plan.plan_version} was still running after "
-            f"{QUOTE_DEADLINE_SECONDS} s, this engine's deadline for a quote, and was "
-            "stopped between two of its passes: it was not priced and nothing was "
-            "guessed -- an operator prices it"
-        ),
+class QuoteTooLong(Exception):
+    """A quote still pricing at `QUOTE_DEADLINE_SECONDS`, stopped between passes.
+
+    Not a refusal of the stay. The work was counted and is within
+    `MAX_QUOTE_WORK`; the clock ran out because the machine was busy -- a few
+    large quotes at once are enough -- or slower than the budget assumes. The
+    same request may well price a moment later, so the doors answer 503 with
+    `Retry-After`, never the 422 gap that sends a car to an operator (F67).
+    """
+
+
+def _past_the_deadline(plan: Plan) -> QuoteTooLong:
+    return QuoteTooLong(
+        f"pricing this stay on plan {plan.plan_version} was still running after "
+        f"{QUOTE_DEADLINE_SECONDS} s, this engine's deadline for a quote, and was stopped "
+        "between two of its passes: nothing was priced and nothing was guessed. The "
+        "engine was busy; try again in a moment."
     )
 
 
@@ -1004,7 +1011,7 @@ def _priced(
     pass: a pass asks no rule whether it qualifies, and finds a rule by its id.
     """
     if qualified.deadline is not None and monotonic() > qualified.deadline:
-        raise Refused([_past_the_deadline(plan)])
+        raise _past_the_deadline(plan)
     ledger = Ledger()
     entry_local = stay.entry_at.astimezone(plan.timezone)
     ledger.add(

@@ -173,21 +173,74 @@ def test_the_slowest_quote_inside_the_budget_is_priced_quickly(shape, monkeypatc
 
 
 @pytest.mark.guarantee("F67")
-def test_a_quote_past_its_deadline_is_refused_between_passes(monkeypatch):
-    """A deadline already past: the first pass is not begun, and the refusal says
-    why. Over the HTTP door's own function too, as a 422."""
+def test_a_quote_past_its_deadline_is_stopped_between_passes_and_told_to_retry(monkeypatch):
+    """A deadline already past: the first pass is not begun. It is not a refusal
+    of the stay -- the same request may price a moment later on a quieter
+    machine -- so the door answers 503 and says try again, never the 422 gap
+    that sends a car to an operator."""
     monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
     shape = Shape("flat", "2h")
-    with pytest.raises(engine.Refused) as refused:
+    with pytest.raises(engine.QuoteTooLong, match="deadline"):
         engine.quote([load_plan(plan(shape, 3))], stay(shape))
-    (finding,) = refused.value.findings
-    assert finding.code == "GAP_QUOTE_OVER_WORK_BUDGET"
-    assert "deadline" in finding.text
     status, body = run_quote(_request(_plan([HOURLY, _flat(1)])))
+    assert status == 503, body
+    assert body["retry"] is True and body["retry_after_seconds"] >= 1
+    assert "try again" in body["error"]
+    assert "findings" not in body and "refused" not in body
+
+
+@pytest.mark.guarantee("F67")
+def test_over_http_a_stopped_quote_carries_retry_after(monkeypatch):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from rate_engine import service
+
+    monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
+    server = service.make_server(port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_address[1]}/v1/quote",
+            data=json.dumps(_request(_plan([HOURLY, _flat(1)]))).encode(), method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as answered:
+            urllib.request.urlopen(request, timeout=10)
+        assert answered.value.code == 503
+        assert answered.value.headers["Retry-After"] == "1"
+        assert json.loads(answered.value.read())["retry"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_the_work_count_refusal_is_still_a_422_and_never_retried():
+    """Deterministic, so a retry would get the same answer: a 422 gap."""
+    inside, over = largest_inside_the_budget(Shape("flat", "2h", 8, 8))
+    status, body = run_quote({"plans": [plan(Shape("flat", "2h", 8, 8), len(over.rules) - 17)],
+                              "entry_at": "2026-04-06T09:00:00-04:00",
+                              "exit_at": "2026-04-06T11:00:00-04:00",
+                              "space_class": "standard", "currency": "USD"})
     assert status == 422, body
     assert body["findings"][0]["code"] == "GAP_QUOTE_OVER_WORK_BUDGET"
+    assert "retry" not in body
 
 
 def test_the_deadline_does_not_touch_an_ordinary_quote():
     shape = Shape("flat", "2h")
     assert engine.quote([load_plan(plan(shape, 3))], stay(shape)).fee_minor > 0
+
+
+def test_the_cli_says_a_stopped_quote_was_not_priced_and_to_try_again(monkeypatch, capsys):
+    from fixtures import PLANS_DIR
+    from rate_engine.cli import main
+
+    monkeypatch.setattr(engine, "QUOTE_DEADLINE_SECONDS", -1.0)
+    code = main(["quote", "--plan", str(PLANS_DIR / "downtown_v2.json"),
+                 "--entry", "2026-03-03T09:14:00-05:00", "--exit", "2026-03-03T18:40:00-05:00",
+                 "--space-class", "standard", "--currency", "USD"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "not priced, try again" in out and "REFUSED" not in out

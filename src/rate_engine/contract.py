@@ -24,7 +24,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .breakdown import Ledger
-from .engine import Quote, Stay, make_stay, max_stay_minutes, quote
+from .engine import Quote, QuoteTooLong, Stay, make_stay, max_stay_minutes, quote
 from .findings import Refused
 from .limits import VALIDATION_DEADLINE_SECONDS
 from .money import NotMinorUnits
@@ -240,6 +240,25 @@ def invalid_response(error: Exception) -> dict[str, Any]:
     return body
 
 
+#: Seconds a caller is told to wait before asking again after a 503. Sent as
+#: `retry_after_seconds` in the body and, over HTTP, as `Retry-After`.
+RETRY_AFTER_SECONDS = 1
+
+
+def busy_response(error: Exception) -> dict[str, Any]:
+    """503: the engine was too busy to answer, and nothing was priced or refused.
+
+    `retry` says the same request may be sent again as it is. A stay is never
+    closed unpriced on one of these: that is what a 422 refusal is for.
+    """
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "error": str(error),
+        "retry": True,
+        "retry_after_seconds": RETRY_AFTER_SECONDS,
+    }
+
+
 def validate_response(plan) -> dict[str, Any]:
     """Every finding, split into the ones the owner still has to look at and the
     ones they have already acknowledged.
@@ -370,6 +389,9 @@ def run_quote(document: object) -> tuple[int, dict[str, Any]]:
     except InvalidPlan as exc:
         # A stay outside the years priced, refused after its length (F62, F70).
         return 400, invalid_response(exc)
+    except QuoteTooLong as exc:
+        # Stopped by the clock, not refused: busy, try again (F67).
+        return 503, busy_response(exc)
     except Refused as refused:
         # 422: the request was well-formed and the plan cannot price it. That is
         # not a server error and not a bad request -- it is the module working.
@@ -393,7 +415,7 @@ def run_validate(document: object) -> tuple[int, dict[str, Any]]:
     except InvalidPlan as exc:
         return 400, invalid_response(exc)
     except ValidationTooLong as exc:
-        return 503, {"schema_version": SCHEMA_VERSION, "error": str(exc)}
+        return 503, busy_response(exc)
 
 
 @_a_400_not_a_crash

@@ -177,6 +177,8 @@ F67/adjust-weight
 F67/cap-day-weight
 F67/cap-limit
 F67/deadline
+F67/deadline-retryable
+F67/retry-after
 F68
 F68/set-limit
 F69

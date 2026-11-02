@@ -787,8 +787,9 @@ stated:
   length they make interesting -- times the plan's rules, since every probe asks
   every rule. Over `MAX_VALIDATION_WORK` it answers 400, `INVALID_PLAN_TOO_LARGE`,
   having run nothing. Within it, the probes are made one at a time and the run
-  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503, a backstop that only
-  a machine far slower than the budget assumes reaches. Over HTTP, at most
+  is abandoned at `VALIDATION_DEADLINE_SECONDS` with a 503 and `Retry-After`,
+  try again. That is the clock: a plan just inside the budget validates in about
+  3 s alone, so a busy or much slower machine can reach it. Over HTTP, at most
   `MAX_CONCURRENT_VALIDATIONS` run at once; one more is answered 503 straight
   away, so a rate setup checking plans cannot slow the quotes at an exit lane.
 - **A quote** prices the stay once for each way it can be priced, plus once
@@ -803,11 +804,16 @@ stated:
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
   operator prices it, and `validate-plan` never reports it. **And a deadline:**
   a quote still pricing `QUOTE_DEADLINE_SECONDS` after its work was counted
-  begins no further pass and is refused the same way, 422,
-  `GAP_QUOTE_OVER_WORK_BUDGET`, its sentence saying it was stopped at the
-  deadline. That is a backstop for a shape that costs more than was measured,
-  or a machine far slower, and the one answer here that depends on the clock;
-  the count is what a plan is judged by (F67).
+  begins no further pass and is answered **503** with `Retry-After`, its body
+  carrying `"retry": true` and `retry_after_seconds`: busy, not refused --
+  nothing was priced, and the same request may be sent again rather than the
+  stay closed unpriced. It is the one answer to a quote that depends on the
+  clock (F5), and it is not only for a shape nobody measured or a far slower
+  machine: on the 4-core box that measured the budget, a plan just inside it
+  that prices in about 0.4 s alone was stopped 14 times in 16 with four such
+  quotes running at once. A typical plan prices in 0.1 to 6 ms there, 170 to
+  10,000 times inside the deadline. The count, not the clock, is what a plan is
+  judged by (F67).
 
 {quote_costs}
 

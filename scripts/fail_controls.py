@@ -1860,6 +1860,24 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a quote whose shape costs more than was measured runs for as long as it "
         "takes, past the deadline",
     ),
+    "F67/deadline-retryable": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "contract.py",
+        "        # Stopped by the clock, not refused: busy, try again (F67).\n"
+        "        return 503, busy_response(exc)\n",
+        "        # PLANTED: a busy engine answers like a gap, and the car goes to an operator\n"
+        '        return 422, {"schema_version": SCHEMA_VERSION, "refused": True, '
+        '"error": str(exc)}\n',
+        "a quote stopped by the clock is answered as a refusal, so the platform closes "
+        "the stay unpriced instead of trying again a moment later",
+    ),
+    "F67/retry-after": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py",
+        "service.py",
+        '            self.send_header("Retry-After", str(RETRY_AFTER_SECONDS))\n',
+        "            pass  # PLANTED: a 503 does not say when to try again\n",
+        "a 503 over HTTP carries no Retry-After, so a caller cannot tell busy from broken",
+    ),
     "F67/cap-limit": (
         "tests/test_op6_3_a_quote_does_bounded_work.py",
         "plan.py",

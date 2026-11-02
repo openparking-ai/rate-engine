@@ -50,7 +50,12 @@ GUARANTEES: dict[str, str] = {
     ),
     "F5": (
         "Determinism. The same plan version and the same stay produce the same fee "
-        "AND the same breakdown, always, on any machine and at any wall-clock time."
+        "AND the same breakdown, on any machine and at any wall-clock time -- with one "
+        "exception, which is never a price: a quote still pricing at "
+        "`QUOTE_DEADLINE_SECONDS` is stopped and answered 503, try again (F67), and on "
+        "a busy machine that can happen to a plan near `MAX_QUOTE_WORK`. Whenever a "
+        "quote is answered with a fee or a refusal, that answer never depends on the "
+        "machine or the clock."
     ),
     "F6": (
         "The test function IS the production path. `/v1/quote` and the CLI emit the "
@@ -524,7 +529,8 @@ GUARANTEES: dict[str, str] = {
         "(the published table), and a stay over `MAX_QUOTE_WORK` is refused, 422 "
         "`GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. A quote "
         "still pricing at `QUOTE_DEADLINE_SECONDS` begins no further pass and is "
-        "refused the same way. The largest plan inside the budget, for each shape the "
+        "answered 503 with `Retry-After`: busy, not refused, so the stay is tried again "
+        "rather than sent to an operator. The largest plan inside the budget, for each shape the "
         "tests generate -- specials, time-based ways, discounts, surcharges, the fill "
         "rule and caps, on stays from two hours to 90 days -- is priced within a fixed "
         "time; the largest stress plan the tests price is inside it, and prices as "

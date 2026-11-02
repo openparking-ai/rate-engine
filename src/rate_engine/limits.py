@@ -30,9 +30,10 @@ MAX_DATES_PER_PLAN = 2000
 #: largest plan the tests validate does 5,550.
 MAX_VALIDATION_WORK = 200_000
 
-#: Wall-clock seconds a validation may run before it is abandoned. A backstop
-#: under `MAX_VALIDATION_WORK`, which is what a plan is judged by; this only
-#: fires on a machine far slower than the one the budget was measured on.
+#: Wall-clock seconds a validation may run before it is abandoned, answered 503,
+#: try again. A backstop under `MAX_VALIDATION_WORK`, which is what a plan is
+#: judged by. It is the clock: a plan just inside the budget validates in about
+#: 3 s alone, so a busy or much slower machine can reach it.
 VALIDATION_DEADLINE_SECONDS = 10.0
 
 #: Validations the HTTP service runs at once. A validation is CPU work that every
@@ -54,10 +55,13 @@ MAX_CAP_RULES_PER_PLAN = 16
 #: stay with a daily and a weekly cap, comes to about 2,500,000.
 MAX_QUOTE_WORK = 3_000_000
 
-#: Wall-clock seconds a quote may run before it is abandoned between two of its
-#: passes. A backstop under `MAX_QUOTE_WORK`, which is what a quote is judged
-#: by: it fires only for a plan whose shape costs more than was measured, or on
-#: a machine far slower, and refuses the stay as over the budget.
+#: Wall-clock seconds a quote may run before it is stopped between two of its
+#: passes and answered 503, try again. A backstop under `MAX_QUOTE_WORK`, which
+#: is what a plan is judged by. It is the clock, so it also fires when the
+#: machine is busy: measured on a 4-core box, a plan just inside the budget that
+#: prices in about 0.4 s alone was stopped 14 times in 16 with four such quotes
+#: running at once. A typical plan prices in well under a hundredth of this --
+#: 0.1 to 6 ms measured, a hundred and seventy to ten thousand times inside it.
 QUOTE_DEADLINE_SECONDS = 1.0
 
 #: The most tax sets one statement may hold, and the most rules in one set. A
