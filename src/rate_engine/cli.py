@@ -118,6 +118,10 @@ def _cmd_validate(args) -> int:
     if args.json:
         _write_exact(encode(body))
         return 0 if status == 200 else 1
+    if status == 503:
+        # The plan was read; the validation did not finish (F65).
+        print(f"\n  the plan was not validated: {body['error']}\n")
+        return 2
     if status != 200:
         print(f"\n  the plan could not be read: {body['error']}\n")
         if "code" in body:

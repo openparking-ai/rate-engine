@@ -154,6 +154,20 @@ def test_a_validation_past_its_deadline_is_a_503(monkeypatch):
     assert "deadline" in body["error"]
 
 
+def test_the_cli_says_a_plan_past_its_deadline_was_read_but_not_validated(
+    monkeypatch, tmp_path, capsys
+):
+    from rate_engine.cli import main
+
+    monkeypatch.setattr(contract, "VALIDATION_DEADLINE_SECONDS", -1.0)
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(BASE))
+    assert main(["validate-plan", "--plan", str(path)]) == 2
+    out = capsys.readouterr().out
+    assert "the plan was not validated" in out
+    assert "could not be read" not in out
+
+
 @pytest.mark.guarantee("F65")
 @pytest.mark.parametrize(
     "field, build",

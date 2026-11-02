@@ -443,8 +443,9 @@ on the part of it that fits, because the part left out would be a price nobody
 stated:
 
 - **A plan** with more rules, space classes or dates than the limits above does
-  not load: 400, `INVALID_PLAN_TOO_LARGE`. That is every door, since every door
-  loads the plan.
+  not load: 400, `INVALID_PLAN_TOO_LARGE`, on every door that loads it. A quote
+  loads only the version in force at entry, so an oversized version that is not
+  in force refuses nothing (F66, below).
 - **`validate-plan`** counts its probe stays before it builds one -- every space
   class, on every date and at every entry time the rules name, for every stay
   length they make interesting -- times the plan's rules, since every probe asks
