@@ -788,7 +788,8 @@ stated:
   cap walking each daily cap's days again inside each week. A plan holds at
   most `MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is
   counted: the ways plus one, times the plan's rules plus the days times the
-  caps' walks. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
+  caps' walks, each day a cap walks counted as `QUOTE_CAP_DAY_WEIGHT` rule
+  reads, since that is what it costs. Over `MAX_QUOTE_WORK` the stay is REFUSED, 422,
   `GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed -- like a stay over 90 days, an
   operator prices it, and `validate-plan` never reports it (F67).
 - **A tax statement** holds at most `MAX_TAX_SETS` sets, and a set at most

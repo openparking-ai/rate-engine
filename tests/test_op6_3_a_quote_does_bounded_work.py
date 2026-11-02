@@ -98,7 +98,7 @@ def test_the_largest_stress_plan_the_tests_price_is_well_inside_the_budget():
                            + [_weekend_flat(i) for i in range(400)]))
     stay = _stay()
     work = quote_work(plan, stay, _Qualified(plan, stay))
-    assert work * 4 < limits.MAX_QUOTE_WORK, work
+    assert work * 1.25 < limits.MAX_QUOTE_WORK, work
 
 
 def test_the_count_is_never_less_than_the_passes_made(monkeypatch):
@@ -118,3 +118,48 @@ def test_the_count_is_never_less_than_the_passes_made(monkeypatch):
     monkeypatch.setattr(engine, "_priced", counted)
     engine.quote([plan], stay)
     assert passes * len(plan.rules) <= quote_work(plan, stay, _Qualified(plan, stay))
+
+
+#: The time the slowest quote just inside the budget may take. About 0.6 s on the
+#: machine that measured it; the margin is for a slower CI runner.
+UNDER_BUDGET_SECONDS = 2.0
+
+
+def _largest_inside_the_budget(daily: int, weekly: int):
+    """The plan with these caps and the most specials whose quote still fits the
+    budget, and the same plan with one special more."""
+    from rate_engine.engine import _Qualified, quote_work
+
+    def plan(n):
+        return load_plan(_plan([HOURLY] + _caps(daily, weekly) + [_flat(i) for i in range(n)]))
+
+    stay = _stay()
+    # As many specials as a plan may hold, less one so the plan one over still loads;
+    # every shape here runs out of budget before that.
+    low, high = 0, limits.MAX_RULES_PER_PLAN - 2 - daily - weekly
+    while low < high:
+        mid = (low + high + 1) // 2
+        candidate = plan(mid)
+        if quote_work(candidate, stay, _Qualified(candidate, stay)) <= limits.MAX_QUOTE_WORK:
+            low = mid
+        else:
+            high = mid - 1
+    return plan(low), plan(low + 1)
+
+
+@pytest.mark.guarantee("F67")
+@pytest.mark.parametrize("daily, weekly", [(8, 8), (1, 15), (16, 0), (0, 0)])
+def test_the_slowest_quote_inside_the_budget_is_priced_quickly(daily, weekly):
+    """The review's shape first: eight daily and eight weekly caps, which with each
+    day of a cap's walk counted as one rule read fit the budget with 259 specials
+    and took about 4 s a quote."""
+    inside, over = _largest_inside_the_budget(daily, weekly)
+    stay = _stay()
+    started = time.perf_counter()
+    with _within(UNDER_BUDGET_SECONDS + 1.0):
+        engine.quote([inside], stay)
+    took = time.perf_counter() - started
+    assert took < UNDER_BUDGET_SECONDS, f"{daily}+{weekly} caps: {took:.2f} s inside the budget"
+    with pytest.raises(engine.Refused) as refused:
+        engine.quote([over], stay)
+    assert [f.code for f in refused.value.findings] == ["GAP_QUOTE_OVER_WORK_BUDGET"]

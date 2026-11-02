@@ -47,10 +47,19 @@ MAX_CAP_RULES_PER_PLAN = 16
 
 #: How much work one quote may do, counted before any way is priced: the ways
 #: plus one, times the plan's rules plus the days of the stay times the caps
-#: that walk them (a weekly cap walking each daily cap's days). The largest
-#: stress plan the tests price, 400 specials beside 400 that do not on a 90-day
-#: stay with a daily and a weekly cap, comes to about 430,000.
-MAX_QUOTE_WORK = 2_000_000
+#: that walk them (a weekly cap walking each daily cap's days), each day a cap
+#: walks counted as `QUOTE_CAP_DAY_WEIGHT` rule reads. Measured, one counted
+#: step is about 0.2 microseconds whatever the plan's shape, so the slowest
+#: quote within this budget takes about 0.6 s. The largest stress plan the
+#: tests price, 400 specials beside 400 that do not on a 90-day stay with a
+#: daily and a weekly cap, comes to about 2,100,000.
+MAX_QUOTE_WORK = 3_000_000
+
+#: What one day of a cap's walk costs, in rule reads. Measured: a pass reads
+#: each rule in about 0.2 microseconds and a cap walks a day in 1 to 3, so a day
+#: is counted as 16. Counted as one, a plan of eight daily and eight weekly caps
+#: fit the budget with 259 specials and took about 4 s a quote.
+QUOTE_CAP_DAY_WEIGHT = 16
 
 #: The most tax sets one statement may hold, and the most rules in one set. A
 #: garage states a new set each time a tax changes, a handful a decade, and a set

@@ -521,9 +521,11 @@ GUARANTEES: dict[str, str] = {
         "A quote does a bounded amount of work. A plan holds at most "
         "`MAX_CAP_RULES_PER_PLAN` caps, and before any way is priced the work is "
         "counted -- the ways plus one, times the rules plus the days times the caps' "
-        "walks -- and a stay over `MAX_QUOTE_WORK` is refused, 422 "
-        "`GAP_QUOTE_OVER_WORK_BUDGET`, nothing guessed and nothing priced. The largest "
-        "stress plan the tests price is well inside it, and prices as before."
+        "walks, a day of a walk weighted as `QUOTE_CAP_DAY_WEIGHT` rule reads -- and a "
+        "stay over `MAX_QUOTE_WORK` is refused, 422 `GAP_QUOTE_OVER_WORK_BUDGET`, nothing "
+        "guessed and nothing priced. The slowest plan shapes just inside the budget, caps "
+        "or none, are priced within a fixed time budget; the largest stress plan the "
+        "tests price is inside it, and prices as before."
     ),
     "F68": (
         "A garage's tax sets load in one pass: two taking effect at one instant are "

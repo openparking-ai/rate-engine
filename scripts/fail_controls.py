@@ -1832,6 +1832,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a quote of 300 specials beside eight daily and eight weekly caps on a "
         "90-day stay runs for tens of seconds instead of being refused",
     ),
+    "F67/cap-day-weight": (
+        "tests/test_op6_3_a_quote_does_bounded_work.py::"
+        "test_the_slowest_quote_inside_the_budget_is_priced_quickly",
+        "limits.py",
+        "QUOTE_CAP_DAY_WEIGHT = 16\n",
+        "QUOTE_CAP_DAY_WEIGHT = 1  # PLANTED: a cap's day costs a rule read\n",
+        "a day of a cap's walk is counted as one rule read, so eight daily and eight "
+        "weekly caps fit the budget with 259 specials and a quote takes seconds",
+    ),
     "F67/cap-limit": (
         "tests/test_op6_3_a_quote_does_bounded_work.py",
         "plan.py",

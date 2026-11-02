@@ -43,7 +43,7 @@ from .findings import (
     Finding,
     Refused,
 )
-from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK
+from .limits import EARLIEST_YEAR, LATEST_YEAR, MAX_QUOTE_WORK, QUOTE_CAP_DAY_WEIGHT
 from .percent import percent_text
 from .plan import InvalidPlan, Plan
 from .rules import (
@@ -861,8 +861,9 @@ def quote_work(plan: Plan, stay: Stay, qualified: _Qualified) -> int:
     `_the_cheapest_way` prices the stay once for each way plus once more, and
     each pass reads the plan's rules and has every cap walk the stay a day at a
     time -- a weekly cap walking each daily cap's days again inside each week.
-    So: (ways + 1) x (rules + days x the caps' walks). An upper bound, never
-    less than the work done, read from the counts alone.
+    So: (ways + 1) x (rules + days x the caps' walks x `QUOTE_CAP_DAY_WEIGHT`),
+    a day of a cap's walk costing as much as that many rule reads. An upper
+    bound, never less than the work done, read from the counts alone.
     """
     ways = len(qualified.at(QUALIFY)) + len(qualified.at(ACCUMULATE))
     caps = qualified.at(CAP)
@@ -870,7 +871,7 @@ def quote_work(plan: Plan, stay: Stay, qualified: _Qualified) -> int:
     weekly = sum(1 for rule in caps if rule.type == "weekly_max")
     walks = daily + weekly * (1 + daily) + (len(caps) - daily - weekly)
     days = stay.duration_minutes // MINUTES_IN_A_DAY + 2  # the days a stay can touch
-    return (ways + 1) * (len(plan.rules) + days * walks)
+    return (ways + 1) * (len(plan.rules) + days * walks * QUOTE_CAP_DAY_WEIGHT)
 
 
 def _over_work_budget(plan: Plan, stay: Stay, qualified: _Qualified) -> Finding | None:
