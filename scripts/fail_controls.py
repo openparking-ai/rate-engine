@@ -1877,6 +1877,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a caller trickling its request a byte at a time holds its thread for as "
         "long as it likes, since no single read waits out the per-read timeout",
     ),
+    "F69/stalled": (
+        "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
+        "service.py",
+        "        self._connection.settimeout(min(left, self._per_read))\n",
+        "        self._connection.settimeout(self._per_read)  # PLANTED: not the time left\n",
+        "a read waits the whole per-read timeout rather than the time left, so a "
+        "caller that sends half a request and goes silent holds its thread for the "
+        "deadline and 30 s more",
+    ),
     "F69/pool": (
         "tests/test_op6_5_a_slow_caller_holds_a_thread_for_a_bounded_time.py",
         "service.py",

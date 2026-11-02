@@ -72,6 +72,31 @@ def test_a_request_trickled_a_byte_at_a_time_is_closed_at_its_deadline(monkeypat
 
 
 @pytest.mark.guarantee("F69")
+def test_a_caller_that_sends_half_a_request_and_goes_silent_is_closed_at_its_deadline(
+    monkeypatch,
+):
+    """Half the headers, then nothing. The per-read timeout is still 30 s, so a
+    read that waited it out rather than the time left would hold the thread for
+    the deadline and 30 s more; the trickle tests cannot see that, since a
+    trickle is cut off at its next byte either way."""
+    server = _serve(monkeypatch, REQUEST_DEADLINE_SECONDS=1.0)
+    try:
+        with socket.create_connection(server.server_address[:2], timeout=5) as connection:
+            connection.sendall(b"POST /v1/quote HTTP/1.0\r\nContent-Ty")
+            started = time.monotonic()
+            try:
+                answer = connection.recv(4096)
+            except TimeoutError:
+                answer = None
+            waited = time.monotonic() - started
+        assert answer == b"", "still open 5 s after the caller went silent"
+        assert waited < 2.5, f"closed after {waited:.1f} s"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.guarantee("F69")
 def test_one_connection_more_than_the_limit_is_answered_503_at_once(monkeypatch):
     server = _serve(monkeypatch, MAX_CONNECTIONS=2)
     address = server.server_address[:2]

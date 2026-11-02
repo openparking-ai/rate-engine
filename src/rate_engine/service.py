@@ -236,6 +236,10 @@ class _BoundedServer(ThreadingHTTPServer):
     number of idle or slow connections can take more threads than this.
     """
 
+    #: Connections the kernel holds waiting to be accepted. The default, 5, made
+    #: opening 64 at once take seconds, though every one is accepted at once.
+    request_queue_size = 128
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
