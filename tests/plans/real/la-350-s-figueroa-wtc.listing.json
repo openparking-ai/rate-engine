@@ -1,0 +1,61 @@
+{
+  "garage": "World Trade Center garage",
+  "address": "350 S Figueroa St, Los Angeles, CA",
+  "city": "Los Angeles",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://en.parkopedia.com/parking/garage/world_trade_center/90071/los_angeles/",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "Early Bird $13.00 (Mon-Fri, in 3am-10am, out by 12am); Evening $9.00; 24 hours $28."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "'Evening $9.00' states no times, so it is not built. 'out by 12am' is read as 23:59."
+  ],
+  "cases": [
+    {
+      "name": "in at 03:00, out inside the limits",
+      "entry": "2026-03-03T03:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry from 03:00",
+      "expect_fee_minor": 1300
+    },
+    {
+      "name": "in at 02:59: before the window",
+      "entry": "2026-03-03T02:59",
+      "minutes": 60,
+      "basis": "the early bird window opens at 03:00",
+      "expect_fee_minor": 2800
+    },
+    {
+      "name": "in at 10:01: one minute past",
+      "entry": "2026-03-03T10:01",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry up to 10:00",
+      "expect_fee_minor": 2800
+    },
+    {
+      "name": "out at 23:59 exactly",
+      "entry": "2026-03-03T03:00",
+      "minutes": 1259,
+      "basis": "listing: out by 23:59",
+      "expect_fee_minor": 1300
+    },
+    {
+      "name": "out at 24:00: one minute late",
+      "entry": "2026-03-03T03:00",
+      "minutes": 1260,
+      "basis": "listing: out by 23:59",
+      "expect_fee_minor": 2800
+    },
+    {
+      "name": "a day the early bird is not listed for",
+      "entry": "2026-03-14T03:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for mon, tue, wed, thu, fri",
+      "expect_fee_minor": 2800
+    }
+  ]
+}

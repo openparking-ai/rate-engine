@@ -1,0 +1,141 @@
+{
+  "plan_version": "dfw-remote-tolltag",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Chicago",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "dfw-120",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "dfw-120",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 300
+      },
+      "stay_at_most_minutes": 120
+    },
+    {
+      "id": "dfw-240",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "dfw-240",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 400
+      },
+      "stay_at_most_minutes": 240
+    },
+    {
+      "id": "dfw-360",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "dfw-360",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 600
+      },
+      "stay_at_most_minutes": 360
+    },
+    {
+      "id": "dfw-6-24h",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "dfw-6-24h",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1400
+      },
+      "stay_at_most_minutes": 1440
+    }
+  ],
+  "decisions": []
+}

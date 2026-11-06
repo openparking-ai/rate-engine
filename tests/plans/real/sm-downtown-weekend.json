@@ -1,0 +1,270 @@
+{
+  "plan_version": "sm-downtown-weekend",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Los_Angeles",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "we-90",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-90",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 0
+      },
+      "stay_at_most_minutes": 90
+    },
+    {
+      "id": "we-120",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-120",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 200
+      },
+      "stay_at_most_minutes": 120
+    },
+    {
+      "id": "we-150",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-150",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 400
+      },
+      "stay_at_most_minutes": 150
+    },
+    {
+      "id": "we-180",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-180",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 600
+      },
+      "stay_at_most_minutes": 180
+    },
+    {
+      "id": "we-210",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-210",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 850
+      },
+      "stay_at_most_minutes": 210
+    },
+    {
+      "id": "we-240",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-240",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1100
+      },
+      "stay_at_most_minutes": 240
+    },
+    {
+      "id": "we-270",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-270",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1400
+      },
+      "stay_at_most_minutes": 270
+    },
+    {
+      "id": "we-300",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-300",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1700
+      },
+      "stay_at_most_minutes": 300
+    },
+    {
+      "id": "we-330",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-330",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 2100
+      },
+      "stay_at_most_minutes": 330
+    },
+    {
+      "id": "we-over",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "we-over",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "any_span",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 2500
+      }
+    }
+  ],
+  "decisions": []
+}

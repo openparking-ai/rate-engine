@@ -1,0 +1,112 @@
+{
+  "garage": "Downtown Santa Monica parking structures 1-2, 4-8 and KEC (weekday)",
+  "address": "Santa Monica, CA (city structures)",
+  "city": "Santa Monica",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://www.santamonica.gov/media/Parking/Parking%20Prices/Approved%20Pricing%20Table%20-%20FINAL%20RATES.pdf",
+  "date_seen": "2026-11-07",
+  "date_on_listing": "New Rates 4/13/2026",
+  "source_kind": "official city pricing table (PDF read in full by this session; text extracted from its layer)",
+  "verbatim_rows": [
+    "Downtown Parking Structures 1 - 2, 4- 8, and KEC. New Rates 4/13/2026 Weekday Per Entry (Mon-Fri): 30 \u2013 90 minutes FREE; 1.5 \u2013 2.0 hours $2.00; 2.0 \u2013 2.5 hours $3.50; 2.5 \u2013 3.0 hours $5.00; 3.0 \u2013 3.5 hours $7.00; 3.5 \u2013 4.0 hours $9.00; 4.0 \u2013 4.5 hours $11.50; 4.5 \u2013 5.0 hours $14.00; 5.0 \u2013 5.5 hours $17.00; 5.5 hours or more $20.00; Daily Maximum $20.00"
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "The table does not say which band an exact edge (2.0 hours) falls in: only the inside of each band is tested.",
+    "'First 30 minutes FREE' appears in the previous-rates column; the new column reads '30 \u2013 90 minutes FREE': read as free up to 90 minutes.",
+    "'per entry' and 'Daily Maximum $20.00' beyond one day are not stated: stays over 24 hours are not tested."
+  ],
+  "cases": [
+    {
+      "name": "60 minutes (30 - 90 minutes)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "table row '30 - 90 minutes'",
+      "expect_fee_minor": 0
+    },
+    {
+      "name": "105 minutes (1.5 - 2.0 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 105,
+      "basis": "table row '1.5 - 2.0 hours'",
+      "expect_fee_minor": 200
+    },
+    {
+      "name": "135 minutes (2.0 - 2.5 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 135,
+      "basis": "table row '2.0 - 2.5 hours'",
+      "expect_fee_minor": 350
+    },
+    {
+      "name": "165 minutes (2.5 - 3.0 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 165,
+      "basis": "table row '2.5 - 3.0 hours'",
+      "expect_fee_minor": 500
+    },
+    {
+      "name": "195 minutes (3.0 - 3.5 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 195,
+      "basis": "table row '3.0 - 3.5 hours'",
+      "expect_fee_minor": 700
+    },
+    {
+      "name": "225 minutes (3.5 - 4.0 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 225,
+      "basis": "table row '3.5 - 4.0 hours'",
+      "expect_fee_minor": 900
+    },
+    {
+      "name": "255 minutes (4.0 - 4.5 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 255,
+      "basis": "table row '4.0 - 4.5 hours'",
+      "expect_fee_minor": 1150
+    },
+    {
+      "name": "285 minutes (4.5 - 5.0 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 285,
+      "basis": "table row '4.5 - 5.0 hours'",
+      "expect_fee_minor": 1400
+    },
+    {
+      "name": "315 minutes (5.0 - 5.5 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 315,
+      "basis": "table row '5.0 - 5.5 hours'",
+      "expect_fee_minor": 1700
+    },
+    {
+      "name": "400 minutes (5.5 hours or more)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 400,
+      "basis": "table row '5.5 hours or more' and 'Daily Maximum'",
+      "expect_fee_minor": 2000
+    },
+    {
+      "name": "600 minutes (5.5 hours or more)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 600,
+      "basis": "table row '5.5 hours or more' and 'Daily Maximum'",
+      "expect_fee_minor": 2000
+    },
+    {
+      "name": "1000 minutes (5.5 hours or more)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1000,
+      "basis": "table row '5.5 hours or more' and 'Daily Maximum'",
+      "expect_fee_minor": 2000
+    },
+    {
+      "name": "1440 minutes (5.5 hours or more)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "table row '5.5 hours or more' and 'Daily Maximum'",
+      "expect_fee_minor": 2000
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "garage": "540 S Grand Ave garage",
+  "address": "540 S Grand Ave, Los Angeles, CA",
+  "city": "Los Angeles",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://en.parkopedia.com/parking/garage/pacmutual/90014/los_angeles",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "Early Bird $16.00 (Mon-Fri, in by 9am); Evening $10.00 (Mon-Fri, in after 5pm); Flat Rate $10.00 (Sat-Sun); 24 hours $37 listed separately."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "No hourly rate is given: a stay none of these prices covers is refused.",
+    "No exit limit is stated for the evening rate: the plan has none. '24 hours $37' is read as the price for a stay of up to 24 hours."
+  ],
+  "cases": [
+    {
+      "name": "in at 00:00, out inside the limits",
+      "entry": "2026-03-03T00:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry from 00:00",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "in at 09:00: 'in by' is inclusive",
+      "entry": "2026-03-03T09:00",
+      "minutes": 60,
+      "basis": "listing: in by 09:00",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "in at 09:01: one minute past",
+      "entry": "2026-03-03T09:01",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry up to 09:00",
+      "expect_fee_minor": 3700
+    },
+    {
+      "name": "a day the early bird is not listed for",
+      "entry": "2026-03-14T00:00",
+      "minutes": 60,
+      "basis": "listing: Flat Rate $10.00 (Sat-Sun)",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "evening: in at 17:01",
+      "entry": "2026-03-03T17:01",
+      "minutes": 240,
+      "basis": "listing: Evening $10.00, in after 5pm",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "in at 17:00: not 'after 5pm'",
+      "entry": "2026-03-03T17:00",
+      "minutes": 240,
+      "basis": "in after 5pm excludes 17:00; the 24 hours price is the one listed",
+      "expect_fee_minor": 3700
+    },
+    {
+      "name": "weekend flat rate",
+      "entry": "2026-03-14T10:00",
+      "minutes": 300,
+      "basis": "listing: Flat Rate $10.00 (Sat-Sun)",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "listing: 24 hours $37",
+      "expect_fee_minor": 3700
+    }
+  ]
+}

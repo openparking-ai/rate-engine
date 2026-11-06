@@ -1,0 +1,47 @@
+{
+  "garage": "Santa Monica Central Beach Zone (Lots 1N-3N, 1S-3S), Nov - Mar",
+  "address": "Santa Monica, CA (beach lots)",
+  "city": "Santa Monica",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://www.santamonica.gov/media/Parking/Parking%20Prices/Approved%20Pricing%20Table%20-%20FINAL%20RATES.pdf",
+  "date_seen": "2026-11-07",
+  "date_on_listing": "New Rates as of 1/12/2026",
+  "source_kind": "official city pricing table (PDF read in full by this session; text extracted from its layer)",
+  "verbatim_rows": [
+    "Central Beach Zone, New Rates as of 1/12/2026, Nov - Mar: Weekdays (per entry) $8.00; Weekends (per entry) $12.00"
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "Per entry is one price for the visit; a visit across midnight is not stated and not tested."
+  ],
+  "cases": [
+    {
+      "name": "weekday, 1 hour",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "Weekdays (per entry)",
+      "expect_fee_minor": 800
+    },
+    {
+      "name": "weekday, 8 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 480,
+      "basis": "per entry, not per time",
+      "expect_fee_minor": 800
+    },
+    {
+      "name": "weekend, 1 hour",
+      "entry": "2026-03-14T10:00",
+      "minutes": 60,
+      "basis": "Weekends (per entry)",
+      "expect_fee_minor": 1200
+    },
+    {
+      "name": "weekend, 8 hours",
+      "entry": "2026-03-14T10:00",
+      "minutes": 480,
+      "basis": "per entry, not per time",
+      "expect_fee_minor": 1200
+    }
+  ]
+}

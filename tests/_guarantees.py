@@ -553,6 +553,15 @@ GUARANTEES: dict[str, str] = {
         "on stays of every length and both ways of pricing the time. A percent discount "
         "above 100% still does not load (F60)."
     ),
+    "F78": (
+        "Real garage listings, written as plans, are priced as the listing says "
+        "(Gokhan, 2026-11-07: test with real rates, \"not some imaginary only created "
+        "rates\"): `tests/plans/real/` holds one plan per real listing from New York, "
+        "Chicago, Los Angeles, Santa Monica and three airports, with its source, its "
+        "words and stays priced at the listing's own edges. The expected number comes "
+        "from the listing, a stay the listing states no price for is refused and not "
+        "guessed, and the files say they are not current prices."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

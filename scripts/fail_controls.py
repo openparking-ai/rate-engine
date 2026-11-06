@@ -2035,6 +2035,30 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a 10,000.00 discount on a 3.00 stay takes off 10,000.00 and the quote is "
         "refused as a negative fee, where it should be free",
     ),
+    # Real listings are priced as the listing says (F78, Gokhan 2026-11-07).
+    "F78": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if False:  # PLANTED: the minimum stay is ignored\n",
+        "the Chicago and New York early birds with a 5-hour or 4-hour minimum are given "
+        "to shorter stays, against what the listings say",
+    ),
+    "F78/maximum-ignored": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: the maximum stay is ignored\n",
+        "the 'up to 10 hours' early bird and every 'up to 3 hours' / '24 hours' band is "
+        "given to stays past its limit",
+    ),
+    "F78/cheapest-not-wins": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special is charged over a cheaper hour",
+        "an early bird dearer than the block rate is charged to a short stay",
+    ),
 }
 
 

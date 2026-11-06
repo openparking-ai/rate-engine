@@ -1,0 +1,111 @@
+{
+  "garage": "1133 S Olive St garage",
+  "address": "1133 S Olive St, Los Angeles, CA",
+  "city": "Los Angeles",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://en.parkopedia.com/parking/garage/olive_garage/90015/los_angeles/",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "Mon-Fri 6:00am-6:00pm: 10 mins $2.25, additional 10 mins $2.25; Early Bird $15.00 (Mon-Fri, in by 9am); Max $25.00."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "No early-bird lower bound or exit limit is stated: the plan reads it as the garage hours (06:00) and no exit limit (one day, Gokhan's rule for early birds).",
+    "Nothing is stated for evenings, after 6:00pm or Saturday/Sunday: the engine refuses those stays."
+  ],
+  "cases": [
+    {
+      "name": "10 minutes",
+      "entry": "2026-03-03T08:00",
+      "minutes": 10,
+      "basis": "listing: 10 mins $2.25",
+      "expect_fee_minor": 225
+    },
+    {
+      "name": "20 minutes",
+      "entry": "2026-03-03T08:00",
+      "minutes": 20,
+      "basis": "listing: additional 10 mins $2.25",
+      "expect_fee_minor": 450
+    },
+    {
+      "name": "11 minutes rounds up to 2 blocks",
+      "entry": "2026-03-03T08:00",
+      "minutes": 11,
+      "basis": "each started block counts (Gokhan: rounding up)",
+      "expect_fee_minor": 450
+    },
+    {
+      "name": "60 min after 9am: blocks only",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "6 blocks of $2.25",
+      "expect_fee_minor": 1350
+    },
+    {
+      "name": "110 min after 9am: under the max",
+      "entry": "2026-03-03T10:00",
+      "minutes": 110,
+      "basis": "11 blocks, under Max $25.00",
+      "expect_fee_minor": 2475
+    },
+    {
+      "name": "120 min after 9am: capped",
+      "entry": "2026-03-03T10:00",
+      "minutes": 120,
+      "basis": "12 blocks is $27.00; listing: Max $25.00",
+      "expect_fee_minor": 2500
+    },
+    {
+      "name": "10 hours after 9am: capped",
+      "entry": "2026-03-03T10:00",
+      "minutes": 600,
+      "basis": "listing: Max $25.00",
+      "expect_fee_minor": 2500
+    },
+    {
+      "name": "in at 9:00, 10 hours: early bird",
+      "entry": "2026-03-03T09:00",
+      "minutes": 600,
+      "basis": "listing: Early Bird $15.00, in by 9am (cheaper than Max $25)",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in at 9:01, 10 hours: no early bird",
+      "entry": "2026-03-03T09:01",
+      "minutes": 600,
+      "basis": "in by 9am; Max $25.00",
+      "expect_fee_minor": 2500
+    },
+    {
+      "name": "early bird in at 8:00, 60 min: blocks are cheaper",
+      "entry": "2026-03-03T08:00",
+      "minutes": 60,
+      "basis": "the cheapest price wins for the customer (Gokhan)",
+      "expect_fee_minor": 1350
+    },
+    {
+      "name": "early bird in at 8:00, 70 min: early bird is cheaper",
+      "entry": "2026-03-03T08:00",
+      "minutes": 70,
+      "basis": "7 blocks is $15.75; Early Bird $15.00",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "Saturday: the listing gives no price",
+      "entry": "2026-03-14T10:00",
+      "minutes": 60,
+      "basis": "the listing states Mon-Fri only; the engine refuses, it does not guess",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "in at 18:30: outside the stated hours",
+      "entry": "2026-03-03T18:30",
+      "minutes": 60,
+      "basis": "the listing states 6:00am-6:00pm",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "plan_version": "sm-beach-central-apr-oct",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Los_Angeles",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "weekday-per-entry",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "weekday-per-entry",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 2000
+      }
+    },
+    {
+      "id": "weekend-per-entry",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "weekend-per-entry",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 2000
+      }
+    }
+  ],
+  "decisions": []
+}

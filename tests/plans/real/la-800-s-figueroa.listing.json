@@ -1,0 +1,62 @@
+{
+  "garage": "800 S Figueroa St garage",
+  "address": "800 S Figueroa St, Los Angeles, CA",
+  "city": "Los Angeles",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://en.parkopedia.com/parking/garage/800_s_figueroa_st/90017/los_angeles",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "Early Bird $10.00 (Mon-Fri, in by 9:30am, out by 12am); Max $30.00; $3 per additional 15 minutes."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "The first 15-minute price is not given, so the per-block rate and the Max $30.00 cannot be built or tested: only the early bird is.",
+    "'out by 12am' is read as 23:59 the same day: midnight itself cannot be stated for a one-day window."
+  ],
+  "cases": [
+    {
+      "name": "in at 00:00, out inside the limits",
+      "entry": "2026-03-03T00:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry from 00:00",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "in at 09:30: 'in by' is inclusive",
+      "entry": "2026-03-03T09:30",
+      "minutes": 60,
+      "basis": "listing: in by 09:30",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "in at 09:31: one minute past",
+      "entry": "2026-03-03T09:31",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry up to 09:30",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "out at 23:59 exactly",
+      "entry": "2026-03-03T00:00",
+      "minutes": 1439,
+      "basis": "listing: out by 23:59",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "out at 24:00: one minute late",
+      "entry": "2026-03-03T00:00",
+      "minutes": 1440,
+      "basis": "listing: out by 23:59",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "a day the early bird is not listed for",
+      "entry": "2026-03-14T00:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for mon, tue, wed, thu, fri",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "garage": "624 S Grand Ave garage",
+  "address": "624 S Grand Ave, Los Angeles, CA",
+  "city": "Los Angeles",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://en.parkopedia.com/parking/garage/one_wilshire/90017/los_angeles/",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "12 mins $4.50, additional 12 mins $4.50; 24 Hours $35.00; Early Bird $15.00 (Mon-Fri, in by 9am)."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "The address-to-page match for this listing was taken from the summary, not seen. The block rate is applied to every day and hour: none is stated."
+  ],
+  "cases": [
+    {
+      "name": "in at 00:00, out inside the limits",
+      "entry": "2026-03-03T00:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry from 00:00",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in at 09:00: 'in by' is inclusive",
+      "entry": "2026-03-03T09:00",
+      "minutes": 60,
+      "basis": "listing: in by 09:00",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in at 09:01: one minute past",
+      "entry": "2026-03-03T09:01",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry up to 09:00",
+      "expect_fee_minor": 2250
+    },
+    {
+      "name": "a day the early bird is not listed for",
+      "entry": "2026-03-14T00:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for mon, tue, wed, thu, fri",
+      "expect_fee_minor": 2250
+    },
+    {
+      "name": "12 minutes",
+      "entry": "2026-03-03T10:00",
+      "minutes": 12,
+      "basis": "listing: 12 mins $4.50",
+      "expect_fee_minor": 450
+    },
+    {
+      "name": "13 minutes",
+      "entry": "2026-03-03T10:00",
+      "minutes": 13,
+      "basis": "listing: additional 12 mins $4.50",
+      "expect_fee_minor": 900
+    },
+    {
+      "name": "24 minutes",
+      "entry": "2026-03-03T10:00",
+      "minutes": 24,
+      "basis": "two 12-minute blocks",
+      "expect_fee_minor": 900
+    },
+    {
+      "name": "2 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 120,
+      "basis": "ten blocks is $45.00, 24 Hours $35.00: the cheaper wins for the customer",
+      "expect_fee_minor": 3500
+    },
+    {
+      "name": "1 hour",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "five blocks, $22.50",
+      "expect_fee_minor": 2250
+    },
+    {
+      "name": "24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "listing: 24 Hours $35.00",
+      "expect_fee_minor": 3500
+    }
+  ]
+}
