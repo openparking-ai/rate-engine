@@ -170,6 +170,10 @@ F64/why-not-every-pass
 F65
 F65/at-least-means-more-than
 F65/rounded-stay
+F66
+F66/at-most-means-less-than
+F66/no-reason-given
+F66/rounded-stay
 F6b/attribute-form
 F6b/imported-name-form
 F6c

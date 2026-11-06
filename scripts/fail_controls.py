@@ -1903,6 +1903,40 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of exactly five hours is refused the five-hour special: \"at least\" "
         "is read as \"more than\"",
     ),
+    # A special can have a maximum stay (F66, Gokhan 2026-11-07).
+    "F66": (
+        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: the maximum stay is ignored\n",
+        "an eleven-hour stay is given the ten-hour early bird, so the special covers "
+        "a stay it says it does not",
+    ),
+    "F66/rounded-stay": (
+        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        '    high = rule.params["stay_at_most_minutes"]\n',
+        '    high = rule.params["stay_at_most_minutes"]\n'
+        "    length = timedelta(minutes=stay.duration_minutes)  # PLANTED: rounded up\n",
+        "a stay of 10 h 0 min 30 s is rounded up to 601 minutes and one of 9 h 59 min "
+        "59 s to 600 before the comparison, so the line moves with the rounding",
+    ),
+    "F66/at-most-means-less-than": (
+        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if high is not None and length >= timedelta(minutes=high):  # PLANTED\n",
+        "a stay of exactly ten hours is refused the ten-hour special: \"at most\" is "
+        "read as \"less than\"",
+    ),
+    "F66/no-reason-given": (
+        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "        failed.append(stay_length)\n",
+        "        pass  # PLANTED: the line does not say why the special did not apply\n",
+        "a stay over the maximum is priced on the regular rate with no line saying the "
+        "special was not applied or why -- the question an attendant is asked",
+    ),
 }
 
 

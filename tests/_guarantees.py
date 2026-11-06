@@ -509,6 +509,15 @@ GUARANTEES: dict[str, str] = {
         "regular rate, and the breakdown says the special did not apply and why. The "
         "cheapest price still wins. A plan that states no minimum is priced as before."
     ),
+    "F66": (
+        "A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "
+        "\"up to 10 hours\"): `stay_at_most_minutes` on a `time_window` means it "
+        "applies only if the REAL stay is at most that many minutes, in real time. A "
+        "longer stay is priced WHOLE by the regular rate, nothing split, and the "
+        "breakdown says the special did not apply because the stay was longer than its "
+        "maximum. The cheapest price still wins. A plan that states no maximum is "
+        "priced as before."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
