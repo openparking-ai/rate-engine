@@ -518,6 +518,16 @@ GUARANTEES: dict[str, str] = {
         "maximum. The cheapest price still wins. A plan that states no maximum is "
         "priced as before."
     ),
+    "F67": (
+        "The patterns real garages list are expressible as the listing words them "
+        "(Gokhan, 2026-11-07: \"accomodate all those options exactly the way they "
+        "describe\"): banded prices (\"up to 3 hours = X, up to 6 hours = Y\") as a "
+        "flat special with a maximum stay each; a max that applies only inside a "
+        "weekday window as a flat special for stays that enter in it, the cheapest "
+        "price winning; a flat \"24 hours\" price as a flat special for a stay of at "
+        "most 24 hours; and an evening window past midnight as ONE `next_day` rule. "
+        "Each is proven on stays either side of its edges, with an example plan."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

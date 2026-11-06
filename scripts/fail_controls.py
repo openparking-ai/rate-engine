@@ -1937,6 +1937,24 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay over the maximum is priced on the regular rate with no line saying the "
         "special was not applied or why -- the question an attendant is asked",
     ),
+    # The real listing patterns are expressible (F67, Gokhan 2026-11-07).
+    "F67/no-maximum-stay": (
+        "tests/test_f67_the_real_listing_patterns_are_expressible.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: a band covers any stay\n",
+        "the 'up to 3 hours' and '24 hours' prices are charged to stays far past "
+        "their limits, so a seven-hour stay pays the three-hour band",
+    ),
+    "F67/evening-cannot-pass-midnight": (
+        "tests/test_f67_the_real_listing_patterns_are_expressible.py",
+        "rules/time_window.py",
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, "any_span": None}',
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 0, "any_span": None}'
+        "  # PLANTED",
+        "a window cannot run past midnight, so 'in after 5pm, out by 6am' has to be "
+        "written as two rules and the one-rule form does not load",
+    ),
 }
 
 
