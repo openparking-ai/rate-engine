@@ -1,4 +1,4 @@
-"""F66 -- a special can have a maximum stay.
+"""F73 -- a special can have a maximum stay.
 
 The real listings: *"early bird, up to 10 hours"* (NYC Upper East Side and Midtown
 West). Gokhan, 2026-11-07: **"plain readings are good."** So a special with
@@ -29,13 +29,13 @@ EARLY_BIRD = flat("early-bird", 3000, day_span="same_day", stay_at_most_minutes=
 PLAN = plan(HOURLY, EARLY_BIRD)
 
 
-@pytest.mark.guarantee("F66")
+@pytest.mark.guarantee("F73")
 def test_a_stay_of_at_most_the_maximum_gets_the_special():
     assert fee(PLAN, TUESDAY_8AM, 600) == 3000
     assert fee(PLAN, TUESDAY_8AM, 480) == 3000   # 8 h by the hour is 36.00
 
 
-@pytest.mark.guarantee("F66")
+@pytest.mark.guarantee("F73")
 def test_a_longer_stay_is_priced_whole_by_the_regular_rate_nothing_split():
     """601 minutes is 11 hours by the hour: 8.00 + 10 x 4.00 = 48.00. Not 30.00 for
     the first ten hours and 4.00 for the last."""
@@ -46,7 +46,7 @@ def test_a_longer_stay_is_priced_whole_by_the_regular_rate_nothing_split():
     assert "so the stay prices on the time-based rate" in said
 
 
-@pytest.mark.guarantee("F66")
+@pytest.mark.guarantee("F73")
 def test_the_stay_is_measured_in_real_minutes_not_rounded_ones():
     """10 h 0 min 30 s rounds UP to 601 minutes elsewhere; here it is simply over
     ten hours. 9 h 59 min 59 s is under it, though it also rounds up to 600."""
@@ -55,7 +55,7 @@ def test_the_stay_is_measured_in_real_minutes_not_rounded_ones():
     assert "600 min 30 s" in " ".join(texts(PLAN, TUESDAY_8AM, 600, seconds=30))
 
 
-@pytest.mark.guarantee("F66")
+@pytest.mark.guarantee("F73")
 def test_the_cheapest_price_still_wins_over_a_special_that_qualifies():
     """A 60.00 special with a ten-hour maximum, on a stay inside it: the hour is
     44.00 for ten hours, so the customer pays 44.00."""
@@ -64,7 +64,7 @@ def test_the_cheapest_price_still_wins_over_a_special_that_qualifies():
     assert fee(dear, TUESDAY_8AM, 600) == 4400
 
 
-@pytest.mark.guarantee("F66")
+@pytest.mark.guarantee("F73")
 def test_a_minimum_and_a_maximum_together_are_a_window_of_lengths():
     """Three to six hours for 20.00. By the hour 3 h is 16.00, 4 h 20.00, 5 h 24.00,
     6 h 28.00, 7 h 32.00."""

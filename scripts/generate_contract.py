@@ -365,7 +365,7 @@ saying it does not.
 
 ### What changed in version 7
 
-**A special can state a minimum and a maximum stay (F65, F66).** A `time_window`
+**A special can state a minimum and a maximum stay (F72, F73).** A `time_window`
 may carry `stay_at_least_minutes` and `stay_at_most_minutes`, each a positive whole
 number of minutes, each optional: leaving one out means no limit of that kind, so
 every plan that loaded on version 6 and states neither prices exactly as before. A
@@ -377,7 +377,7 @@ stay, nothing split -- and the breakdown says which limit it missed. The cheapes
 price still wins. A minimum above the maximum does not load.
 
 **A day is the local calendar day, and a week is counted from a day the plan names
-(F68, F69).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
+(F75, F76).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
 e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
 `rolling_7d` choice of a weekly max are gone. **That is a plan that loaded on
 version 6 and does not load here.** The refusal names the field and says what to
@@ -393,7 +393,7 @@ exit are the same instant is now zero, with a `zero_length_stay` line saying why
 one second is a minute and prices as before. See "A stay of zero length costs
 nothing".
 
-**A price is never below $0 (F70).** Gokhan, 2026-11-07: "Rate cannot be below $0."
+**A price is never below $0 (F77).** Gokhan, 2026-11-07: "Rate cannot be below $0."
 A discount bigger than the fee makes the stay free and is not refused: a fixed
 discount takes off at most what the stay costs and its line says it was limited, a
 second discount takes off at most what is left, and a 100% discount makes the stay
@@ -773,7 +773,7 @@ This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state that a day means a local `calendar_day` (a "rolling 24 hours" day was the
-other choice until version 7 and is gone, F68). The stay is cut at the start
+other choice until version 7 and is gone, F75). The stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 

@@ -503,7 +503,7 @@ GUARANTEES: dict[str, str] = {
         "a daily and a weekly max, are priced within a fixed time budget. No limit is "
         "set on the rules a plan may hold or the ways a stay may have."
     ),
-    "F65": (
+    "F72": (
         "A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "
         "\"5-hour minimum\"): `stay_at_least_minutes` on a `time_window` means it applies "
         "only if the REAL stay is at least that many minutes, in real time and not the "
@@ -511,7 +511,7 @@ GUARANTEES: dict[str, str] = {
         "regular rate, and the breakdown says the special did not apply and why. The "
         "cheapest price still wins. A plan that states no minimum is priced as before."
     ),
-    "F66": (
+    "F73": (
         "A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "
         "\"up to 10 hours\"): `stay_at_most_minutes` on a `time_window` means it "
         "applies only if the REAL stay is at most that many minutes, in real time. A "
@@ -520,7 +520,7 @@ GUARANTEES: dict[str, str] = {
         "maximum. The cheapest price still wins. A plan that states no maximum is "
         "priced as before."
     ),
-    "F67": (
+    "F74": (
         "The patterns real garages list are expressible as the listing words them "
         "(Gokhan, 2026-11-07: \"accomodate all those options exactly the way they "
         "describe\"): banded prices (\"up to 3 hours = X, up to 6 hours = Y\") as a "
@@ -530,21 +530,21 @@ GUARANTEES: dict[str, str] = {
         "most 24 hours; and an evening window past midnight as ONE `next_day` rule. "
         "Each is proven on stays either side of its edges, with an example plan."
     ),
-    "F68": (
+    "F75": (
         "A daily max counts the local calendar day, and only that (Gokhan, "
         "2026-11-07: \"calendar day not 24 hrs\"). A stay of 24 hours that starts at "
         "18:00 is in two days and each is capped on its own; a day with a clock change "
         "is one day. A plan that states a rolling 24-hour day does not load, and the "
         "refusal names the field and says to write `calendar_day`."
     ),
-    "F69": (
+    "F76": (
         "A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "
         "\"day: wednesday . e.g. sunday to sunday\"). The same stay is one week or two "
         "depending on that day. `week_starts_on` is a day name, always; a plan that "
         "states a rolling seven-day week does not load, and the refusal names the field "
         "and says to write `calendar_week` and a starting day."
     ),
-    "F70": (
+    "F77": (
         "A price can never be below $0 (Gokhan, 2026-11-07: \"Rate cannot be below "
         "$0\"), and a discount bigger than the fee floors at $0 and is never refused: a "
         "fixed discount takes off at most what the stay costs and the line says it was "

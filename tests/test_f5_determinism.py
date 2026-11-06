@@ -89,7 +89,7 @@ def test_a_spring_forward_day_is_priced_by_the_local_clock_not_by_elapsed_hours(
 @pytest.mark.guarantee("F5")
 def test_a_fall_back_day_is_one_calendar_day_however_long_the_clock_makes_it():
     """2026-11-01 is 25 hours on the local clock, and a daily max counts the local
-    calendar day (F68), so it is still ONE day with ONE cap.
+    calendar day (F75), so it is still ONE day with ONE cap.
 
     A stay of 1499 minutes beginning at local midnight that day ends at 23:59 the
     SAME date, so it pays 3000, where the same 1499 minutes starting at midnight

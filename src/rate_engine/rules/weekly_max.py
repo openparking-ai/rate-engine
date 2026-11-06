@@ -6,7 +6,7 @@ NEGATIVE line saying how much it took off, so the fee stays equal to the sum of
 its lines and the operator sees the size of the reduction rather than a bare
 "cap applied".
 
-**A week is counted from a day the garage picks, and only that (F69).** Gokhan,
+**A week is counted from a day the garage picks, and only that (F76).** Gokhan,
 2026-11-07: *"day: wednesday . e.g. sunday to sunday."* The cap is per local calendar
 week the stay touches, and the week starts on the day the plan names: Sunday to
 Sunday, Wednesday to Wednesday, whatever the garage's own week is. There is no

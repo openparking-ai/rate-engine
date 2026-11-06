@@ -5,7 +5,7 @@ ledger it is a NEGATIVE line saying how much it took off, which both keeps the
 fee equal to the sum of its lines and shows the operator the size of the
 discount -- the number a plain "daily max applied" would have hidden.
 
-**A day is a local calendar day, and only that (F68).** Gokhan, 2026-11-07: *"calendar
+**A day is a local calendar day, and only that (F75).** Gokhan, 2026-11-07: *"calendar
 day not 24 hrs."* A stay from Friday 22:00 to Saturday 02:00 is in two calendar days
 and each is capped on its own; a day is what the local clock says it is, so across a
 DST transition it is 23 or 25 hours, and that is correct. A "rolling 24 hours" day,

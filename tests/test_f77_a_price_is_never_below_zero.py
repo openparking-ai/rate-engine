@@ -1,4 +1,4 @@
-"""F70 -- a price can never be below $0, and a discount bigger than the fee never refuses.
+"""F77 -- a price can never be below $0, and a discount bigger than the fee never refuses.
 
 Gokhan, 2026-11-07: **"Rate cannot be below $0."** And on a discount bigger than
 the fee: it floors at $0, it is not refused. So a fixed discount takes off at most
@@ -74,7 +74,7 @@ def _plan(names: tuple[str, ...], order: tuple[str, ...], special: bool) -> dict
     return document
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_a_discount_bigger_than_the_fee_makes_it_free_and_says_it_was_limited():
     document = _plan(("huge",), ("huge",), special=False)
     status, body = quote(document, SATURDAY_10AM, 60)
@@ -85,7 +85,7 @@ def test_a_discount_bigger_than_the_fee_makes_it_free_and_says_it_was_limited():
     assert "limited to the 3.00 USD charged" in line["text"]
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_a_100_percent_discount_is_free_and_the_second_discount_has_nothing_left():
     document = _plan(("all", "five"), ("all", "five"), special=False)
     status, body = quote(document, SATURDAY_10AM, 90)
@@ -95,7 +95,7 @@ def test_a_100_percent_discount_is_free_and_the_second_discount_has_nothing_left
     assert five["delta_minor"] == 0, "nothing is left to take 5.00 off"
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_the_sweep_every_discount_in_every_order_on_every_length_is_priced_at_zero_or_more():
     priced = floored = 0
     names_sets = [n for r in (1, 2, 3) for n in itertools.combinations(sorted(DISCOUNTS), r)]
@@ -116,7 +116,7 @@ def test_the_sweep_every_discount_in_every_order_on_every_length_is_priced_at_ze
     assert priced > 1000 and floored > 500, (priced, floored)
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_a_discount_on_a_special_is_floored_too():
     document = _plan(("huge",), ("huge",), special=True)
     status, body = quote(document, SATURDAY_10AM, 600)
@@ -125,7 +125,7 @@ def test_a_discount_on_a_special_is_floored_too():
                for ln in body["breakdown"]), "the special priced the stay, and was floored after"
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_a_discount_that_does_not_exceed_the_fee_takes_off_exactly_its_amount():
     """The floor is not a cap on discounts: 5.00 off a 12.00 fee is 7.00."""
     document = _plan(("five",), ("five",), special=False)
@@ -133,7 +133,7 @@ def test_a_discount_that_does_not_exceed_the_fee_takes_off_exactly_its_amount():
     assert status == 200 and body["fee_minor"] == 700, body
 
 
-@pytest.mark.guarantee("F70")
+@pytest.mark.guarantee("F77")
 def test_a_weekday_stay_is_untouched_by_a_saturday_discount():
     document = _plan(("huge",), ("huge",), special=False)
     status, body = quote(document, TUESDAY_8AM, 60)

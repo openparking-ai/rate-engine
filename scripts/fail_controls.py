@@ -1887,17 +1887,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a connection has no socket timeout, so a caller that stops part-way through "
         "a body holds its thread for as long as it keeps the connection open",
     ),
-    # A special can need a minimum stay (F65, Gokhan 2026-11-07).
-    "F65": (
-        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+    # A special can need a minimum stay (F72, Gokhan 2026-11-07).
+    "F72": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
         "rules/time_window.py",
         "    if low is not None and length < timedelta(minutes=low):\n",
         "    if False:  # PLANTED: the minimum stay is ignored\n",
         "a four-hour stay is given the five-hour early bird, so the special applies "
         "to a stay that did not earn it",
     ),
-    "F65/rounded-stay": (
-        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+    "F72/rounded-stay": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
         "rules/time_window.py",
         "    length = stay.exit_at - stay.entry_at\n    low = rule.params",
         "    length = timedelta(minutes=stay.duration_minutes)  # PLANTED: rounded up\n"
@@ -1905,25 +1905,25 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of 4 h 59 min 30 s is rounded up to five hours before it is compared "
         "with the minimum, so it is given the five-hour special",
     ),
-    "F65/at-least-means-more-than": (
-        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+    "F72/at-least-means-more-than": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
         "rules/time_window.py",
         "    if low is not None and length < timedelta(minutes=low):\n",
         "    if low is not None and length <= timedelta(minutes=low):  # PLANTED\n",
         "a stay of exactly five hours is refused the five-hour special: \"at least\" "
         "is read as \"more than\"",
     ),
-    # A special can have a maximum stay (F66, Gokhan 2026-11-07).
-    "F66": (
-        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+    # A special can have a maximum stay (F73, Gokhan 2026-11-07).
+    "F73": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
         "rules/time_window.py",
         "    if high is not None and length > timedelta(minutes=high):\n",
         "    if False:  # PLANTED: the maximum stay is ignored\n",
         "an eleven-hour stay is given the ten-hour early bird, so the special covers "
         "a stay it says it does not",
     ),
-    "F66/rounded-stay": (
-        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+    "F73/rounded-stay": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
         "rules/time_window.py",
         '    high = rule.params["stay_at_most_minutes"]\n',
         '    high = rule.params["stay_at_most_minutes"]\n'
@@ -1931,33 +1931,33 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of 10 h 0 min 30 s is rounded up to 601 minutes and one of 9 h 59 min "
         "59 s to 600 before the comparison, so the line moves with the rounding",
     ),
-    "F66/at-most-means-less-than": (
-        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+    "F73/at-most-means-less-than": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
         "rules/time_window.py",
         "    if high is not None and length > timedelta(minutes=high):\n",
         "    if high is not None and length >= timedelta(minutes=high):  # PLANTED\n",
         "a stay of exactly ten hours is refused the ten-hour special: \"at most\" is "
         "read as \"less than\"",
     ),
-    "F66/no-reason-given": (
-        "tests/test_f66_a_special_can_have_a_maximum_stay.py",
+    "F73/no-reason-given": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
         "rules/time_window.py",
         "        failed.append(stay_length)\n",
         "        pass  # PLANTED: the line does not say why the special did not apply\n",
         "a stay over the maximum is priced on the regular rate with no line saying the "
         "special was not applied or why -- the question an attendant is asked",
     ),
-    # The real listing patterns are expressible (F67, Gokhan 2026-11-07).
-    "F67/no-maximum-stay": (
-        "tests/test_f67_the_real_listing_patterns_are_expressible.py",
+    # The real listing patterns are expressible (F74, Gokhan 2026-11-07).
+    "F74/no-maximum-stay": (
+        "tests/test_f74_the_real_listing_patterns_are_expressible.py",
         "rules/time_window.py",
         "    if high is not None and length > timedelta(minutes=high):\n",
         "    if False:  # PLANTED: a band covers any stay\n",
         "the 'up to 3 hours' and '24 hours' prices are charged to stays far past "
         "their limits, so a seven-hour stay pays the three-hour band",
     ),
-    "F67/evening-cannot-pass-midnight": (
-        "tests/test_f67_the_real_listing_patterns_are_expressible.py",
+    "F74/evening-cannot-pass-midnight": (
+        "tests/test_f74_the_real_listing_patterns_are_expressible.py",
         "rules/time_window.py",
         'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, "any_span": None}',
         'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 0, "any_span": None}'
@@ -1965,10 +1965,10 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a window cannot run past midnight, so 'in after 5pm, out by 6am' has to be "
         "written as two rules and the one-rule form does not load",
     ),
-    # A day is the local calendar day, a week starts on the plan's day (F68, F69,
+    # A day is the local calendar day, a week starts on the plan's day (F75, F76,
     # Gokhan 2026-11-07).
-    "F68": (
-        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+    "F75": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
         "rules/daily_max.py",
         "        day += ONE_DAY\n"
         "        yield datetime.combine(day, time(0), tzinfo=plan.timezone).astimezone(UTC)\n",
@@ -1978,40 +1978,40 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of 24 hours from 18:00 is one day, capped once at 30.00, where it is "
         "two calendar days and pays 58.00",
     ),
-    "F68/the-refusal-names-no-fix": (
-        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+    "F75/the-refusal-names-no-fix": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
         "rules/daily_max.py",
         '    if boundary == "rolling_24h":\n',
         "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
         "a plan stating a rolling 24-hour day is refused without being told to write "
         "calendar_day",
     ),
-    "F68/any-boundary-loads": (
-        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+    "F75/any-boundary-loads": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
         "rules/daily_max.py",
         "    if boundary not in DAY_BOUNDARIES:\n",
         "    if False:  # PLANTED: any day boundary loads\n",
         "a daily max stating 'weekday' or nothing at all loads, and prices as a "
         "calendar day while the plan says something else",
     ),
-    "F69": (
-        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+    "F76": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
         "rules/weekly_max.py",
         '    week = _week_start(local_entry, rule.params["week_starts_on"])\n',
         "    week = local_entry  # PLANTED: the week starts on the day of entry\n",
         "the day the garage names is ignored and a week is counted from the day the car "
         "came in, so a Monday garage and a Wednesday garage price a stay the same",
     ),
-    "F69/the-refusal-names-no-fix": (
-        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+    "F76/the-refusal-names-no-fix": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
         "rules/weekly_max.py",
         '    if boundary == "rolling_7d":\n',
         "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
         "a plan stating a rolling seven-day week is refused without being told to write "
         "calendar_week and a starting day",
     ),
-    "F69/no-day-loads": (
-        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+    "F76/no-day-loads": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
         "rules/weekly_max.py",
         "    if starts_on not in DAYS_OF_WEEK:\n",
         "    if False:  # PLANTED: a week with no starting day loads\n",
@@ -2026,9 +2026,9 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of one second is treated as no time and costs nothing, where it is a "
         "minute and pays the first period",
     ),
-    # A price is never below $0 (F70, Gokhan 2026-11-07).
-    "F70": (
-        "tests/test_f70_a_price_is_never_below_zero.py",
+    # A price is never below $0 (F77, Gokhan 2026-11-07).
+    "F77": (
+        "tests/test_f77_a_price_is_never_below_zero.py",
         "rules/time_window.py",
         "            return max(0, min(amount[\"minor\"], running_total_minor))\n",
         "            return amount[\"minor\"]  # PLANTED: a discount may exceed the fee\n",

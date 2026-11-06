@@ -156,7 +156,7 @@ def test_the_LOWER_ceiling_is_the_one_that_stands_whichever_is_lower():
 def test_a_weekly_cap_counts_WEEKS_from_the_day_the_plan_names():
     """The day the plan names decides where a week ends, so the same stay is two
     weeks in one garage and one in another (a rolling seven-day count is no longer
-    a choice, F69)."""
+    a choice, F76)."""
     from datetime import timedelta
 
     from rate_engine.rules.weekly_max import weeks_covered
@@ -170,7 +170,7 @@ def test_a_weekly_cap_counts_WEEKS_from_the_day_the_plan_names():
     assert weeks_covered(weekly, crosses, plan) == 2
 
     # A week the garage starts on Sunday is one week for the same stay: the day the
-    # plan names decides where a week ends (F69).
+    # plan names decides where a week ends (F76).
     sunday = copy.deepcopy(PLAN)
     for rule in sunday["rules"]:
         if rule["id"] == "cap-weekly":

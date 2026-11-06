@@ -27,7 +27,7 @@ saying it does not.
 
 ### What changed in version 7
 
-**A special can state a minimum and a maximum stay (F65, F66).** A `time_window`
+**A special can state a minimum and a maximum stay (F72, F73).** A `time_window`
 may carry `stay_at_least_minutes` and `stay_at_most_minutes`, each a positive whole
 number of minutes, each optional: leaving one out means no limit of that kind, so
 every plan that loaded on version 6 and states neither prices exactly as before. A
@@ -39,7 +39,7 @@ stay, nothing split -- and the breakdown says which limit it missed. The cheapes
 price still wins. A minimum above the maximum does not load.
 
 **A day is the local calendar day, and a week is counted from a day the plan names
-(F68, F69).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
+(F75, F76).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
 e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
 `rolling_7d` choice of a weekly max are gone. **That is a plan that loaded on
 version 6 and does not load here.** The refusal names the field and says what to
@@ -55,7 +55,7 @@ exit are the same instant is now zero, with a `zero_length_stay` line saying why
 one second is a minute and prices as before. See "A stay of zero length costs
 nothing".
 
-**A price is never below $0 (F70).** Gokhan, 2026-11-07: "Rate cannot be below $0."
+**A price is never below $0 (F77).** Gokhan, 2026-11-07: "Rate cannot be below $0."
 A discount bigger than the fee makes the stay free and is not refused: a fixed
 discount takes off at most what the stay costs and its line says it was limited, a
 second discount takes off at most what is left, and a 100% discount makes the stay
@@ -435,7 +435,7 @@ This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
 state that a day means a local `calendar_day` (a "rolling 24 hours" day was the
-other choice until version 7 and is gone, F68). The stay is cut at the start
+other choice until version 7 and is gone, F75). The stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 
@@ -716,15 +716,15 @@ never failed is a decoration.
 | **F62** | The longest stay the engine prices is 90 days of 24 hours, entry to exit (Gokhan, 2026-10-16). Exactly 90 days is priced; 90 days and one second is REFUSED with GAP_STAY_LONGER_THAN_MAX_STAY, a 422 naming the limit, at every door -- before the plan is read, before a day of the stay is walked and before a base is asked what it charged, so a stay of about ten thousand years is refused with no more work than one of 90 days and a second. It is elapsed time, so a clock change does not move it. The limit is one constant, `MAX_STAY_DAYS`, read at every use, and `validate-plan` answers it as `max_stay_minutes` for a rate setup to show. |
 | **F63** | The cheapest price always wins (Gokhan, 2026-10-16): where more than one price could apply to the same time, the car pays the cheapest, and whole-stay alternatives are compared (2026-10-17). A flat special is one price for the stay it covers, held to the max for each day and week the car is in, and is compared with the time-based rate's whole stay, each calendar day capped by the daily max and each week by the weekly max: with a 50 Friday-to-Sunday flat, a 30 daily max and an hourly rate that reaches 30 within a day, Saturday only is 30 and Friday 18:00 to Sunday 18:00 is 50. A stay past a special's exit limit is not covered by it. Two specials, or two time-based rates, are compared on the whole fee, caps and all -- a rate of 100 the first hour and 0.50 after beats one of 2 an hour over two days at 30 a day, 42 against 60 -- and the losing line gives both figures where the rules' own prices do not say why. Under `stated_order` the cheapest way is charged too, the time-based rate included. On every stay swept, the fee is the least of the fees each way charges on its own. Additive rules are not made a choice: a surcharge and a fixed increase are still added in full. |
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. No limit is set on the rules a plan may hold or the ways a stay may have. |
-| **F65** | A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "5-hour minimum"): `stay_at_least_minutes` on a `time_window` means it applies only if the REAL stay is at least that many minutes, in real time and not the rounded minutes the periods are counted in. A shorter stay prices whole on the regular rate, and the breakdown says the special did not apply and why. The cheapest price still wins. A plan that states no minimum is priced as before. |
-| **F66** | A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "up to 10 hours"): `stay_at_most_minutes` on a `time_window` means it applies only if the REAL stay is at most that many minutes, in real time. A longer stay is priced WHOLE by the regular rate, nothing split, and the breakdown says the special did not apply because the stay was longer than its maximum. The cheapest price still wins. A plan that states no maximum is priced as before. |
-| **F67** | The patterns real garages list are expressible as the listing words them (Gokhan, 2026-11-07: "accomodate all those options exactly the way they describe"): banded prices ("up to 3 hours = X, up to 6 hours = Y") as a flat special with a maximum stay each; a max that applies only inside a weekday window as a flat special for stays that enter in it, the cheapest price winning; a flat "24 hours" price as a flat special for a stay of at most 24 hours; and an evening window past midnight as ONE `next_day` rule. Each is proven on stays either side of its edges, with an example plan. |
-| **F68** | A daily max counts the local calendar day, and only that (Gokhan, 2026-11-07: "calendar day not 24 hrs"). A stay of 24 hours that starts at 18:00 is in two days and each is capped on its own; a day with a clock change is one day. A plan that states a rolling 24-hour day does not load, and the refusal names the field and says to write `calendar_day`. |
-| **F69** | A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "day: wednesday . e.g. sunday to sunday"). The same stay is one week or two depending on that day. `week_starts_on` is a day name, always; a plan that states a rolling seven-day week does not load, and the refusal names the field and says to write `calendar_week` and a starting day. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
-| **F70** | A price can never be below $0 (Gokhan, 2026-11-07: "Rate cannot be below $0"), and a discount bigger than the fee floors at $0 and is never refused: a fixed discount takes off at most what the stay costs and the line says it was limited, a second discount takes off at most what is left, and a 100% discount makes the stay free. Swept over every combination of discounts in every order on stays of every length and both ways of pricing the time. A percent discount above 100% still does not load (F60). |
+| **F72** | A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "5-hour minimum"): `stay_at_least_minutes` on a `time_window` means it applies only if the REAL stay is at least that many minutes, in real time and not the rounded minutes the periods are counted in. A shorter stay prices whole on the regular rate, and the breakdown says the special did not apply and why. The cheapest price still wins. A plan that states no minimum is priced as before. |
+| **F73** | A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "up to 10 hours"): `stay_at_most_minutes` on a `time_window` means it applies only if the REAL stay is at most that many minutes, in real time. A longer stay is priced WHOLE by the regular rate, nothing split, and the breakdown says the special did not apply because the stay was longer than its maximum. The cheapest price still wins. A plan that states no maximum is priced as before. |
+| **F74** | The patterns real garages list are expressible as the listing words them (Gokhan, 2026-11-07: "accomodate all those options exactly the way they describe"): banded prices ("up to 3 hours = X, up to 6 hours = Y") as a flat special with a maximum stay each; a max that applies only inside a weekday window as a flat special for stays that enter in it, the cheapest price winning; a flat "24 hours" price as a flat special for a stay of at most 24 hours; and an evening window past midnight as ONE `next_day` rule. Each is proven on stays either side of its edges, with an example plan. |
+| **F75** | A daily max counts the local calendar day, and only that (Gokhan, 2026-11-07: "calendar day not 24 hrs"). A stay of 24 hours that starts at 18:00 is in two days and each is capped on its own; a day with a clock change is one day. A plan that states a rolling 24-hour day does not load, and the refusal names the field and says to write `calendar_day`. |
+| **F76** | A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "day: wednesday . e.g. sunday to sunday"). The same stay is one week or two depending on that day. `week_starts_on` is a day name, always; a plan that states a rolling seven-day week does not load, and the refusal names the field and says to write `calendar_week` and a starting day. |
+| **F77** | A price can never be below $0 (Gokhan, 2026-11-07: "Rate cannot be below $0"), and a discount bigger than the fee floors at $0 and is never refused: a fixed discount takes off at most what the stay costs and the line says it was limited, a second discount takes off at most what is left, and a 100% discount makes the stay free. Swept over every combination of discounts in every order on stays of every length and both ways of pricing the time. A percent discount above 100% still does not load (F60). |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 | **F9** | The published contract is DERIVED, never transcribed. Every generated block matches the code, and every block that ASSERTS something about its values is proven to move when those values contradict it. |

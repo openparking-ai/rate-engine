@@ -1,4 +1,4 @@
-"""Plans and quotes for the real-rate-option tests (F65 and after).
+"""Plans and quotes for the real-rate-option tests (F72 and after).
 
 One small helper so each guarantee's file reads as the listing it models. Every
 price here is an EXAMPLE chosen to make the arithmetic easy to check by hand. It is

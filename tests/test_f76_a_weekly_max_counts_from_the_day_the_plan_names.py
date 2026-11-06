@@ -1,4 +1,4 @@
-"""F69 -- a weekly max counts a week from a day the plan names, and only that.
+"""F76 -- a weekly max counts a week from a day the plan names, and only that.
 
 Gokhan, 2026-11-07: **"day: wednesday . e.g. sunday to sunday."** A week is a
 calendar week that starts on the day the garage picks. A week counted as seven days
@@ -41,7 +41,7 @@ def _fee(starts_on: str, entry: str, minutes: int) -> int:
     return body["fee_minor"]
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 def test_the_day_the_plan_names_decides_how_many_weeks_a_stay_is_in():
     """Six days from Wednesday noon: 8.00 + 143 x 4.00 = 580.00 by the hour.
 
@@ -54,7 +54,7 @@ def test_the_day_the_plan_names_decides_how_many_weeks_a_stay_is_in():
     assert _fee("mon", WEDNESDAY_NOON, SIX_DAYS) == 20000
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 def test_sunday_to_sunday_and_wednesday_to_wednesday_are_both_stated_the_same_way():
     # 8 days from Wednesday noon ends Thursday noon: Wednesday weeks cut at the
     # next Wednesday 00:00, so two weeks; Sunday weeks cut at Sunday and Sunday.
@@ -67,7 +67,7 @@ def test_sunday_to_sunday_and_wednesday_to_wednesday_are_both_stated_the_same_wa
     assert _fee("sun", midnight, 7 * 24 * 60) == 20000
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 def test_the_line_says_which_weeks():
     document = plan(HOURLY, WEEKLY)
     status, body = quote(document, WEDNESDAY_NOON, EIGHT_DAYS)
@@ -75,7 +75,7 @@ def test_the_line_says_which_weeks():
     assert "(calendar_week) applied over 2 weeks" in text
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 def test_a_rolling_seven_day_week_does_not_load_and_the_refusal_says_what_to_write():
     document = plan(HOURLY, {**WEEKLY, "week_boundary": "rolling_7d", "week_starts_on": None})
     with pytest.raises(InvalidPlan) as caught:
@@ -86,7 +86,7 @@ def test_a_rolling_seven_day_week_does_not_load_and_the_refusal_says_what_to_wri
     assert '"calendar_week"' in message and "week_starts_on" in message
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 @pytest.mark.parametrize("starts_on", [None, "monday", "", "everyday"])
 def test_a_week_with_no_day_the_plan_names_does_not_load(starts_on):
     document = plan(HOURLY, {**WEEKLY, "week_starts_on": starts_on})
@@ -94,7 +94,7 @@ def test_a_week_with_no_day_the_plan_names_does_not_load(starts_on):
         load_plan(document)
 
 
-@pytest.mark.guarantee("F69")
+@pytest.mark.guarantee("F76")
 def test_any_other_week_boundary_does_not_load_either():
     document = plan(HOURLY, copy.deepcopy({**WEEKLY, "week_boundary": "fortnight"}))
     with pytest.raises(InvalidPlan, match="expected 'calendar_week'"):

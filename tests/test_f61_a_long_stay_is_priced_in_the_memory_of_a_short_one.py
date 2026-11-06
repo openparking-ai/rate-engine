@@ -68,7 +68,7 @@ HOURLY = {
 }
 
 #: A daily and a weekly cap, counted by the plan's own calendar (the only way a day
-#: or a week is counted, F68 and F69).
+#: or a week is counted, F75 and F76).
 CAPS = {
     "calendar": [
         {"id": "cap-daily", "type": "daily_max", "stage": "CAP",
