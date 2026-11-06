@@ -194,8 +194,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 6",
-        "SCHEMA_VERSION = 7  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 7",
+        "SCHEMA_VERSION = 8  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -1876,6 +1876,32 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    timeout = None  # PLANTED: no socket timeout",
         "a connection has no socket timeout, so a caller that stops part-way through "
         "a body holds its thread for as long as it keeps the connection open",
+    ),
+    # A special can need a minimum stay (F65, Gokhan 2026-11-07).
+    "F65": (
+        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if False:  # PLANTED: the minimum stay is ignored\n",
+        "a four-hour stay is given the five-hour early bird, so the special applies "
+        "to a stay that did not earn it",
+    ),
+    "F65/rounded-stay": (
+        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    length = stay.exit_at - stay.entry_at\n    low = rule.params",
+        "    length = timedelta(minutes=stay.duration_minutes)  # PLANTED: rounded up\n"
+        "    low = rule.params",
+        "a stay of 4 h 59 min 30 s is rounded up to five hours before it is compared "
+        "with the minimum, so it is given the five-hour special",
+    ),
+    "F65/at-least-means-more-than": (
+        "tests/test_f65_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if low is not None and length <= timedelta(minutes=low):  # PLANTED\n",
+        "a stay of exactly five hours is refused the five-hour special: \"at least\" "
+        "is read as \"more than\"",
     ),
 }
 

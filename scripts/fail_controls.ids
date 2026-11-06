@@ -167,6 +167,9 @@ F64
 F64/compared-whole
 F64/time-budget
 F64/why-not-every-pass
+F65
+F65/at-least-means-more-than
+F65/rounded-stay
 F6b/attribute-form
 F6b/imported-name-form
 F6c

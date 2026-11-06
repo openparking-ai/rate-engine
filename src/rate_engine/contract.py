@@ -54,7 +54,15 @@ from .validator import undecided, validate_plan
 #: `fill_level` rule now REQUIRES the owner's two answers, `raises_specials` and
 #: `raises_vip_extra`, and a rule written without them is refused by name. Plans
 #: with no fill rule load and price exactly as on 5.
-SCHEMA_VERSION = 6
+#:
+#: **7 in the real-options round: a plan that loaded on 6 may not load, and a plan
+#: field was ADDED.** A `time_window` may state `stay_at_least_minutes` and
+#: `stay_at_most_minutes`; and the choices Gokhan did not want were removed -- a daily
+#: max counts the calendar day only, a weekly max counts a week from a stated day
+#: only, and no window runs under `any_span`. A plan that states one of the removed
+#: choices is refused by name, saying what to write instead. See "What changed in
+#: version 7" in docs/CONTRACT.md.
+SCHEMA_VERSION = 7
 
 QUOTE_REQUEST_KEYS = frozenset({"plans", "entry_at", "exit_at", "space_class", "currency"})
 

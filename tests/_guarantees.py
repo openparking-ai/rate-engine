@@ -501,6 +501,14 @@ GUARANTEES: dict[str, str] = {
         "a daily and a weekly max, are priced within a fixed time budget. No limit is "
         "set on the rules a plan may hold or the ways a stay may have."
     ),
+    "F65": (
+        "A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "
+        "\"5-hour minimum\"): `stay_at_least_minutes` on a `time_window` means it applies "
+        "only if the REAL stay is at least that many minutes, in real time and not the "
+        "rounded minutes the periods are counted in. A shorter stay prices whole on the "
+        "regular rate, and the breakdown says the special did not apply and why. The "
+        "cheapest price still wins. A plan that states no minimum is priced as before."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

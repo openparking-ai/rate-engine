@@ -142,6 +142,13 @@ NOT_APPLIED = "time_window.not_applied"
 
 EXTRA = {"label", "applies_on", "enter_from", "enter_by", "exit_by", "day_span", "effect"}
 
+#: Two limits on how long the stay really was, both optional: a window that states
+#: neither has no limit of that kind, which is what every plan written before they
+#: existed meant. Real minutes, never the rounded ones the periods are counted in:
+#: a stay of 239 minutes and 30 seconds is not a four-hour stay.
+STAY_LIMITS: tuple[str, ...] = ("stay_at_least_minutes", "stay_at_most_minutes")
+OPTIONAL = frozenset(STAY_LIMITS)
+
 
 # --- the condition: WHEN --------------------------------------------------
 
@@ -450,6 +457,39 @@ def _effect(value: object, where: str) -> dict:
     )
 
 
+def _stay_limits(raw: dict, where: str) -> tuple[int | None, int | None]:
+    """The minimum and maximum real stay this window applies to, or None for each.
+
+    Gokhan, 2026-11-07, on the real listings ("5-hour minimum", "up to 10 hours"):
+    *"plain readings are good."* A minimum means the window applies only if the real
+    stay is at least that many minutes, and a maximum only if it is at most that
+    many; otherwise the stay prices on the regular rate, whole, nothing split.
+    """
+    from ..plan import InvalidPlan
+
+    found: dict[str, int | None] = {}
+    for key in STAY_LIMITS:
+        value = raw.get(key)
+        if key not in raw or value is None:
+            found[key] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise InvalidPlan(
+                f"{where}.{key} is {value!r}; it must be a positive whole number of "
+                "minutes. To state no limit of this kind, leave the field out: a limit "
+                "of zero would read as a decision somebody made."
+            )
+        found[key] = value
+    low, high = found["stay_at_least_minutes"], found["stay_at_most_minutes"]
+    if low is not None and high is not None and low > high:
+        raise InvalidPlan(
+            f"{where}.stay_at_least_minutes is {low} and {where}.stay_at_most_minutes is {high}: "
+            "no stay is at least the first and at most the second, so this window could "
+            "never apply. Swap them, or remove one."
+        )
+    return low, high
+
+
 # --- building --------------------------------------------------------------
 
 
@@ -464,7 +504,7 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
     effect = _effect(raw["effect"], f"{where}.effect")
     stage = EFFECT_STAGES[effect["kind"]]
 
-    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
+    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA, OPTIONAL)
     # DERIVED from the effect, then checked against what the document claims.
     # This type runs at two stages, so the framework cannot do it for us.
     check_stated_stage(raw, where, stage)
@@ -500,12 +540,15 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
     exit_by = parse_limit(raw, "exit_by", where)
     _refuse_a_limit_that_cannot_be_meant(exit_by, enter_from, day_span, where)
 
+    min_stay, max_stay = _stay_limits(raw, where)
     params = {
         "applies_on": _applies_on(raw, where),
         "enter_from": enter_from,
         "enter_by": enter_by,
         "exit_by": exit_by,
         "day_span": day_span,
+        "stay_at_least_minutes": min_stay,
+        "stay_at_most_minutes": max_stay,
         "effect": effect,
     }
     return Rule(
@@ -620,6 +663,44 @@ def _exit_failure(rule: Rule, entry_local, exit_local) -> str | None:
     return None
 
 
+def _real_length_text(length: timedelta) -> str:
+    """The stay as it really was, in the words a receipt uses: whole minutes, and
+    the seconds too when there are some, because the limits are read on them."""
+    minutes, rest = divmod(length, timedelta(minutes=1))
+    text = f"{minutes} min"
+    if rest:
+        seconds, part = divmod(rest, timedelta(seconds=1))
+        if seconds:
+            text += f" {seconds} s"
+        if part:
+            text += " and a part of a second"
+    return text
+
+
+def _stay_length_failure(rule: Rule, stay) -> str | None:
+    """Why the REAL length of the stay is outside this window's limits, or None.
+
+    Real time, `exit_at - entry_at`, compared as a duration: not `duration_minutes`,
+    which rounds a part-minute UP and would make 239 min 30 s a four-hour stay
+    (Gokhan, 2026-11-07: "measured in real minutes, not rounded"). A stay exactly at
+    a limit is inside it: "at least 240" and "at most 600" both include themselves.
+    """
+    length = stay.exit_at - stay.entry_at
+    low = rule.params["stay_at_least_minutes"]
+    if low is not None and length < timedelta(minutes=low):
+        return (
+            f"the stay is {_real_length_text(length)} and this rule needs a stay of "
+            f"at least {low} min"
+        )
+    high = rule.params["stay_at_most_minutes"]
+    if high is not None and length > timedelta(minutes=high):
+        return (
+            f"the stay is {_real_length_text(length)} and this rule covers a stay of "
+            f"at most {high} min"
+        )
+    return None
+
+
 def _failures(rule: Rule, stay, plan) -> list[str]:
     """Why this stay fails the rule, in plain English. Empty means it qualifies.
 
@@ -663,6 +744,10 @@ def _failures(rule: Rule, stay, plan) -> list[str]:
     if exit_side is not None:
         failed.append(exit_side)
 
+    stay_length = _stay_length_failure(rule, stay)
+    if stay_length is not None:
+        failed.append(stay_length)
+
     # A `rate` effect carries its own ceiling, and it is a condition like any
     # other: a stay past it is not priced at the ceiling and not pro-rated -- the
     # window does not apply, and the stay falls to the plan's ordinary rate or
@@ -702,11 +787,21 @@ def _class_failure(rule: Rule, stay) -> str:
 # --- applying --------------------------------------------------------------
 
 
+def _limits_clause(rule: Rule) -> str:
+    """', stay of at least N min and at most M min' when the window states a limit."""
+    parts = []
+    if rule.params["stay_at_least_minutes"] is not None:
+        parts.append(f"at least {rule.params['stay_at_least_minutes']} min")
+    if rule.params["stay_at_most_minutes"] is not None:
+        parts.append(f"at most {rule.params['stay_at_most_minutes']} min")
+    return f", stay of {' and '.join(parts)}" if parts else ""
+
+
 def _window_clause(rule: Rule, entry_local) -> str:
     return (
         f"entered {entry_local:%a %d %b} between {rule.params['enter_from']:%H:%M} and "
         f"{rule.params['enter_by']:%H:%M}, exited by {rule.params['exit_by']:%H:%M}, "
-        f"day span {rule.params['day_span']}"
+        f"day span {rule.params['day_span']}{_limits_clause(rule)}"
     )
 
 

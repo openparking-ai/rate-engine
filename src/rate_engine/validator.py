@@ -161,6 +161,13 @@ def _duration_marks(plan: Plan, entry_minute: int) -> set[int]:
             marks.add(3 * 24 * 60)
 
     for rule in _windowed_rules(plan):
+        # A window's stated minimum and maximum stay are durations it declares, so
+        # each is probed a minute either side of itself -- the README's own
+        # requirement of a rule that qualifies on a length.
+        for key in ("stay_at_least_minutes", "stay_at_most_minutes"):
+            stated = rule.params.get(key)
+            if stated:
+                marks.update({stated - 1, stated, stated + 1})
         exit_by = rule.params.get("exit_by")
         if exit_by is None:
             continue

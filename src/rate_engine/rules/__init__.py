@@ -298,14 +298,26 @@ def check_stated_stage(raw: dict, where: str, stage: str) -> None:
         )
 
 
-def common_fields(raw: dict, plan_space_classes: tuple[str, ...], where: str, extra: set[str]):
-    """Validate the fields every rule has, and reject unknown keys by name."""
+def common_fields(
+    raw: dict,
+    plan_space_classes: tuple[str, ...],
+    where: str,
+    extra: set[str],
+    optional: frozenset[str] = frozenset(),
+):
+    """Validate the fields every rule has, and reject unknown keys by name.
+
+    `optional` names fields a rule MAY leave out, where leaving one out means "no
+    limit of this kind" and nothing else. It exists for a field added after plans
+    were written (a minimum or maximum stay on a special): every plan that loaded
+    before still loads and prices the same. The type reads each with `raw.get`.
+    """
     from ..plan import InvalidPlan
 
     required = {"id", "type", "stage", "space_classes"} | extra
     present = set(raw)
     missing = sorted(required - present)
-    unknown = sorted(present - required)
+    unknown = sorted(present - required - optional)
     if missing:
         raise InvalidPlan(f"{where} is missing required field(s): {', '.join(missing)}.")
     if unknown:

@@ -113,6 +113,7 @@ def _owned_names() -> dict[str, set[str]]:
     for module in modules:
         fields |= set(module.EXTRA)
     fields |= set(space_surcharge.PERCENT_EXTRA)
+    fields |= set(time_window.OPTIONAL)
     # Nested field names the rule types define inside their own objects.
     fields |= {"days", "dates", "price_minor", "percent_bp", "minor", "amount",
                "direction", "rounding"}

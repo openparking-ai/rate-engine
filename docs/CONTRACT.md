@@ -1,6 +1,6 @@
 # The rate engine contract
 
-Version 6. One contract, five surfaces: `POST /v1/quote`, `POST
+Version 7. One contract, five surfaces: `POST /v1/quote`, `POST
 /v1/validate-plan`, `POST /v1/validate-tax-sets`, `POST /v1/tax`, and the
 `rate-engine` CLI, which carries the same four operations. Our own platform is an ordinary
 client of it — there is no private path and no in-process shortcut, so if this
@@ -10,7 +10,7 @@ interface is inadequate we find out before an integrator does.
 nothing.** A plan arrives on the call and is gone when the response is written.
 
 <!--gen:schema_version kind=1-->
-`schema_version` **6**
+`schema_version` **7**
 <!--/gen:schema_version-->
 
 ## Versioning, and the unknown key
@@ -674,6 +674,7 @@ never failed is a decoration.
 | **F62** | The longest stay the engine prices is 90 days of 24 hours, entry to exit (Gokhan, 2026-10-16). Exactly 90 days is priced; 90 days and one second is REFUSED with GAP_STAY_LONGER_THAN_MAX_STAY, a 422 naming the limit, at every door -- before the plan is read, before a day of the stay is walked and before a base is asked what it charged, so a stay of about ten thousand years is refused with no more work than one of 90 days and a second. It is elapsed time, so a clock change does not move it. The limit is one constant, `MAX_STAY_DAYS`, read at every use, and `validate-plan` answers it as `max_stay_minutes` for a rate setup to show. |
 | **F63** | The cheapest price always wins (Gokhan, 2026-10-16): where more than one price could apply to the same time, the car pays the cheapest, and whole-stay alternatives are compared (2026-10-17). A flat special is one price for the stay it covers, held to the max for each day and week the car is in, and is compared with the time-based rate's whole stay, each calendar day capped by the daily max and each week by the weekly max: with a 50 Friday-to-Sunday flat, a 30 daily max and an hourly rate that reaches 30 within a day, Saturday only is 30 and Friday 18:00 to Sunday 18:00 is 50. A stay past a special's exit limit is not covered by it. Two specials, or two time-based rates, are compared on the whole fee, caps and all -- a rate of 100 the first hour and 0.50 after beats one of 2 an hour over two days at 30 a day, 42 against 60 -- and the losing line gives both figures where the rules' own prices do not say why. Under `stated_order` the cheapest way is charged too, the time-based rate included. On every stay swept, the fee is the least of the fees each way charges on its own. Additive rules are not made a choice: a surcharge and a fixed increase are still added in full. |
 | **F64** | A quote prices each way once, and asks nothing again per way or per pair. With N ways that qualify -- specials and time-based rates -- the stay goes through the pipeline N + 1 times (once, with one way), which is F63 itself. Beside that, each rule is asked once a quote whether it qualifies, a rule is found by its id and two rules are never compared field by field, a special that did not qualify is asked for its line once, and a way at most three times. 400 qualifying specials beside 400 that do not, on a 90-day stay with a daily and a weekly max, are priced within a fixed time budget. No limit is set on the rules a plan may hold or the ways a stay may have. |
+| **F65** | A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "5-hour minimum"): `stay_at_least_minutes` on a `time_window` means it applies only if the REAL stay is at least that many minutes, in real time and not the rounded minutes the periods are counted in. A shorter stay prices whole on the regular rate, and the breakdown says the special did not apply and why. The cheapest price still wins. A plan that states no minimum is priced as before. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
