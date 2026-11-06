@@ -6,20 +6,16 @@ NEGATIVE line saying how much it took off, so the fee stays equal to the sum of
 its lines and the operator sees the size of the reduction rather than a bare
 "cap applied".
 
-**`week_boundary` is required with no default, for exactly `daily_max`'s
-reason.** "Weekly max 100" does not say what a week is, and the two honest
-answers price a Saturday-to-Tuesday stay differently:
-
-* `calendar_week` -- the cap is per local week the stay touches, and the week
-  starts on the day the plan names. There is no universal answer to which day
-  that is: it is Monday in most of Europe, Sunday in the United States, and
-  Saturday in parts of the Middle East. The engine will not pick.
-* `rolling_7d` -- the cap is per seven days from ENTRY. The starting day is
-  irrelevant, so `week_starts_on` is `null` and the null has to be TYPED.
-
-**`week_starts_on` is required in BOTH cases**, the way `max_duration_minutes`
-is: null is a statement, and a field that may be absent is a field somebody can
-forget while believing they set it.
+**A week is counted from a day the garage picks, and only that (F69).** Gokhan,
+2026-11-07: *"day: wednesday . e.g. sunday to sunday."* The cap is per local calendar
+week the stay touches, and the week starts on the day the plan names: Sunday to
+Sunday, Wednesday to Wednesday, whatever the garage's own week is. There is no
+universal first day -- it is Monday in most of Europe, Sunday in the United States,
+and Saturday in parts of the Middle East -- so the plan says which and the engine
+does not pick. A "rolling seven days from entry" week used to be the other choice,
+and it is gone: a plan that states it does not load, and the refusal says to write
+`calendar_week` and a starting day. `week_boundary` is still stated, with no
+default, so a plan says in its own words what a week is.
 
 **TWO caps on one plan are not a conflict.** They compose, and the lower ceiling
 wins -- which falls out of applying them in sequence rather than being arranged,
@@ -62,12 +58,7 @@ from ..stages import CAP
 from ..wallclock import DAYS_OF_WEEK
 from . import TOLD_THE_BASE, Rule, common_fields, daily_max, register
 
-WEEK_BOUNDARIES: tuple[str, ...] = ("calendar_week", "rolling_7d")
-
-#: Which boundary requires a starting day, and which requires it to be null.
-#: A table rather than two `if`s, so the refusal messages below cannot disagree
-#: with what the builder actually accepts.
-NEEDS_A_STARTING_DAY: dict[str, bool] = {"calendar_week": True, "rolling_7d": False}
+WEEK_BOUNDARIES: tuple[str, ...] = ("calendar_week",)
 
 DAYS_IN_A_WEEK = 7
 
@@ -79,30 +70,29 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
 
     rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
     boundary = raw["week_boundary"]
+    if boundary == "rolling_7d":
+        raise InvalidPlan(
+            f"{where}.week_boundary is 'rolling_7d', which this version does not "
+            "have: a weekly max counts a week from a day the garage picks "
+            "(Gokhan, 2026-11-07, \"day: wednesday . e.g. sunday to sunday\"). Write "
+            "\"calendar_week\" and set week_starts_on to that day, one of "
+            f"{', '.join(DAYS_OF_WEEK)}."
+        )
     if boundary not in WEEK_BOUNDARIES:
         raise InvalidPlan(
-            f"{where}.week_boundary is {boundary!r}; expected one of "
-            f"{', '.join(WEEK_BOUNDARIES)}. There is no default: a cap of 100 a week "
-            "prices a Saturday-to-Tuesday stay at 100 or at 200 depending on the "
-            "answer, and that is the owner's decision."
+            f"{where}.week_boundary is {boundary!r}; expected "
+            f"{WEEK_BOUNDARIES[0]!r}. A weekly max counts a calendar week from a "
+            "day the garage picks; the field is stated so the plan says what a week is."
         )
 
     starts_on = raw["week_starts_on"]
-    if NEEDS_A_STARTING_DAY[boundary]:
-        if starts_on not in DAYS_OF_WEEK:
-            raise InvalidPlan(
-                f"{where}.week_starts_on is {starts_on!r}; a 'calendar_week' cap needs "
-                f"a day name from {', '.join(DAYS_OF_WEEK)}. There is no universal "
-                "first day of the week -- it is Monday in most of Europe, Sunday in "
-                "the United States, and Saturday in parts of the Middle East -- so the "
-                "plan says which, and the engine does not pick."
-            )
-    elif starts_on is not None:
+    if starts_on not in DAYS_OF_WEEK:
         raise InvalidPlan(
-            f"{where}.week_starts_on is {starts_on!r}, but this rule states "
-            "'rolling_7d', where a week runs from the stay's own entry and no starting "
-            "day applies. Write null: a value that cannot affect the fee would read as "
-            "a decision somebody made and the engine ignored."
+            f"{where}.week_starts_on is {starts_on!r}; a weekly max needs the day "
+            f"the garage's week starts on, one of {', '.join(DAYS_OF_WEEK)}. There "
+            "is no universal first day of the week -- it is Monday in most of Europe, "
+            "Sunday in the United States, and Saturday in parts of the Middle East -- "
+            "so the plan says which, and the engine does not pick."
         )
 
     return Rule(
@@ -141,25 +131,18 @@ def weeks_of(rule: Rule, stay, plan):
         return
 
     cut = entry
-    if rule.params["week_boundary"] == "rolling_7d":
-        weeks = -(-stay.duration_minutes // (DAYS_IN_A_WEEK * 24 * 60))  # ceil, integer only
-        for k in range(1, weeks):
-            start = entry + timedelta(days=DAYS_IN_A_WEEK * k)
-            yield cut, start
-            cut = start
-    else:
-        local_entry = stay.entry_at.astimezone(plan.timezone).date()
-        week = _week_start(local_entry, rule.params["week_starts_on"])
-        while True:
-            week += timedelta(days=DAYS_IN_A_WEEK)
-            # fold=0 is the first instant of the date, even when midnight itself
-            # falls in a transition.
-            boundary = datetime.combine(week, time(0), tzinfo=plan.timezone)
-            boundary = boundary.astimezone(UTC)
-            if boundary >= exit_at:
-                break
-            yield cut, boundary
-            cut = boundary
+    local_entry = stay.entry_at.astimezone(plan.timezone).date()
+    week = _week_start(local_entry, rule.params["week_starts_on"])
+    while True:
+        week += timedelta(days=DAYS_IN_A_WEEK)
+        # fold=0 is the first instant of the date, even when midnight itself
+        # falls in a transition.
+        boundary = datetime.combine(week, time(0), tzinfo=plan.timezone)
+        boundary = boundary.astimezone(UTC)
+        if boundary >= exit_at:
+            break
+        yield cut, boundary
+        cut = boundary
     yield cut, exit_at
 
 

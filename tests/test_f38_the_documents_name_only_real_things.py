@@ -50,7 +50,7 @@ DOCUMENTS = ("README.md", "docs/CONTRACT.md")
 #:
 #: Self-policing: a test below requires every entry to be absent from the code,
 #: so if one of these ever comes back the entry has to go with it.
-REMOVED = frozenset({"early_bird"})
+REMOVED = frozenset({"early_bird", "rolling_24h", "rolling_7d"})
 
 #: Backticked tokens that are not identifiers this module owns. English, JSON,
 #: Python, ISO, and the shell. Every entry here is a decision that this word is

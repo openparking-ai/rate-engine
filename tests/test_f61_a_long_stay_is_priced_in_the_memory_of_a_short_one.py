@@ -13,8 +13,8 @@ What this file pins:
 * **Memory.** The days and weeks are found as they are walked and never listed,
   each day's or week's amount goes into a running tally, and the base remembers
   only its last few answers. Twenty years peak within a fixed allowance of one
-  year, measured by `tracemalloc`, with a daily and a weekly cap, calendar and
-  rolling -- an allowance a list holding eight bytes a day would pass.
+  year, measured by `tracemalloc`, with a daily and a weekly cap -- an allowance
+  a list holding eight bytes a day would pass.
 * **Work.** It still grows with the stay, by a step a day. Ten years ask the
   base, and find day starts, ten times as often as one year, and a century
   does no more per day than a year: each week's days are found from the week's
@@ -67,8 +67,8 @@ HOURLY = {
     "repeat_period_minor": 400, "rounding": "ceil", "max_duration_minutes": None,
 }
 
-#: A daily and a weekly cap of each kind: the plan's own calendar, or rolling
-#: windows from entry.
+#: A daily and a weekly cap, counted by the plan's own calendar (the only way a day
+#: or a week is counted, F68 and F69).
 CAPS = {
     "calendar": [
         {"id": "cap-daily", "type": "daily_max", "stage": "CAP",
@@ -76,13 +76,6 @@ CAPS = {
         {"id": "cap-weekly", "type": "weekly_max", "stage": "CAP",
          "space_classes": ["standard"], "max_minor": 10000,
          "week_boundary": "calendar_week", "week_starts_on": "mon"},
-    ],
-    "rolling": [
-        {"id": "cap-daily", "type": "daily_max", "stage": "CAP",
-         "space_classes": ["standard"], "max_minor": 3000, "day_boundary": "rolling_24h"},
-        {"id": "cap-weekly", "type": "weekly_max", "stage": "CAP",
-         "space_classes": ["standard"], "max_minor": 10000,
-         "week_boundary": "rolling_7d", "week_starts_on": None},
     ],
 }
 
@@ -280,31 +273,24 @@ UNUSUAL_DATES = [
 ]
 
 
-def _caps_in(zone: str, around: str, boundary: str):
-    document = _plan(
-        HOURLY,
-        {"id": "cap-daily", "type": "daily_max", "stage": "CAP",
-         "space_classes": ["standard"], "max_minor": 3000, "day_boundary": boundary},
-        CAPS["calendar"][1],
-        {**CAPS["rolling"][1], "id": "cap-rolling-week"},
-    )
+def _caps_in(zone: str, around: str):
+    document = _plan(HOURLY, *CAPS["calendar"])
     document["timezone"] = zone
     document["effective_from"] = (
         parse_instant(around, "around") - timedelta(days=30)
     ).isoformat()
     plan = load_plan(document)
     rules = {rule.id: rule for rule in plan.rules}
-    return plan, rules["cap-daily"], (rules["cap-weekly"], rules["cap-rolling-week"])
+    return plan, rules["cap-daily"], (rules["cap-weekly"],)
 
 
 @pytest.mark.guarantee("F61")
-@pytest.mark.parametrize("boundary", ["calendar_day", "rolling_24h"])
 @pytest.mark.parametrize("zone,around", UNUSUAL_DATES)
-def test_the_day_found_from_its_date_is_the_day_a_walk_from_entry_finds(zone, around, boundary):
+def test_the_day_found_from_its_date_is_the_day_a_walk_from_entry_finds(zone, around):
     """Every half hour of a ten-day stay, from four entries: the day found by
     its date is the day a walk from entry finds it in, and each week -- both
     kinds -- and each 31-hour window is cut into the days the walk cuts."""
-    plan, daily, weeklies = _caps_in(zone, around, boundary)
+    plan, daily, weeklies = _caps_in(zone, around)
     base = parse_instant(around, "around")
     for offset in (timedelta(0), timedelta(hours=7), timedelta(hours=13, minutes=30),
                    timedelta(hours=23, minutes=45)):
@@ -319,17 +305,17 @@ def test_the_day_found_from_its_date_is_the_day_a_walk_from_entry_finds(zone, ar
         while instant < stay.exit_at:
             expected = next(i for i, (_s, e) in enumerate(walked) if e > instant)
             found = daily_max._day_holding(daily, stay, plan, instant)
-            assert found == expected, (zone, boundary, entry, instant, found, expected)
+            assert found == expected, (zone, entry, instant, found, expected)
             window_end = min(instant + timedelta(hours=31), stay.exit_at)
             assert list(daily_max.pieces(daily, stay, plan, instant, window_end)) == walk(
                 instant, window_end
-            ), (zone, boundary, entry, instant)
+            ), (zone, entry, instant)
             instant += timedelta(minutes=30)
         for weekly in weeklies:
             for start, end in weekly_max.weeks_of(weekly, stay, plan):
                 assert list(daily_max.pieces(daily, stay, plan, start, end)) == walk(
                     start, end
-                ), (zone, boundary, weekly.id, entry, start)
+                ), (zone, weekly.id, entry, start)
 
 
 class _SkipsMidnight(tzinfo):

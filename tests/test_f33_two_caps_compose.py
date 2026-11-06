@@ -153,9 +153,10 @@ def test_the_LOWER_ceiling_is_the_one_that_stands_whichever_is_lower():
 
 
 @pytest.mark.guarantee("F33")
-def test_a_weekly_cap_counts_WEEKS_and_a_rolling_one_counts_SEVEN_DAY_BLOCKS():
-    """`week_boundary` is the field `day_boundary` is, one unit up, and the two
-    answers differ for a stay that crosses a week boundary."""
+def test_a_weekly_cap_counts_WEEKS_from_the_day_the_plan_names():
+    """The day the plan names decides where a week ends, so the same stay is two
+    weeks in one garage and one in another (a rolling seven-day count is no longer
+    a choice, F69)."""
     from datetime import timedelta
 
     from rate_engine.rules.weekly_max import weeks_covered
@@ -165,18 +166,18 @@ def test_a_weekly_cap_counts_WEEKS_and_a_rolling_one_counts_SEVEN_DAY_BLOCKS():
     entry_at = parse_instant("2026-03-08T12:00:00-04:00", "entry")  # a Sunday
     crosses = make_stay(entry_at, entry_at + timedelta(days=1), "standard")
 
-    # Monday starts the week, so Sunday-to-Monday touches two calendar weeks and
-    # one rolling seven-day block. The two are genuinely different rules.
+    # Monday starts the week, so Sunday-to-Monday touches two calendar weeks.
     assert weeks_covered(weekly, crosses, plan) == 2
 
-    rolling = copy.deepcopy(PLAN)
-    for rule in rolling["rules"]:
+    # A week the garage starts on Sunday is one week for the same stay: the day the
+    # plan names decides where a week ends (F69).
+    sunday = copy.deepcopy(PLAN)
+    for rule in sunday["rules"]:
         if rule["id"] == "cap-weekly":
-            rule["week_boundary"] = "rolling_7d"
-            rule["week_starts_on"] = None
-    rolling_plan = load_plan(rolling)
-    rolling_rule = next(r for r in rolling_plan.rules if r.id == "cap-weekly")
-    assert weeks_covered(rolling_rule, crosses, rolling_plan) == 1
+            rule["week_starts_on"] = "sun"
+    sunday_plan = load_plan(sunday)
+    sunday_rule = next(r for r in sunday_plan.rules if r.id == "cap-weekly")
+    assert weeks_covered(sunday_rule, crosses, sunday_plan) == 1
 
 
 @pytest.mark.guarantee("F33")
@@ -184,9 +185,9 @@ def test_a_weekly_cap_counts_WEEKS_and_a_rolling_one_counts_SEVEN_DAY_BLOCKS():
     "fields,expected",
     [
         ({"week_boundary": "weekly"}, "week_boundary is 'weekly'"),
-        ({"week_starts_on": "monday"}, "needs a day name"),
-        ({"week_starts_on": None}, "needs a day name"),
-        ({"week_boundary": "rolling_7d"}, "no starting day applies"),
+        ({"week_starts_on": "monday"}, "needs the day the garage's week starts on"),
+        ({"week_starts_on": None}, "needs the day the garage's week starts on"),
+        ({"week_boundary": "rolling_7d"}, "does not have"),
     ],
 )
 def test_a_week_the_engine_cannot_read_is_REFUSED_by_name(fields, expected):

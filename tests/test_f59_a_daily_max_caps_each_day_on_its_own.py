@@ -195,16 +195,6 @@ def test_a_period_is_charged_on_the_day_it_starts():
     assert "30.00 USD + 0.00 USD" in _line(body, "cap-daily")["text"]
 
 
-@pytest.mark.guarantee("F59")
-def test_a_rolling_day_is_capped_on_its_own_too():
-    """`rolling_24h` stays the plan's choice, and its windows are capped the same
-    way: Monday 09:00 to Tuesday 09:15 is 30.00 + the 25th hour, 4.00."""
-    body = _quote(_plan(HOURLY, _daily(boundary="rolling_24h")), MONDAY,
-                  "2026-04-07T09:15:00-04:00")
-    assert body["fee_minor"] == 3400
-    assert "each 24-hour window is capped on its own" in _line(body, "cap-daily")["text"]
-
-
 # --- a clock change -----------------------------------------------------------
 
 

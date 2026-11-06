@@ -363,6 +363,33 @@ ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
 
+### What changed in version 7
+
+**A special can state a minimum and a maximum stay (F65, F66).** A `time_window`
+may carry `stay_at_least_minutes` and `stay_at_most_minutes`, each a positive whole
+number of minutes, each optional: leaving one out means no limit of that kind, so
+every plan that loaded on version 6 and states neither prices exactly as before. A
+special with a minimum applies only if the real stay is at least that long; one
+with a maximum, only if it is at most that long. The stay is measured in real time,
+to the second, not in the whole minutes it is rounded up to elsewhere. A stay
+outside the limits gets no part of the special -- the regular rate prices the whole
+stay, nothing split -- and the breakdown says which limit it missed. The cheapest
+price still wins. A minimum above the maximum does not load.
+
+**A day is the local calendar day, and a week is counted from a day the plan names
+(F68, F69).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
+e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
+`rolling_7d` choice of a weekly max are gone. **That is a plan that loaded on
+version 6 and does not load here.** The refusal names the field and says what to
+write: `day_boundary` `calendar_day`; `week_boundary` `calendar_week` with
+`week_starts_on` set to the garage's first day, which is now required to be a day
+name (it was `null` under `rolling_7d`). A stay is cut at local midnight, and a
+week at local midnight on its first day, so a stay of 24 hours that starts at 18:00
+is in two days. Both fields are still stated, with no default.
+
+**What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
+before upgrading: such a plan will not load, and the refusal says what to write.
+
 ### What changed in version 6
 
 **A fill rule states two answers the owner gives, and a rule without them does
@@ -386,13 +413,13 @@ reading breakdown lines meets three new line codes, `fill_level.special_not_rais
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
 **A daily max caps each day on its own, and a weekly max each week (F59).** The
-garage owner's decision, 2026-10-16: the daily max is per calendar day. The stay
-is cut at each local midnight -- or every 24 hours from entry under
-`rolling_24h`, which stays the plan's choice -- and each day pays the time
+garage owner's decision, 2026-10-16: the daily max is per calendar day (and
+since version 7 it is only that). The stay
+is cut at each local midnight, and each day pays the time
 charged in it, or the daily max where that is less. A day the car is in for no
 time adds nothing. A weekly max caps each of the plan's weeks the same way, by
-the week it already states (`calendar_week` from `week_starts_on`, or
-`rolling_7d`), after the daily max for each of the week's days. At 8 the first
+the week it states (`calendar_week` from `week_starts_on`), after the daily max
+for each of the week's days. At 8 the first
 hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 was 60 -- the
 max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
@@ -729,9 +756,8 @@ server happens to run in, which is a different fee on a different machine.
 This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
-state whether a day means a local `calendar_day` or a `rolling_24h` window,
-because those price a Friday-night-to-Saturday-morning stay differently and the
-answer is the owner's to give. Whichever it states, the stay is cut at the start
+state that a day means a local `calendar_day` (a "rolling 24 hours" day was the
+other choice until version 7 and is gone, F68). The stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 

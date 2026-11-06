@@ -25,6 +25,33 @@ ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
 
+### What changed in version 7
+
+**A special can state a minimum and a maximum stay (F65, F66).** A `time_window`
+may carry `stay_at_least_minutes` and `stay_at_most_minutes`, each a positive whole
+number of minutes, each optional: leaving one out means no limit of that kind, so
+every plan that loaded on version 6 and states neither prices exactly as before. A
+special with a minimum applies only if the real stay is at least that long; one
+with a maximum, only if it is at most that long. The stay is measured in real time,
+to the second, not in the whole minutes it is rounded up to elsewhere. A stay
+outside the limits gets no part of the special -- the regular rate prices the whole
+stay, nothing split -- and the breakdown says which limit it missed. The cheapest
+price still wins. A minimum above the maximum does not load.
+
+**A day is the local calendar day, and a week is counted from a day the plan names
+(F68, F69).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
+e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
+`rolling_7d` choice of a weekly max are gone. **That is a plan that loaded on
+version 6 and does not load here.** The refusal names the field and says what to
+write: `day_boundary` `calendar_day`; `week_boundary` `calendar_week` with
+`week_starts_on` set to the garage's first day, which is now required to be a day
+name (it was `null` under `rolling_7d`). A stay is cut at local midnight, and a
+week at local midnight on its first day, so a stay of 24 hours that starts at 18:00
+is in two days. Both fields are still stated, with no default.
+
+**What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
+before upgrading: such a plan will not load, and the refusal says what to write.
+
 ### What changed in version 6
 
 **A fill rule states two answers the owner gives, and a rule without them does
@@ -48,13 +75,13 @@ reading breakdown lines meets three new line codes, `fill_level.special_not_rais
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
 **A daily max caps each day on its own, and a weekly max each week (F59).** The
-garage owner's decision, 2026-10-16: the daily max is per calendar day. The stay
-is cut at each local midnight -- or every 24 hours from entry under
-`rolling_24h`, which stays the plan's choice -- and each day pays the time
+garage owner's decision, 2026-10-16: the daily max is per calendar day (and
+since version 7 it is only that). The stay
+is cut at each local midnight, and each day pays the time
 charged in it, or the daily max where that is less. A day the car is in for no
 time adds nothing. A weekly max caps each of the plan's weeks the same way, by
-the week it already states (`calendar_week` from `week_starts_on`, or
-`rolling_7d`), after the daily max for each of the week's days. At 8 the first
+the week it states (`calendar_week` from `week_starts_on`), after the daily max
+for each of the week's days. At 8 the first
 hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 was 60 -- the
 max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
@@ -391,9 +418,8 @@ server happens to run in, which is a different fee on a different machine.
 This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
-state whether a day means a local `calendar_day` or a `rolling_24h` window,
-because those price a Friday-night-to-Saturday-morning stay differently and the
-answer is the owner's to give. Whichever it states, the stay is cut at the start
+state that a day means a local `calendar_day` (a "rolling 24 hours" day was the
+other choice until version 7 and is gone, F68). The stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 
@@ -667,7 +693,7 @@ never failed is a decoration.
 | **F56** | A cap counts only the days and weeks the car is in for more than zero time: an exit at exactly local midnight, at a 24-hour mark or at the start of a week adds no day or week, and one minute past it does. A week holds only its own days, so it costs no more than the daily max for the days the car is in it: at 30 a day and 100 a week, seven days and an hour is 100 + 4 by the hour and 100 + 30 for a flat price, not 100 twice. The two caps still compose in either order. |
 | **F57** | A fixed discount takes off at most what the stay costs when it is taken, and never less than nothing. A stay cheaper than the discount is priced at zero and the line says the discount was limited to the charge, rather than refused as a negative fee; a discount smaller than the charge is taken in full. A fixed increase is added in full, so a fixed discount listed before it no longer reduces it: 5 off then 4 added on a stay of 3 is 4, and the other way round 2. A fixed discount never adds money: on a total at or below zero it takes off nothing. The 150% discount that once took a total there no longer loads (F60). |
 | **F58** | The HTTP door reads a request body only within a bound. A negative Content-Length is a named 400 rather than a read to the end of the connection, and every connection carries a socket timeout, so a caller that stops part-way through a body is disconnected rather than holding a thread. |
-| **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, or each 24 hours from entry under `rolling_24h`, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special, one price for the stay it covers, is capped as one price at the max times the days the car is in (F63), as is a rule type that does not say how its charge builds up. What a base says it charged is checked against its lines on every quote. |
+| **F59** | A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). The stay is cut at each local midnight, and each day pays the time charged in it or the max, whichever is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it starts, the rate does not start again at midnight, a day with a clock change is one day, and a day the car is in for no time adds nothing. A weekly max caps each of the plan's weeks the same way, after the daily max for each of its days. The caps compose in either order, the answer is the same on every run and in every server zone, and no fee is higher than the max times the days touched. A flat special, one price for the stay it covers, is capped as one price at the max times the days the car is in (F63), as is a rule type that does not say how its charge builds up. What a base says it charged is checked against its lines on every quote. |
 | **F6** | The test function IS the production path. `/v1/quote` and the CLI emit the same response bytes for the same request, from one code path and one encoder; the CLI's terminal newline is written outside the payload. |
 | **F60** | A percent discount can never exceed 100%. A `time_window` discount whose `percent_bp` is above 10000 does not load: `validate-plan`, `quote` and the HTTP door answer 400 with the code INVALID_PERCENT_DISCOUNT_OVER_100 beside a sentence naming the field, so no plan carrying one is saved and no stay is priced on it. 10000 loads and makes the stay free. A percent increase over 100% still loads, a fixed discount larger than the charge is F57's, and every other load refusal carries no code. |
 | **F61** | A long stay is priced in the memory of a short one. A cap finds the stay's days and weeks as it walks them and lists none of them, each day's or week's amount goes into a running tally, the base remembers only its last few answers, and a cap's line spells out a bounded number of runs of equal amounts, then says how many more there were and what they came to. The work still grows with the stay, by a step a day: ten years take ten times the work of one, and a century no more a day than a year. The engine refuses a stay longer than 90 days before any of this work (F62); these are measured with that limit lifted, so they hold for the caps whatever it is set to. |
@@ -677,6 +703,8 @@ never failed is a decoration.
 | **F65** | A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "5-hour minimum"): `stay_at_least_minutes` on a `time_window` means it applies only if the REAL stay is at least that many minutes, in real time and not the rounded minutes the periods are counted in. A shorter stay prices whole on the regular rate, and the breakdown says the special did not apply and why. The cheapest price still wins. A plan that states no minimum is priced as before. |
 | **F66** | A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "up to 10 hours"): `stay_at_most_minutes` on a `time_window` means it applies only if the REAL stay is at most that many minutes, in real time. A longer stay is priced WHOLE by the regular rate, nothing split, and the breakdown says the special did not apply because the stay was longer than its maximum. The cheapest price still wins. A plan that states no maximum is priced as before. |
 | **F67** | The patterns real garages list are expressible as the listing words them (Gokhan, 2026-11-07: "accomodate all those options exactly the way they describe"): banded prices ("up to 3 hours = X, up to 6 hours = Y") as a flat special with a maximum stay each; a max that applies only inside a weekday window as a flat special for stays that enter in it, the cheapest price winning; a flat "24 hours" price as a flat special for a stay of at most 24 hours; and an evening window past midnight as ONE `next_day` rule. Each is proven on stays either side of its edges, with an example plan. |
+| **F68** | A daily max counts the local calendar day, and only that (Gokhan, 2026-11-07: "calendar day not 24 hrs"). A stay of 24 hours that starts at 18:00 is in two days and each is capped on its own; a day with a clock change is one day. A plan that states a rolling 24-hour day does not load, and the refusal names the field and says to write `calendar_day`. |
+| **F69** | A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "day: wednesday . e.g. sunday to sunday"). The same stay is one week or two depending on that day. `week_starts_on` is a day name, always; a plan that states a rolling seven-day week does not load, and the refusal names the field and says to write `calendar_week` and a starting day. |
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |

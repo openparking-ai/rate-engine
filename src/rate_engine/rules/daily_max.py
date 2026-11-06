@@ -5,20 +5,17 @@ ledger it is a NEGATIVE line saying how much it took off, which both keeps the
 fee equal to the sum of its lines and shows the operator the size of the
 discount -- the number a plain "daily max applied" would have hidden.
 
-**`day_boundary` is required, with no default, and it is the interesting field.**
-"Daily max 30" does not say what a day is, and the two honest answers price a
-two-day stay differently:
-
-* `calendar_day` -- a day is a local calendar date. A stay from Friday 22:00 to
-  Saturday 02:00 is in two of them. Across a DST transition a calendar day is 23
-  or 25 hours, and that is correct: a day is what the local clock says it is.
-* `rolling_24h` -- a day is 24 hours from ENTRY. The same stay is four hours long
-  and is in one. DST does not move it, because 24 hours is 24 hours whatever the
-  clock did.
+**A day is a local calendar day, and only that (F68).** Gokhan, 2026-11-07: *"calendar
+day not 24 hrs."* A stay from Friday 22:00 to Saturday 02:00 is in two calendar days
+and each is capped on its own; a day is what the local clock says it is, so across a
+DST transition it is 23 or 25 hours, and that is correct. A "rolling 24 hours" day,
+counted from entry, used to be the plan's other choice, and it is gone: a plan that
+states it does not load, and the refusal says to write `calendar_day`. The field is
+still stated, with no default, so a plan says in its own words what a day means and
+a later round that is told a second meaning has a place to put it.
 
 §8 raises exactly this ("what happens at midnight on a two-day stay") as one of
-the things a rate sign does not tell you. So the engine does not decide it. A
-plan that does not state `day_boundary` does not load.
+the things a rate sign does not tell you, and it is answered.
 
 **Each day is capped on its own (F59).** Gokhan, 2026-10-16: the daily max is
 per calendar day -- split the stay at the garage's local midnight and cap each
@@ -27,8 +24,7 @@ the time is split by the day it was charged in, and each day pays at most the
 max. Monday 09:00 to Tuesday 00:15 at $8 the first hour and $4 an hour after,
 $30 a day: Monday's fifteen hours are $64 and pay $30, Tuesday's fifteen minutes
 are the stay's sixteenth hour and pay $4. $34, where a cap of $30 times the days
-touched allowed $60. A rolling day is cut at each 24 hours from entry and capped
-the same way.
+touched allowed $60.
 
 How the charge is split is the base's to say, not this file's: the engine hands
 a cap `charged_by` (the `told_the_base` trait), what the base charges for the
@@ -44,8 +40,7 @@ stay.
 
 **A day the car is in for no time is not a day it touched.** An exit at exactly
 local midnight ends on the date before, so Monday 09:00 to Tuesday 00:00 is one
-calendar day, not two. A rolling window already counted that way: a stay of
-exactly 24 hours is one window.
+calendar day, not two.
 
 **A long stay is priced in the memory of a short one (F61).** Each day is capped
 on its own, so a cap walks the stay a day at a time and its work grows with the
@@ -69,7 +64,7 @@ from ..money import as_non_negative_minor, format_minor
 from ..stages import CAP
 from . import TOLD_THE_BASE, Rule, common_fields, register
 
-DAY_BOUNDARIES: tuple[str, ...] = ("calendar_day", "rolling_24h")
+DAY_BOUNDARIES: tuple[str, ...] = ("calendar_day",)
 
 EXTRA = {"max_minor", "day_boundary"}
 
@@ -87,12 +82,20 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
 
     rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
     boundary = raw["day_boundary"]
+    if boundary == "rolling_24h":
+        raise InvalidPlan(
+            f"{where}.day_boundary is 'rolling_24h', which this version does not "
+            "have: a daily max counts the local calendar day, and only that "
+            "(Gokhan, 2026-11-07, \"calendar day not 24 hrs\"). Write "
+            "\"calendar_day\" -- a stay that crosses midnight is then capped on "
+            "each of the days it is in, and a 24-hour stay that starts at 18:00 is "
+            "in two of them."
+        )
     if boundary not in DAY_BOUNDARIES:
         raise InvalidPlan(
-            f"{where}.day_boundary is {boundary!r}; expected one of "
-            f"{', '.join(DAY_BOUNDARIES)}. There is no default: a cap of 30 a day "
-            "prices a Friday-night-to-Saturday-morning stay at 30 or at 60 depending "
-            "on the answer, and that is the owner's decision."
+            f"{where}.day_boundary is {boundary!r}; expected {DAY_BOUNDARIES[0]!r}. "
+            "A daily max counts the local calendar day and nothing else; the field "
+            "is stated so the plan says what a day is."
         )
     params = {
         "max_minor": as_non_negative_minor(raw["max_minor"], f"{where}.max_minor"),
@@ -114,14 +117,8 @@ def _day_starts(rule: Rule, stay, plan, first: int = 1):
 
     A calendar day starts at local midnight: fold=0 is the first instant of the
     date, even when midnight itself falls in a transition, so a 23- or 25-hour
-    day is one day rather than 0.96 or 1.04 of one. A rolling day starts every
-    24 hours from entry.
+    day is one day rather than 0.96 or 1.04 of one.
     """
-    if rule.params["day_boundary"] == "rolling_24h":
-        start = stay.entry_at.astimezone(UTC) + ONE_DAY * (first - 1)
-        while True:
-            start += ONE_DAY
-            yield start
     day = stay.entry_at.astimezone(plan.timezone).date() + ONE_DAY * (first - 1)
     while True:
         day += ONE_DAY
@@ -139,7 +136,7 @@ def _day_holding(rule: Rule, stay, plan, instant: datetime) -> int:
     """Which of the stay's days `instant` falls in, counted from 0 at entry: the
     day that starts at or before it and ends after it.
 
-    Found from the date (or the time since entry, for a rolling day) rather
+    Found from the date rather
     than by walking from entry, so asking about a day late in a long stay costs
     what asking about the first does. The guess is then checked against the
     starts `_day_starts` gives, both ways, so the day found is the day `days_of`
@@ -150,11 +147,8 @@ def _day_holding(rule: Rule, stay, plan, instant: datetime) -> int:
     entry = stay.entry_at.astimezone(UTC)
     if instant <= entry:
         return 0
-    if rule.params["day_boundary"] == "rolling_24h":
-        index = (instant - entry) // ONE_DAY
-    else:
-        entry_date = stay.entry_at.astimezone(plan.timezone).date()
-        index = max(0, (instant.astimezone(plan.timezone).date() - entry_date).days)
+    entry_date = stay.entry_at.astimezone(plan.timezone).date()
+    index = max(0, (instant.astimezone(plan.timezone).date() - entry_date).days)
     while index > 0 and _start_of_day(rule, stay, plan, index) > instant:
         index -= 1
     while _start_of_day(rule, stay, plan, index + 1) <= instant:
@@ -199,8 +193,8 @@ def pieces(rule: Rule, stay, plan, start: datetime, end: datetime):
 
     One (start, end) for each day the car is in for more than zero time inside
     that part. `weekly_max` asks this of each week a stay is cut into: a
-    calendar day sits inside a calendar week, and a rolling day that runs past a
-    week's end is split there, so each week holds only its own part of it. A
+    calendar day sits inside a calendar week, so each week holds whole days of
+    the stay (the first and last cut by the stay's own ends). A
     stay of zero length is one piece, as it is one day.
 
     The walk starts at the day holding `start`, so a week late in a long stay is
@@ -316,7 +310,6 @@ def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> li
     caps = days_covered(rule, stay, plan)
     most = rule.params["max_minor"]
     currency = plan.currency
-    calendar = rule.params["day_boundary"] == "calendar_day"
     if charged_by is None:
         # One price for the whole stay: no day it can be split by.
         amounts = None
@@ -325,7 +318,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> li
         # Tallied day by day, never listed: a long stay in a short one's memory.
         amounts = Amounts(each_capped_day(rule, stay, plan, charged_by))
         ceiling = amounts.total
-    span = f"{caps} days" if caps != 1 else ("the day" if calendar else "24 hours")
+    span = f"{caps} days" if caps != 1 else "the day"
 
     if running_total_minor <= ceiling:
         return [
@@ -342,8 +335,7 @@ def apply(rule: Rule, stay, plan, running_total_minor: int, *, charged_by) -> li
         ]
     by_day = ""
     if amounts is not None and caps > 1 and amounts.smallest < most:
-        unit = "day" if calendar else "24-hour window"
-        by_day = f" ({amounts_text(amounts, currency)}: each {unit} is capped on its own)"
+        by_day = f" ({amounts_text(amounts, currency)}: each day is capped on its own)"
     return [
         Line(
             code="daily_max.applied",

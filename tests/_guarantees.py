@@ -427,8 +427,8 @@ GUARANTEES: dict[str, str] = {
     ),
     "F59": (
         "A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). "
-        "The stay is cut at each local midnight, or each 24 hours from entry under "
-        "`rolling_24h`, and each day pays the time charged in it or the max, whichever "
+        "The stay is cut at each local midnight, and each day pays the time charged in "
+        "it or the max, whichever "
         "is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to "
         "Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it "
         "starts, the rate does not start again at midnight, a day with a clock change "
@@ -527,6 +527,20 @@ GUARANTEES: dict[str, str] = {
         "price winning; a flat \"24 hours\" price as a flat special for a stay of at "
         "most 24 hours; and an evening window past midnight as ONE `next_day` rule. "
         "Each is proven on stays either side of its edges, with an example plan."
+    ),
+    "F68": (
+        "A daily max counts the local calendar day, and only that (Gokhan, "
+        "2026-11-07: \"calendar day not 24 hrs\"). A stay of 24 hours that starts at "
+        "18:00 is in two days and each is capped on its own; a day with a clock change "
+        "is one day. A plan that states a rolling 24-hour day does not load, and the "
+        "refusal names the field and says to write `calendar_day`."
+    ),
+    "F69": (
+        "A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "
+        "\"day: wednesday . e.g. sunday to sunday\"). The same stay is one week or two "
+        "depending on that day. `week_starts_on` is a day name, always; a plan that "
+        "states a rolling seven-day week does not load, and the refusal names the field "
+        "and says to write `calendar_week` and a starting day."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

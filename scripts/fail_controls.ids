@@ -119,7 +119,7 @@ F55/share-rounds-against-driver
 F55/stated-order-charged
 F55/tie-not-first
 F56/exit-date-counted
-F56/rolling-day-past-the-week
+F56/day-past-the-week
 F56/week-by-weekly-max-alone
 F56/week-start-at-exit-counted
 F57/discount-not-floored
@@ -176,6 +176,12 @@ F66/no-reason-given
 F66/rounded-stay
 F67/evening-cannot-pass-midnight
 F67/no-maximum-stay
+F68
+F68/any-boundary-loads
+F68/the-refusal-names-no-fix
+F69
+F69/no-day-loads
+F69/the-refusal-names-no-fix
 F6b/attribute-form
 F6b/imported-name-form
 F6c

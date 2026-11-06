@@ -91,10 +91,10 @@ ON_OPEN = "2026-03-03T06:00:00-05:00"  # Tue, exactly on enter_from
 SATURDAY = "2026-03-07T07:00:00-05:00"  # inside the hours, NOT one of the stated days
 FRI_NIGHT = "2026-03-06T22:00:00-05:00"  # crosses local midnight into Saturday
 DST_SPRING = "2026-03-07T12:00:00-05:00"  # the US spring-forward is 2026-03-08
-#: 2026-11-01 is the US fall-back: that LOCAL day is 25 hours long. It is the
-#: only date in the year where `calendar_day` and `rolling_24h` give different
-#: answers for the same stay -- a stay can fit inside one local date and still
-#: cross two 24-hour windows. An axis with only the spring side is half an axis.
+#: 2026-11-01 is the US fall-back: that LOCAL day is 25 hours long. A stay can fit
+#: inside one local date and still be longer than 24 hours, so a daily max that
+#: counted 24 hours would split it and one that counts the calendar day does not.
+#: An axis with only the spring side is half an axis.
 DST_FALL = "2026-11-01T00:00:00-04:00"
 
 CORPUS: dict[str, Stay] = {

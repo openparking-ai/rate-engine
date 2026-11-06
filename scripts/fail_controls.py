@@ -1402,12 +1402,12 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F56/week-start-at-exit-counted": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/weekly_max.py",
-        "            if boundary >= exit_at:",
-        "            if boundary > exit_at:  # PLANTED: a week start at the exit counts",
+        "        if boundary >= exit_at:",
+        "        if boundary > exit_at:  # PLANTED: a week start at the exit counts",
         "an exit at exactly the start of a calendar week counts that week, so a "
         "Monday-to-Monday stay is two weeks and a flat price pays the weekly max twice",
     ),
-    "F56/rolling-day-past-the-week": (
+    "F56/day-past-the-week": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/daily_max.py",
         "        if not (day_start < end and day_end > start):",
@@ -1954,6 +1954,59 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "  # PLANTED",
         "a window cannot run past midnight, so 'in after 5pm, out by 6am' has to be "
         "written as two rules and the one-rule form does not load",
+    ),
+    # A day is the local calendar day, a week starts on the plan's day (F68, F69,
+    # Gokhan 2026-11-07).
+    "F68": (
+        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        "        day += ONE_DAY\n"
+        "        yield datetime.combine(day, time(0), tzinfo=plan.timezone).astimezone(UTC)\n",
+        "        day += ONE_DAY\n"
+        "        # PLANTED: a day is 24 hours from entry, not the calendar day\n"
+        "        yield stay.entry_at.astimezone(UTC) + ONE_DAY * (day - entry_date).days\n",
+        "a stay of 24 hours from 18:00 is one day, capped once at 30.00, where it is "
+        "two calendar days and pays 58.00",
+    ),
+    "F68/the-refusal-names-no-fix": (
+        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        '    if boundary == "rolling_24h":\n',
+        "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
+        "a plan stating a rolling 24-hour day is refused without being told to write "
+        "calendar_day",
+    ),
+    "F68/any-boundary-loads": (
+        "tests/test_f68_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        "    if boundary not in DAY_BOUNDARIES:\n",
+        "    if False:  # PLANTED: any day boundary loads\n",
+        "a daily max stating 'weekday' or nothing at all loads, and prices as a "
+        "calendar day while the plan says something else",
+    ),
+    "F69": (
+        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        '    week = _week_start(local_entry, rule.params["week_starts_on"])\n',
+        "    week = local_entry  # PLANTED: the week starts on the day of entry\n",
+        "the day the garage names is ignored and a week is counted from the day the car "
+        "came in, so a Monday garage and a Wednesday garage price a stay the same",
+    ),
+    "F69/the-refusal-names-no-fix": (
+        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        '    if boundary == "rolling_7d":\n',
+        "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
+        "a plan stating a rolling seven-day week is refused without being told to write "
+        "calendar_week and a starting day",
+    ),
+    "F69/no-day-loads": (
+        "tests/test_f69_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        "    if starts_on not in DAYS_OF_WEEK:\n",
+        "    if False:  # PLANTED: a week with no starting day loads\n",
+        "a weekly max with a null or misspelt starting day loads and then fails on the "
+        "first stay it touches, or silently counts from the wrong day",
     ),
 }
 
