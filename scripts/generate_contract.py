@@ -393,6 +393,14 @@ exit are the same instant is now zero, with a `zero_length_stay` line saying why
 one second is a minute and prices as before. See "A stay of zero length costs
 nothing".
 
+**A price is never below $0 (F70).** Gokhan, 2026-11-07: "Rate cannot be below $0."
+A discount bigger than the fee makes the stay free and is not refused: a fixed
+discount takes off at most what the stay costs and its line says it was limited, a
+second discount takes off at most what is left, and a 100% discount makes the stay
+free. This was already how a fixed discount priced (F57); it is now pinned as a
+claim over every combination of discounts and every order. A percent discount above
+100% still does not load (F60) -- that refuses a plan when it is saved, not a stay.
+
 **What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
 before upgrading: such a plan will not load, and the refusal says what to write. A
 caller that relied on a zero-length stay paying the first period will now get zero,

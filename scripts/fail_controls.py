@@ -2026,6 +2026,15 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "a stay of one second is treated as no time and costs nothing, where it is a "
         "minute and pays the first period",
     ),
+    # A price is never below $0 (F70, Gokhan 2026-11-07).
+    "F70": (
+        "tests/test_f70_a_price_is_never_below_zero.py",
+        "rules/time_window.py",
+        "            return max(0, min(amount[\"minor\"], running_total_minor))\n",
+        "            return amount[\"minor\"]  # PLANTED: a discount may exceed the fee\n",
+        "a 10,000.00 discount on a 3.00 stay takes off 10,000.00 and the quote is "
+        "refused as a negative fee, where it should be free",
+    ),
 }
 
 

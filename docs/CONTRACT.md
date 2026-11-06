@@ -55,6 +55,14 @@ exit are the same instant is now zero, with a `zero_length_stay` line saying why
 one second is a minute and prices as before. See "A stay of zero length costs
 nothing".
 
+**A price is never below $0 (F70).** Gokhan, 2026-11-07: "Rate cannot be below $0."
+A discount bigger than the fee makes the stay free and is not refused: a fixed
+discount takes off at most what the stay costs and its line says it was limited, a
+second discount takes off at most what is left, and a 100% discount makes the stay
+free. This was already how a fixed discount priced (F57); it is now pinned as a
+claim over every combination of discounts and every order. A percent discount above
+100% still does not load (F60) -- that refuses a plan when it is saved, not a stay.
+
 **What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
 before upgrading: such a plan will not load, and the refusal says what to write. A
 caller that relied on a zero-length stay paying the first period will now get zero,
@@ -716,6 +724,7 @@ never failed is a decoration.
 | **F6b** | And there is exactly ONE encoder. No surface re-implements the response bytes, so the two doors cannot drift the way they silently did. |
 | **F6c** | The CLI's payload is the route's payload BYTE FOR BYTE, with any terminal newline written outside it -- compared as bytes, never as decoded objects. |
 | **F7** | Registering a new rule type changes no existing plan's answer -- fee and breakdown byte-identical. |
+| **F70** | A price can never be below $0 (Gokhan, 2026-11-07: "Rate cannot be below $0"), and a discount bigger than the fee floors at $0 and is never refused: a fixed discount takes off at most what the stay costs and the line says it was limited, a second discount takes off at most what is left, and a 100% discount makes the stay free. Swept over every combination of discounts in every order on stays of every length and both ways of pricing the time. A percent discount above 100% still does not load (F60). |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 | **F9** | The published contract is DERIVED, never transcribed. Every generated block matches the code, and every block that ASSERTS something about its values is proven to move when those values contradict it. |

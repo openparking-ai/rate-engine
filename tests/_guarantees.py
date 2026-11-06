@@ -544,6 +544,15 @@ GUARANTEES: dict[str, str] = {
         "states a rolling seven-day week does not load, and the refusal names the field "
         "and says to write `calendar_week` and a starting day."
     ),
+    "F70": (
+        "A price can never be below $0 (Gokhan, 2026-11-07: \"Rate cannot be below "
+        "$0\"), and a discount bigger than the fee floors at $0 and is never refused: a "
+        "fixed discount takes off at most what the stay costs and the line says it was "
+        "limited, a second discount takes off at most what is left, and a 100% discount "
+        "makes the stay free. Swept over every combination of discounts in every order "
+        "on stays of every length and both ways of pricing the time. A percent discount "
+        "above 100% still does not load (F60)."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "
