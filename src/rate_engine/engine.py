@@ -809,7 +809,13 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     if blocking:
         raise Refused(blocking)
 
-    ledger = _the_cheapest_way(plan, stay, qualified)
+    if stay.duration_minutes == 0:
+        # Decided only now, after everything that refuses has had its say: a plan that
+        # cannot price this stay still refuses it, and a stay it can price at all
+        # costs nothing when the car was in for no time (F24).
+        ledger = _zero_length(plan, stay)
+    else:
+        ledger = _the_cheapest_way(plan, stay, qualified)
 
     fee = ledger.total_minor
     _assert_ledger_is_the_fee(fee, ledger)
@@ -828,6 +834,51 @@ def quote(plans: list[Plan], stay: Stay) -> Quote:
     return Quote(
         fee_minor=fee, currency=plan.currency, plan_version=plan.plan_version, breakdown=ledger
     )
+
+
+#: The line a stay of no length carries. Engine-level, like `stay`: no rule can write
+#: it, because no rule is asked.
+ZERO_LENGTH = "zero_length_stay"
+
+
+def _zero_length(plan: Plan, stay: Stay) -> Ledger:
+    """A car that came in and left in the same instant costs nothing (F24).
+
+    Gokhan, 2026-11-07: *"0 means $0. 1 means round up."* Nothing is priced, so no
+    rule is asked: no first period, no cap, no surcharge, no adjustment. One second
+    is a minute (`Stay.duration_minutes` rounds UP) and is priced from the first
+    period as every other stay is, so the line between $0 and the first period is
+    exactly the line between no time and some. Before this, a stay of no length paid
+    the first period.
+    """
+    from .money import format_minor
+
+    ledger = Ledger()
+    entry_local = stay.entry_at.astimezone(plan.timezone)
+    ledger.add(
+        Line(
+            code="stay",
+            rule_id=None,
+            text=(
+                f"Entered {entry_local:%H:%M %a %d %b}, "
+                f"{stay.duration_minutes} minutes, space class {stay.space_class!r}, "
+                f"plan {plan.plan_version}"
+            ),
+            delta_minor=0,
+        )
+    )
+    ledger.add(
+        Line(
+            code=ZERO_LENGTH,
+            rule_id=None,
+            text=(
+                "Zero-length stay: the car left the instant it came in, so there is no "
+                f"charge -- {format_minor(0, plan.currency)}, and nothing is added"
+            ),
+            delta_minor=0,
+        )
+    )
+    return ledger
 
 
 def _priced(

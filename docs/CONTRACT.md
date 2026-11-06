@@ -49,8 +49,16 @@ name (it was `null` under `rolling_7d`). A stay is cut at local midnight, and a
 week at local midnight on its first day, so a stay of 24 hours that starts at 18:00
 is in two days. Both fields are still stated, with no default.
 
+**A stay of no length costs nothing (F24).** Gokhan, 2026-11-07: "0 means $0. 1
+means round up." It used to pay the first period. A fee for a stay where entry and
+exit are the same instant is now zero, with a `zero_length_stay` line saying why;
+one second is a minute and prices as before. See "A stay of zero length costs
+nothing".
+
 **What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
-before upgrading: such a plan will not load, and the refusal says what to write.
+before upgrading: such a plan will not load, and the refusal says what to write. A
+caller that relied on a zero-length stay paying the first period will now get zero,
+and meets one new breakdown line code, `zero_length_stay`.
 
 ### What changed in version 6
 
@@ -654,7 +662,7 @@ never failed is a decoration.
 | **F22b** | And the stage is not the whole answer. A rule TYPE may declare that it speaks when it did not qualify, so a weekend discount declining because it is a Tuesday says so on the receipt -- while a rule that was never about this space stays silent whatever it declared. |
 | **F22c** | A special for another space class charges nothing. A QUALIFY rule that does not cover the stay's class did not qualify, whatever its times, so it adds no money and gets its not-applied line at zero, naming the class as the reason -- never a time for a special the stay could never get; the fee is what the plan without it charges. |
 | **F23** | The production invariant that the fee IS the ledger's sum is itself guarded: deleting it, no-opping it or unwiring it from the pricing path turns the suite red. |
-| **F24** | A zero-length stay pays the first period -- a decision, published in the contract with the divergence it was disclosed with, not left for an integrator to discover as an anomaly. |
+| **F24** | A stay of no length costs nothing (Gokhan, 2026-11-07: "0 means $0. 1 means round up"), with or without a grace period, and the receipt says why; one second is a minute and pays the first period like any stay past grace. A negative stay and a stay the plan cannot price are still refused. Published in the contract, not left for an integrator to discover as an anomaly. |
 | **F25** | Whether a time window may run past midnight is stated by the PLAN, in `day_span`, with no default -- the engine holds no day condition of its own. `day_span` also says WHERE the exit limit falls: under a bounded span it is `exit_by` on the entry date plus the span, so a limit past midnight is a moment rather than a clock reading. `any_span` names no last day and keeps the clock reading. |
 | **F26** | A window applies on the days the PLAN states -- weekday names, or the garage's own dates for a holiday or an event -- matched against the ENTRY's local date, and a window that did not match names the day that failed and the days it wanted. There is no built-in calendar and no preset: 'weekend' means different days in different countries. |
 | **F27** | `enter_from` is CONSULTED, not merely validated and stored. A window states BOTH ends of its entry range, which is what makes an evening rate expressible, and a stay arriving one minute before it opens does not qualify. |
@@ -822,29 +830,33 @@ ten minutes and one millisecond is eleven minutes and misses a ten-minute grace.
 That is coherent with every other duration comparison here, including the stated
 ceiling on a time-based rule, and it is recorded rather than adjusted.
 
-## A stay of zero length pays the first period
+## A stay of zero length costs nothing
 
-**Entry and exit at the same instant is priced, not free, and not refused.** The
-first period covers `[0, first_period_minutes]`, so a car that enters and leaves
-without stopping pays `first_period_minor` -- the same as a car that stayed one
-minute or fifty-nine.
+**Entry and exit at the same instant costs nothing, whatever the plan says.**
+Gokhan, 2026-11-07: "0 means $0. 1 means round up." A stay of zero length costs
+nothing -- no first period, no cap, no surcharge, no adjustment -- and the
+breakdown says so in one line, `zero_length_stay`, after the first line, which names
+the stay. A stay of **one second** is a minute (stay length is rounded UP, module-wide) and is
+priced from the first period like any other stay past a grace period, so the line
+between no charge and the first period is the line between no time and some.
 
-It is a DECISION, and it is published here because an integrator cannot otherwise
-learn it: the number is correct under the rule as written, and it is the kind of
-edge a garage owner will be asked about at the counter.
+This used to pay the first period, a decision of 2026-09-07 that diverged from the
+platform's older fee code, which returned zero for the same stay. The two now
+agree. It is a rule change: a caller that relied on a zero-length stay paying the
+first period will get zero.
 
-**It diverges from the platform's own older fee code, which returns zero for the
-same stay.** That divergence is known and is a later round's to reconcile; it is
-recorded rather than left for whoever notices the two answering differently.
+It is decided after everything that refuses has had its say. A zero-length stay in
+a space class the plan does not declare, or that no rule covers, is refused for
+that, as at any length; and a plan with a fill rule still needs the occupancy
+figure. Only a stay the plan could price is priced at nothing.
 
 A negative stay -- exit before entry -- is a different thing and is REFUSED as a
 caller bug rather than priced at zero, because pricing it would hide it.
 
-**And this paragraph now describes only a plan that declares NO grace.** A garage
-that declares one makes a zero-length stay free by the grace rule, because zero
-is at or under any positive number of minutes. Both behaviours are deliberate,
-both are tested, and which one a garage gets is stated in its own plan rather
-than assumed here.
+**A garage that declares a grace period** makes a stay of up to that many minutes
+free by the grace rule, and a stay of zero is the bottom of that range, so a plan
+with or without grace answers zero the same way. The grace line is the one a
+graced stay carries; a plan with none carries the zero-length line.
 - **No validations, no monthly parkers, no payments, no card.**
 - **Tax only as arithmetic.** This bullet said "no tax" until version 3, and it
   is qualified rather than deleted: the module computes tax lines on an amount it

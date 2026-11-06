@@ -319,7 +319,8 @@ def test_the_two_caps_still_compose_in_either_order():
 
 @pytest.mark.guarantee("F56")
 def test_a_zero_length_stay_is_still_one_day_and_one_week():
-    """F24: a stay of zero minutes pays the first period, so it is in one day."""
+    """The caps still count one day and one week for a stay of zero minutes, though
+    since F24 such a stay costs nothing and no cap is asked of it on a quote."""
     plan = load_plan(_plan("calendar_day", "calendar_week"))
     daily = next(r for r in plan.rules if r.id == "cap-daily")
     weekly = next(r for r in plan.rules if r.id == "cap-weekly")
@@ -327,4 +328,4 @@ def test_a_zero_length_stay_is_still_one_day_and_one_week():
     stay = make_stay(entry, entry, "standard")
     assert days_covered(daily, stay, plan) == 1
     assert weeks_covered(weekly, stay, plan) == 1
-    assert _fee(_plan("calendar_day", "calendar_week"), entry.isoformat(), entry.isoformat()) == 800
+    assert _fee(_plan("calendar_day", "calendar_week"), entry.isoformat(), entry.isoformat()) == 0

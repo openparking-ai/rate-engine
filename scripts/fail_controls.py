@@ -440,19 +440,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "stops reacting at all -- the exact deletion that left all 97 tests green "
         "when the outside pass measured it",
     ),
-    # X11. The plant makes a zero-length stay free -- the behaviour Grok proposed
-    # and Gokhan has not overruled. The control exists so the DECISION cannot be
-    # changed by accident; changing it on purpose is a brief.
+    # X11, reversed on 2026-11-07. The plant used to make a zero-length stay free,
+    # the behaviour Grok proposed and the owner had not agreed to; he has now said
+    # "0 means $0", so the plant is the old behaviour: a zero-length stay paying the
+    # first period. Still there so the DECISION cannot be changed by accident.
     "F24": (
-        "tests/test_f24_a_zero_length_stay_is_priced.py",
-        "rules/increment.py",
-        "    if minutes <= first_len:",
-        "    if minutes == 0:  # PLANTED: a zero-length stay silently becomes free\n"
-        "        return []\n"
-        "    if minutes <= first_len:",
-        "a stay of zero minutes stops paying the first period, which is a pricing "
-        "decision being changed with nothing said -- and it is the exact behaviour "
-        "an outside reviewer asked for and the owner has not agreed to",
+        "tests/test_f24_a_zero_length_stay_costs_nothing.py",
+        "engine.py",
+        "    if stay.duration_minutes == 0:\n",
+        "    if False:  # PLANTED: a zero-length stay pays the first period again\n",
+        "a stay of zero minutes pays the first period, which the owner said costs "
+        "$0 (\"0 means $0\")",
     ),
     # X4. The plant restores the undeclared condition exactly as it shipped: the
     # engine deciding the day span for every plan, whatever the plan says.
@@ -1590,7 +1588,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
         "\n"
-        "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
+        "    if stay.duration_minutes == 0:\n"
+        "        # Decided only now, after everything that refuses has had its say: a plan that\n"
+        "        # cannot price this stay still refuses it, and a stay it can price at all\n"
+        "        # costs nothing when the car was in for no time (F24).\n"
+        "        ledger = _zero_length(plan, stay)\n"
+        "    else:\n"
+        "        ledger = _the_cheapest_way(plan, stay, qualified)\n",
         "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
         "    qualified = _Qualified(plan, stay)\n"
         "\n"
@@ -1598,7 +1602,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
         "\n"
-        "    ledger = _the_cheapest_way(plan, stay, qualified)\n"
+        "    if stay.duration_minutes == 0:\n"
+        "        # Decided only now, after everything that refuses has had its say: a plan that\n"
+        "        # cannot price this stay still refuses it, and a stay it can price at all\n"
+        "        # costs nothing when the car was in for no time (F24).\n"
+        "        ledger = _zero_length(plan, stay)\n"
+        "    else:\n"
+        "        ledger = _the_cheapest_way(plan, stay, qualified)\n"
         "    too_long = _longer_than_priced(stay)\n"
         "    if too_long is not None:\n"
         "        raise Refused([too_long])\n",
@@ -2007,6 +2017,14 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if False:  # PLANTED: a week with no starting day loads\n",
         "a weekly max with a null or misspelt starting day loads and then fails on the "
         "first stay it touches, or silently counts from the wrong day",
+    ),
+    "F24/one-second-is-free": (
+        "tests/test_f24_a_zero_length_stay_costs_nothing.py",
+        "engine.py",
+        "    if stay.duration_minutes == 0:\n",
+        "    if (stay.exit_at - stay.entry_at).total_seconds() < 60:  # PLANTED\n",
+        "a stay of one second is treated as no time and costs nothing, where it is a "
+        "minute and pays the first period",
     ),
 }
 

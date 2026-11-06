@@ -31,10 +31,9 @@ and the breakdown says it was superseded rather than dropping it silently.
 comparison here -- the stated ceiling on an `increment` rule reads the same
 rounded value -- and it is stated in docs/CONTRACT.md rather than changed.
 
-**One consequence worth naming**, because it changes a decision published in the
-contract: a zero-length stay falls inside any grace window and is free. The
-contract's "a stay of zero length pays the first period" now describes a garage
-that declares NO grace, and says so.
+**One consequence worth naming**: a zero-length stay falls inside any grace window
+and is free. Since F24 (Gokhan, 2026-11-07: "0 means $0") a zero-length stay is free
+whether or not a plan declares grace, so grace is no longer what makes it so.
 """
 
 from __future__ import annotations

@@ -168,9 +168,11 @@ GUARANTEES: dict[str, str] = {
         "turns the suite red."
     ),
     "F24": (
-        "A zero-length stay pays the first period -- a decision, published in the "
-        "contract with the divergence it was disclosed with, not left for an "
-        "integrator to discover as an anomaly."
+        "A stay of no length costs nothing (Gokhan, 2026-11-07: \"0 means $0. 1 means "
+        "round up\"), with or without a grace period, and the receipt says why; one "
+        "second is a minute and pays the first period like any stay past grace. A "
+        "negative stay and a stay the plan cannot price are still refused. Published "
+        "in the contract, not left for an integrator to discover as an anomaly."
     ),
     "F25": (
         "Whether a time window may run past midnight is stated by the PLAN, in "

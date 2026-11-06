@@ -90,7 +90,7 @@ def _owned_names() -> dict[str, set[str]]:
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
     from rate_engine import engine
-    from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED
+    from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED, ZERO_LENGTH
     from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
     from rate_engine.rules import (
@@ -152,7 +152,7 @@ def _owned_names() -> dict[str, set[str]]:
         "stated value": values,
         "guarantee": set(GUARANTEES),
         "tax": tax_names,
-        "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED},
+        "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED, ZERO_LENGTH},
         # The engine's one stated limit (F62), read off the module that holds it.
         "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
     }

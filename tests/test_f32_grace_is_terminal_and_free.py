@@ -194,19 +194,20 @@ def test_terminality_is_DECLARED_BY_THE_TYPE_and_not_known_by_the_engine():
 
 
 @pytest.mark.guarantee("F32")
-def test_a_ZERO_LENGTH_stay_is_FREE_under_a_plan_that_declares_grace():
-    """The consequence §8b records, and the one that qualifies a decision already
-    published: "a stay of zero length pays the first period" describes a garage
-    that declares NO grace, and the contract now says so."""
+def test_a_ZERO_LENGTH_stay_is_FREE_with_or_without_a_grace_period():
+    """A zero-length stay costs nothing whatever the plan says (F24, Gokhan
+    2026-11-07: "0 means $0"). Under a grace plan it is the grace rule that makes it
+    free; under one with none it is the zero-length rule, so grace is not what the
+    answer depends on -- and one minute past grace still prices from entry."""
     _s, with_grace = _quote(0)
     assert with_grace["fee_minor"] == 0
 
     without = copy.deepcopy(PLAN)
     without["rules"] = [r for r in without["rules"] if r["id"] != "grace-10"]
     _s, no_grace = _quote(0, plan=without)
-    assert no_grace["fee_minor"] == 800 + 500 + 250, (
-        "the published decision changed for a plan that declares no grace"
-    )
+    assert no_grace["fee_minor"] == 0
+    _s, one_minute = _quote(1, plan=without)
+    assert one_minute["fee_minor"] == 800 + 500 + 250, "one minute rounds up, as before"
 
 
 @pytest.mark.guarantee("F32")

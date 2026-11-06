@@ -387,6 +387,11 @@ def test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP():
             continue
         priced += 1
         assert body["fee_minor"] == want["fee_minor"], f"{case}: {body['breakdown']}"
+        if minutes == 0:
+            # A stay of no length costs nothing and asks no rule (F24), so no rule
+            # of any class has a line on it; the two plans still agree on all of it.
+            assert body["fee_minor"] == 0 and body["breakdown"] == want["breakdown"], case
+            continue
         theirs = [line for line in body["breakdown"] if line["rule_id"] in gone]
         rest = [line for line in body["breakdown"] if line["rule_id"] not in gone]
         assert rest == want["breakdown"], case
@@ -405,7 +410,9 @@ def test_a_special_for_another_class_changes_nothing_but_its_own_line_SWEEP():
                 met_every_time += 1
     # Both kinds of stay were met -- ones that met every time of a special for
     # another class, and ones that also missed a time -- and enough stays priced
-    # for the comparison to mean something.
-    assert met_every_time >= 900 and missed_a_time >= 1000 and priced >= 1100, (
+    # for the comparison to mean something. The floors were 900 and 1000 before a stay
+    # of no length stopped asking any rule (F24): those stays are still swept, above,
+    # and no longer counted here.
+    assert met_every_time >= 700 and missed_a_time >= 900 and priced >= 1100, (
         met_every_time, missed_a_time, priced,
     )

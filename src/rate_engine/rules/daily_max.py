@@ -221,7 +221,7 @@ def charge_in(stay, charged_by, start: datetime, end: datetime) -> int:
 
     What it charges for a stay ending at `end`, less what it charges for one
     ending at `start` -- nothing, when `start` is the entry: the first period is
-    owed from the first instant, which is why a stay of zero length pays it (F24).
+    owed from the first instant, so the parts of a stay add up to its charge.
     The parts of a stay therefore add up to its charge exactly.
     """
     before = 0 if start == stay.entry_at else charged_by(_minutes_into(stay, start))
