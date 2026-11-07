@@ -562,6 +562,22 @@ GUARANTEES: dict[str, str] = {
         "from the listing, a stay the listing states no price for is refused and not "
         "guessed, and the files say they are not current prices."
     ),
+    "F79": (
+        "A flat price can be charged per 24 hours (Gokhan, 2026-11-07, on a flat "
+        "24-hour price used on a longer stay: \"cheapest win\"): a flat special with "
+        "`charged: \"per_24_hours\"` is charged once for every 24 hours of the stay, and is a "
+        "candidate beside the regular rate, so the customer pays the lower. A started "
+        "24 hours counts as a whole one, in real time (Claude's choice, not Gokhan's): "
+        "24 h is one block, 24 h and one second is two. A flat that does not state "
+        "`charged` is one price for the stay, as before."
+    ),
+    "F80": (
+        "A stay that does not match a window's entry and exit times gets no benefit "
+        "from that rate and pays whatever else applies (Gokhan, 2026-11-07, on a daily "
+        "max inside a time window: \"If it doesn't match it doesn't apply\"). With "
+        "\"Max $25, Mon-Fri 6am-6pm\", a stay in at 17:00 and out at 20:00 is not "
+        "covered and is priced whole on the regular rate."
+    ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "
         "refused exactly as one hitting an outstanding gap is; no entry in `decisions[]` "

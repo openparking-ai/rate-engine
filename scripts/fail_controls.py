@@ -2059,6 +2059,53 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if False:  # PLANTED: the special is charged over a cheaper hour",
         "an early bird dearer than the block rate is charged to a short stay",
     ),
+    # A flat price can be charged per 24 hours (F79, Gokhan 2026-11-07).
+    "F79": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        '    if effect["kind"] == "flat" and effect[CHARGED] == "per_24_hours":\n',
+        '    if False:  # PLANTED: `charged` is ignored, the flat is one price\n',
+        "a 30-hour stay with a flat per 24 hours is given the one price, or drops to "
+        "the regular rate, not two blocks",
+    ),
+    "F79/one-price-however-long": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "                delta_minor=price * blocks,\n",
+        "                delta_minor=price,  # PLANTED: charged once however long\n",
+        "a 49-hour stay is charged 20.00 although the line says 3 blocks",
+    ),
+    "F79/started-block-not-counted": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "    return max(1, blocks + (1 if rest else 0))\n",
+        "    return max(1, blocks)  # PLANTED: only whole 24 hours count\n",
+        "24 hours and one second is one block, and 30 hours is one block, not two",
+    ),
+    "F79/wall-clock-block": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "    blocks, rest = divmod(length, timedelta(hours=24))\n",
+        "    blocks, rest = divmod(stay.exit_at.replace(tzinfo=None) - "
+        "stay.entry_at.replace(tzinfo=None), timedelta(hours=24))  # PLANTED: wall clock\n",
+        "a 24-real-hour stay across the spring clock change is 25 hours on the wall "
+        "clock and is charged two blocks",
+    ),
+    # A stay outside a window's times gets nothing from it (F80, Gokhan 2026-11-07).
+    "F80": (
+        "tests/test_f80_a_stay_outside_a_windows_times_gets_nothing_from_it.py",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    exit_side = None  # PLANTED: the exit limit is ignored\n",
+        "in at 17:00 and out at 20:00 is given the 6am-6pm max",
+    ),
+    "F80/entry-before-ignored": (
+        "tests/test_f80_a_stay_outside_a_windows_times_gets_nothing_from_it.py",
+        "rules/time_window.py",
+        '    if entry_local.time() < rule.params["enter_from"]:\n',
+        "    if False:  # PLANTED: the entry window's opening is ignored\n",
+        "a stay in at 05:00 is given the 6am-6pm max",
+    ),
 }
 
 

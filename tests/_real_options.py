@@ -30,16 +30,19 @@ TUESDAY_8AM = "2026-03-03T08:00:00-05:00"
 
 
 def flat(rule_id: str, price_minor: int, *, days=None, enter_from="00:00", enter_by="23:59",
-         exit_by="23:59", day_span="next_day", **limits) -> dict:
+         exit_by="23:59", day_span="next_day", charged=None, **limits) -> dict:
     """A flat special, with the stay limits (`stay_at_least_minutes`, `stay_at_most_minutes`)
     passed through as given. Every day, any entry time, unless said otherwise."""
+    effect = {"kind": "flat", "price_minor": price_minor}
+    if charged is not None:
+        effect["charged"] = charged
     return {
         "id": rule_id, "type": "time_window", "stage": "QUALIFY",
         "space_classes": ["standard"], "label": rule_id,
         "applies_on": {"kind": "days_of_week", "days": days or EVERY_DAY},
         "enter_from": enter_from, "enter_by": enter_by, "exit_by": exit_by,
         "day_span": day_span,
-        "effect": {"kind": "flat", "price_minor": price_minor},
+        "effect": effect,
         **limits,
     }
 

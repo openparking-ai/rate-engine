@@ -38,6 +38,26 @@ outside the limits gets no part of the special -- the regular rate prices the wh
 stay, nothing split -- and the breakdown says which limit it missed. The cheapest
 price still wins. A minimum above the maximum does not load.
 
+**A flat price can be charged per 24 hours, and the cheapest way wins (F79).**
+Gokhan, 2026-11-07, on a flat 24-hour price used on a longer stay: "cheapest win". A
+flat special may carry `charged`, optional, `"once"` or `"per_24_hours"`; leaving it
+out is `"once"`, one price for the whole stay, so every plan that loaded before
+prices as it did. With `"per_24_hours"` the price is charged for every 24 hours of
+the stay, and it is a candidate beside the regular rate: the customer pays the
+lower. **A started 24 hours counts as a whole one** -- Claude's choice, not
+Gokhan's -- in real time, so 24 hours is one block and 24 hours and one second is
+two. With an hourly rate of 8.00 for the first hour and 4.00 after, and a flat 20.00
+per 24 hours: a 2-hour stay is 12.00 (the hour is cheaper), 24 hours is 20.00, 30
+hours is 2 x 20.00 = 40.00 where a flat that covers only a stay of at most 24 hours
+left it at 124.00 by the hour, and 49 hours is 60.00. The breakdown shows the
+blocks.
+
+**A stay outside a window's times gets nothing from it (F80).** Gokhan, 2026-11-07,
+on a max stated inside a time window: "If it doesn't match it doesn't apply." This is
+how it already worked and is now pinned: with "Max 25.00, Mon-Fri 6am-6pm", a stay
+in at 17:00 and out at 20:00 is not covered and pays the regular rate for the whole
+stay.
+
 **A day is the local calendar day, and a week is counted from a day the plan names
 (F75, F76).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
 e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
@@ -726,7 +746,9 @@ never failed is a decoration.
 | **F76** | A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "day: wednesday . e.g. sunday to sunday"). The same stay is one week or two depending on that day. `week_starts_on` is a day name, always; a plan that states a rolling seven-day week does not load, and the refusal names the field and says to write `calendar_week` and a starting day. |
 | **F77** | A price can never be below $0 (Gokhan, 2026-11-07: "Rate cannot be below $0"), and a discount bigger than the fee floors at $0 and is never refused: a fixed discount takes off at most what the stay costs and the line says it was limited, a second discount takes off at most what is left, and a 100% discount makes the stay free. Swept over every combination of discounts in every order on stays of every length and both ways of pricing the time. A percent discount above 100% still does not load (F60). |
 | **F78** | Real garage listings, written as plans, are priced as the listing says (Gokhan, 2026-11-07: test with real rates, "not some imaginary only created rates"): `tests/plans/real/` holds one plan per real listing from New York, Chicago, Los Angeles, Santa Monica and three airports, with its source, its words and stays priced at the listing's own edges. The expected number comes from the listing, a stay the listing states no price for is refused and not guessed, and the files say they are not current prices. |
+| **F79** | A flat price can be charged per 24 hours (Gokhan, 2026-11-07, on a flat 24-hour price used on a longer stay: "cheapest win"): a flat special with `charged: "per_24_hours"` is charged once for every 24 hours of the stay, and is a candidate beside the regular rate, so the customer pays the lower. A started 24 hours counts as a whole one, in real time (Claude's choice, not Gokhan's): 24 h is one block, 24 h and one second is two. A flat that does not state `charged` is one price for the stay, as before. |
 | **F8** | The fee is the sum of the breakdown's deltas, by construction. There is no second route to the total. |
+| **F80** | A stay that does not match a window's entry and exit times gets no benefit from that rate and pays whatever else applies (Gokhan, 2026-11-07, on a daily max inside a time window: "If it doesn't match it doesn't apply"). With "Max $25, Mon-Fri 6am-6pm", a stay in at 17:00 and out at 20:00 is not covered and is priced whole on the regular rate. |
 | **F8b** | A rule's only channel to the fee is a list of Lines. A malformed return is REFUSED by name, not left to crash inside the ledger. |
 | **F9** | The published contract is DERIVED, never transcribed. Every generated block matches the code, and every block that ASSERTS something about its values is proven to move when those values contradict it. |
 <!--/gen:guarantees-->

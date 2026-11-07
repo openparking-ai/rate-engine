@@ -116,13 +116,13 @@ def _owned_names() -> dict[str, set[str]]:
     fields |= set(time_window.OPTIONAL)
     # Nested field names the rule types define inside their own objects.
     fields |= {"days", "dates", "price_minor", "percent_bp", "minor", "amount",
-               "direction", "rounding"}
+               "direction", "rounding", "charged"}
 
     values = set(RESOLUTION_MODES) | set(DAYS_OF_WEEK)
     values |= set(time_window.DAY_SPANS) | set(time_window.APPLIES_ON_KINDS)
     values |= set(time_window.EFFECT_STAGES) | set(time_window.DIRECTIONS)
     values |= set(time_window.AMOUNT_KINDS) | set(time_window.ADJUST_ROUNDINGS)
-    values |= set(increment.ROUNDING_MODES)
+    values |= set(increment.ROUNDING_MODES) | set(time_window.CHARGED_WAYS)
     values |= set(daily_max.DAY_BOUNDARIES) | set(weekly_max.WEEK_BOUNDARIES)
     values |= set(TAX_ROUNDINGS)
     values |= set(fill_level.ROUNDINGS) | set(space_surcharge.ROUNDINGS)

@@ -109,6 +109,21 @@ from . import (
     register,
 )
 
+#: Optional on a `flat` effect: how often the price is charged. (No plan field may be a
+#: boolean, so this is a word.)
+CHARGED = "charged"
+CHARGED_WAYS: tuple[str, ...] = ("once", "per_24_hours")
+
+
+def _started_24_hours(stay) -> int:
+    """How many 24-hour blocks the REAL stay has started: 1 to 24 h is one, 24 h and
+    one second is two. Real time, `exit_at - entry_at`, so a clock change does not
+    shorten or lengthen a block. A zero-length stay never gets here (it costs $0)."""
+    length = stay.exit_at - stay.entry_at
+    blocks, rest = divmod(length, timedelta(hours=24))
+    return max(1, blocks + (1 if rest else 0))
+
+
 #: The two ways a plan may state WHEN a window applies.
 APPLIES_ON_KINDS: tuple[str, ...] = ("days_of_week", "dates")
 
@@ -388,7 +403,7 @@ def _effect(value: object, where: str) -> dict:
     kind = value["kind"]
 
     if kind == "flat":
-        unknown = sorted(set(value) - {"kind", "price_minor"})
+        unknown = sorted(set(value) - {"kind", "price_minor", CHARGED})
         if unknown:
             raise InvalidPlan(
                 f"{where} carries key(s) this version does not understand: "
@@ -396,9 +411,18 @@ def _effect(value: object, where: str) -> dict:
             )
         if "price_minor" not in value:
             raise InvalidPlan(f"{where} is missing required field(s): price_minor.")
+        # Optional. Absent means one price for the whole stay, as it always was.
+        charged = value.get(CHARGED, "once")
+        if charged not in CHARGED_WAYS:
+            raise InvalidPlan(
+                f"{where}.{CHARGED} is {charged!r}; write \"per_24_hours\" (the price is "
+                "charged for every 24 hours of the stay, and a started 24 hours counts as "
+                "a whole one) or \"once\" (one price for the whole stay), or leave it out."
+            )
         return {
             "kind": kind,
             "price_minor": as_non_negative_minor(value["price_minor"], f"{where}.price_minor"),
+            CHARGED: charged,
         }
 
     if kind == "rate":
@@ -930,6 +954,24 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
 
     effect = rule.params["effect"]
     entry_local = local_minute(stay.entry_at, plan.timezone)
+
+    if effect["kind"] == "flat" and effect[CHARGED] == "per_24_hours":
+        blocks = _started_24_hours(stay)
+        price = effect["price_minor"]
+        return [
+            Line(
+                code=APPLIED,
+                rule_id=rule.id,
+                text=(
+                    f"{rule.display_name} {format_minor(price, plan.currency)} for each "
+                    f"started 24 hours, {blocks} x {format_minor(price, plan.currency)} = "
+                    f"{format_minor(price * blocks, plan.currency)} "
+                    f"({_window_clause(rule, entry_local)}) -- replaces the time-based "
+                    "charge when it is the cheaper way"
+                ),
+                delta_minor=price * blocks,
+            )
+        ]
 
     if effect["kind"] == "flat":
         return [

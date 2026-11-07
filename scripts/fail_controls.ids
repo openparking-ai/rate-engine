@@ -191,6 +191,12 @@ F77
 F78
 F78/cheapest-not-wins
 F78/maximum-ignored
+F79
+F79/one-price-however-long
+F79/started-block-not-counted
+F79/wall-clock-block
 F8
+F80
+F80/entry-before-ignored
 F8b
 F9
