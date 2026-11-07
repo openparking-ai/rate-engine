@@ -12,7 +12,8 @@ every day and its effect hardcoded to flat.
 **And the effect is not only a flat price.** *"it is not only %. or increase or
 discount. it could be a complete different rate."* Three effects, one condition:
 
-* `flat` -- one price for the whole stay. The early bird.
+* `flat` -- one price for the whole stay, or, with `charged` set to `per_24_hours`,
+  that price for every started 24 hours (F79). The early bird.
 * `rate` -- a completely different time-based rate for this stay. It takes the
   fields `increment` takes and is priced by `increment`'s own code; see below.
 * `adjust` -- a percentage or an amount, up or down, ON THE WHOLE FEE.

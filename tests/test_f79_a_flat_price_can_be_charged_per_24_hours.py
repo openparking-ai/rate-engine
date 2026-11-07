@@ -17,9 +17,11 @@ each hour after; the flat price is 20.00 per 24 hours.
     30 h           124.00      2 x 20 = 40.00       124.00                        40.00
     49 h           200.00      3 x 20 = 60.00       200.00                        60.00
 
-`scripts/fail_controls.py` charges the flat once however long the stay, counts only
-whole 24 hours, rounds the stay up before counting, and drops the regular rate as a
-candidate, and requires this file to go red each time.
+`scripts/fail_controls.py` ignores `charged`, charges the flat once however long
+the stay, counts only whole 24 hours, and counts blocks on the wall clock, and
+requires this file to go red each time. That the cheaper regular rate wins is the
+engine's general cheapest-way comparison (F63); the 200.00 case here exercises it
+but no control of this file removes it.
 """
 
 from __future__ import annotations
