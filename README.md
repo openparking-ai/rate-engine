@@ -131,10 +131,11 @@ drifts.
   the rate does not apply at all — no pro-rating, no partial credit, and not the
   cheaper of the two. The breakdown still carries a line saying which condition
   failed, because that is the question an attendant is actually asked.
-- **Daily and weekly maximums**, each stating what a day or a week means — a
-  local calendar day or a rolling 24 hours; a calendar week starting on the day
-  the plan names, or a rolling seven days. Those price a Friday-night stay
-  differently and the answer is the operator's, not ours: there is no universal
+- **Daily and weekly maximums**, each stating what a day or a week means — a day
+  is the local calendar day, and a week is counted from the day the plan names
+  (Sunday to Sunday, Wednesday to Wednesday): the garage's own week, never a
+  rolling count from entry. Those price a Friday-night stay differently and the
+  answer is the operator's, not ours: there is no universal
   first day of the week. **Each day is capped on its own**: the stay is cut at
   the start of each day, and each day pays the time charged in it, or the
   maximum where that is less — Monday 09:00 to Tuesday 00:15 at $8 the first

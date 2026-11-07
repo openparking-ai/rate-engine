@@ -1,0 +1,54 @@
+{
+  "garage": "Santa Monica Pier Deck, weekdays, Nov - Mar",
+  "address": "Santa Monica, CA",
+  "city": "Santa Monica",
+  "timezone": "America/Los_Angeles",
+  "source_url": "https://www.santamonica.gov/media/Parking/Parking%20Prices/Approved%20Pricing%20Table%20-%20FINAL%20RATES.pdf",
+  "date_seen": "2026-11-07",
+  "date_on_listing": "New Rates as of 1/12/2026",
+  "source_kind": "official city pricing table (PDF read in full by this session; text extracted from its layer)",
+  "verbatim_rows": [
+    "Santa Monica Pier Deck, New Rates as of 1/12/2026, Nov - Mar: Weekdays (per hour) $3.00; Weekdays (daily maximum per entry) $15.00"
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "Seasons (Apr - Oct, Nov - Mar) are separate plans: the engine has no month condition. A plan version per season, switched by date, is how a real garage would carry both."
+  ],
+  "cases": [
+    {
+      "name": "1 hour",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "per hour",
+      "expect_fee_minor": 300
+    },
+    {
+      "name": "2 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 120,
+      "basis": "per hour",
+      "expect_fee_minor": 600
+    },
+    {
+      "name": "90 minutes: a started hour counts",
+      "entry": "2026-03-03T10:00",
+      "minutes": 90,
+      "basis": "each started hour counts (Gokhan: rounding up)",
+      "expect_fee_minor": 600
+    },
+    {
+      "name": "8 hours: capped",
+      "entry": "2026-03-03T10:00",
+      "minutes": 480,
+      "basis": "daily maximum per entry",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "12 hours: capped",
+      "entry": "2026-03-03T10:00",
+      "minutes": 720,
+      "basis": "daily maximum per entry",
+      "expect_fee_minor": 1500
+    }
+  ]
+}

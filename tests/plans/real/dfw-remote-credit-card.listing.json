@@ -1,0 +1,63 @@
+{
+  "garage": "DFW Airport Remote parking (Credit Card at Exit column)",
+  "address": "Remote South, 2400 S Airfield Dr, Dallas, TX 75261 (Remote North, Grapevine, TX 76051)",
+  "city": "Dallas",
+  "timezone": "America/Chicago",
+  "source_url": "https://www.dfwairport.com/park/remote",
+  "date_seen": "2026-11-07",
+  "date_on_listing": "effective October 1, 2026",
+  "source_kind": "airport-run economy lot, operator page (read through a page-summarising fetch)",
+  "verbatim_rows": [
+    "Remote Daily Rates (effective October 1, 2026): 0 mins - 2 hrs $3.00 | 2 - 4 hrs $4.00 | 4 - 6 hrs $6.00 | 6 - 24 hrs $16.00 (Credit Card at Exit)"
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "The edges (exactly 2 hours) are not stated: only the inside of each row is tested.",
+    "'Prebooking saves up to 50% off TollTag rates' is a reservation price: not expressible (see the PR body).",
+    "The page labels no daily maximum; the table stops at 24 hours."
+  ],
+  "cases": [
+    {
+      "name": "60 minutes (0 mins - 2 hrs)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 60,
+      "basis": "table row 0 mins - 2 hrs",
+      "expect_fee_minor": 300
+    },
+    {
+      "name": "3 hours (2 - 4 hrs)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 180,
+      "basis": "table row 2 - 4 hrs",
+      "expect_fee_minor": 400
+    },
+    {
+      "name": "5 hours (4 - 6 hrs)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 300,
+      "basis": "table row 4 - 6 hrs",
+      "expect_fee_minor": 600
+    },
+    {
+      "name": "10 hours (6 - 24 hrs)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 600,
+      "basis": "table row 6 - 24 hrs",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "table row 6 - 24 hrs",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "25 hours: the table stops at 24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1500,
+      "basis": "no row past 24 hours is stated: the engine refuses",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    }
+  ]
+}

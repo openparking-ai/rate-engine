@@ -1,0 +1,69 @@
+{
+  "garage": "Boston Logan Economy Parking Garage (Massport)",
+  "address": "Boston Logan International Airport (no street address on the page)",
+  "city": "Boston",
+  "timezone": "America/New_York",
+  "source_url": "https://www.massport.com/logan-airport/getting-to-logan/parking/economy-parking",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "airport-run economy garage, operator page (read through a page-summarising fetch)",
+  "verbatim_rows": [
+    "First hour $10.00 | 1 hour - 2 hours $26.00 | 2 hours - 3 hours $28.00 | 3 hours - 4 hours $31.00 | 4 hours - 24 hours $37.00 | Additional day 0-6 hours $19.00 | Additional day 6-24 hours $37.00. Landing page: 'The maximum daily rate for Economy Parking is $37 per day.' 'A limited number of spaces are available for $29 per day' with advance reservation."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "The $29 advance-reservation price and the 'Additional day' rows are not expressible: stays over 24 hours are refused, not guessed.",
+    "Lost ticket: 'Applicable parking fee + $5.00' is a fee, not a rate: not built."
+  ],
+  "cases": [
+    {
+      "name": "30 minutes (First hour)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 30,
+      "basis": "table row First hour",
+      "expect_fee_minor": 1000
+    },
+    {
+      "name": "90 minutes (1 hour - 2 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 90,
+      "basis": "table row 1 hour - 2 hours",
+      "expect_fee_minor": 2600
+    },
+    {
+      "name": "150 minutes (2 hours - 3 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 150,
+      "basis": "table row 2 hours - 3 hours",
+      "expect_fee_minor": 2800
+    },
+    {
+      "name": "210 minutes (3 hours - 4 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 210,
+      "basis": "table row 3 hours - 4 hours",
+      "expect_fee_minor": 3100
+    },
+    {
+      "name": "10 hours (4 hours - 24 hours)",
+      "entry": "2026-03-03T10:00",
+      "minutes": 600,
+      "basis": "table row 4 hours - 24 hours; also 'maximum daily rate $37'",
+      "expect_fee_minor": 3700
+    },
+    {
+      "name": "24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "table row 4 hours - 24 hours",
+      "expect_fee_minor": 3700
+    },
+    {
+      "name": "30 hours: 'Additional day' rows",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1800,
+      "basis": "'Additional day 0-6 hours $19.00': a price per additional day that depends on the hours in that day cannot be stated: the engine refuses",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "garage": "Millennium Garages (Millennium Park)",
+  "address": "5 S Columbus Dr, Chicago, IL",
+  "city": "Chicago",
+  "timezone": "America/Chicago",
+  "source_url": "https://en.parkopedia.com/parking/underground/millennium_garages_millennium_park/60601/chicago/",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "weekday all-day about $38 for 3 hours, $46 for 6 hours, $56 for 24 hours; early bird needs a 5-hour minimum, excludes holidays; weekend listing: early bird $16, entry 5-10am, exit by 7pm."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "'about' $38/$46/$56 is read as exactly those amounts. The weekday early bird's price is not given, and the holiday dates it excludes are not given: neither is built.",
+    "A weekend stay that is not the weekend early bird has no listed price: refused."
+  ],
+  "cases": [
+    {
+      "name": "in at 05:00, out inside the limits",
+      "entry": "2026-03-14T05:00",
+      "minutes": 300,
+      "basis": "the weekend early bird is listed for entry from 05:00",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "in at 04:59: before the window",
+      "entry": "2026-03-14T04:59",
+      "minutes": 300,
+      "basis": "the weekend early bird window opens at 05:00",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "in at 10:01: one minute past",
+      "entry": "2026-03-14T10:01",
+      "minutes": 300,
+      "basis": "the weekend early bird is listed for entry up to 10:00",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "out at 19:00 exactly",
+      "entry": "2026-03-14T05:00",
+      "minutes": 840,
+      "basis": "listing: out by 19:00",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "out at 19:01: one minute late",
+      "entry": "2026-03-14T05:00",
+      "minutes": 841,
+      "basis": "listing: out by 19:00",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "stay of 300 min: the minimum",
+      "entry": "2026-03-14T05:00",
+      "minutes": 300,
+      "basis": "listing: 300-minute minimum",
+      "expect_fee_minor": 1600
+    },
+    {
+      "name": "stay of 299 min: one short",
+      "entry": "2026-03-14T05:00",
+      "minutes": 299,
+      "basis": "listing: 300-minute minimum",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "weekday 2 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 120,
+      "basis": "listing: $38 for 3 hours",
+      "expect_fee_minor": 3800
+    },
+    {
+      "name": "weekday 3 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 180,
+      "basis": "listing: $38 for 3 hours",
+      "expect_fee_minor": 3800
+    },
+    {
+      "name": "weekday 4 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 240,
+      "basis": "listing: $46 for 6 hours",
+      "expect_fee_minor": 4600
+    },
+    {
+      "name": "weekday 6 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 360,
+      "basis": "listing: $46 for 6 hours",
+      "expect_fee_minor": 4600
+    },
+    {
+      "name": "weekday 24 hours",
+      "entry": "2026-03-03T10:00",
+      "minutes": 1440,
+      "basis": "listing: $56 for 24 hours",
+      "expect_fee_minor": 5600
+    }
+  ]
+}

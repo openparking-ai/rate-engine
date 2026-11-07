@@ -61,9 +61,9 @@ HOURLY = {
     "first_period_minor": 800, "repeat_period_minutes": 60,
     "repeat_period_minor": 400, "rounding": "ceil", "max_duration_minutes": None,
 }
-#: A rolling day: 90 days from any entry are exactly 90 windows, each capped.
+#: A calendar day: 90 days from any entry touch at most 91 dates, each capped.
 DAILY = {"id": "cap-daily", "type": "daily_max", "stage": "CAP",
-         "space_classes": ["standard"], "max_minor": 3000, "day_boundary": "rolling_24h"}
+         "space_classes": ["standard"], "max_minor": 3000, "day_boundary": "calendar_day"}
 WEEKLY = {"id": "cap-weekly", "type": "weekly_max", "stage": "CAP",
           "space_classes": ["standard"], "max_minor": 10000,
           "week_boundary": "calendar_week", "week_starts_on": "mon"}
@@ -114,10 +114,11 @@ def test_the_limit_is_the_decision():
 
 @pytest.mark.guarantee("F62")
 def test_exactly_90_days_is_priced():
-    """Ninety rolling days, each capped at 30.00: 2700.00."""
+    """Ninety days from 09:00 touch 91 calendar dates, each capped at 30.00:
+    2730.00."""
     status, body = run_quote(_request(_plan(), ENTRY, _exit_after(days=90)))
     assert status == 200, body
-    assert body["fee_minor"] == 90 * 3000
+    assert body["fee_minor"] == 91 * 3000
     assert "129600 minutes" in body["breakdown"][0]["text"], body["breakdown"][0]
 
 

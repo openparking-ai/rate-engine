@@ -1,0 +1,81 @@
+{
+  "plan_version": "chi-park-millennium",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Chicago",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "early-15",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "early-15",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "05:00",
+      "enter_by": "07:00",
+      "exit_by": "19:00",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1500
+      },
+      "stay_at_least_minutes": 300
+    },
+    {
+      "id": "early-17",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "early-17",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "09:59",
+      "exit_by": "19:00",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1700
+      },
+      "stay_at_least_minutes": 300
+    }
+  ],
+  "decisions": []
+}

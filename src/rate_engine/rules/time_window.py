@@ -12,7 +12,8 @@ every day and its effect hardcoded to flat.
 **And the effect is not only a flat price.** *"it is not only %. or increase or
 discount. it could be a complete different rate."* Three effects, one condition:
 
-* `flat` -- one price for the whole stay. The early bird.
+* `flat` -- one price for the whole stay, or, with `charged` set to `per_24_hours`,
+  that price for every started 24 hours (F79). The early bird.
 * `rate` -- a completely different time-based rate for this stay. It takes the
   fields `increment` takes and is priced by `increment`'s own code; see below.
 * `adjust` -- a percentage or an amount, up or down, ON THE WHOLE FEE.
@@ -109,6 +110,21 @@ from . import (
     register,
 )
 
+#: Optional on a `flat` effect: how often the price is charged. (No plan field may be a
+#: boolean, so this is a word.)
+CHARGED = "charged"
+CHARGED_WAYS: tuple[str, ...] = ("once", "per_24_hours")
+
+
+def _started_24_hours(stay) -> int:
+    """How many 24-hour blocks the REAL stay has started: 1 to 24 h is one, 24 h and
+    one second is two. Real time, `exit_at - entry_at`, so a clock change does not
+    shorten or lengthen a block. A zero-length stay never gets here (it costs $0)."""
+    length = stay.exit_at - stay.entry_at
+    blocks, rest = divmod(length, timedelta(hours=24))
+    return max(1, blocks + (1 if rest else 0))
+
+
 #: The two ways a plan may state WHEN a window applies.
 APPLIES_ON_KINDS: tuple[str, ...] = ("days_of_week", "dates")
 
@@ -141,6 +157,13 @@ APPLIED = "time_window.applied"
 NOT_APPLIED = "time_window.not_applied"
 
 EXTRA = {"label", "applies_on", "enter_from", "enter_by", "exit_by", "day_span", "effect"}
+
+#: Two limits on how long the stay really was, both optional: a window that states
+#: neither has no limit of that kind, which is what every plan written before they
+#: existed meant. Real minutes, never the rounded ones the periods are counted in:
+#: a stay of 239 minutes and 30 seconds is not a four-hour stay.
+STAY_LIMITS: tuple[str, ...] = ("stay_at_least_minutes", "stay_at_most_minutes")
+OPTIONAL = frozenset(STAY_LIMITS)
 
 
 # --- the condition: WHEN --------------------------------------------------
@@ -381,7 +404,7 @@ def _effect(value: object, where: str) -> dict:
     kind = value["kind"]
 
     if kind == "flat":
-        unknown = sorted(set(value) - {"kind", "price_minor"})
+        unknown = sorted(set(value) - {"kind", "price_minor", CHARGED})
         if unknown:
             raise InvalidPlan(
                 f"{where} carries key(s) this version does not understand: "
@@ -389,9 +412,18 @@ def _effect(value: object, where: str) -> dict:
             )
         if "price_minor" not in value:
             raise InvalidPlan(f"{where} is missing required field(s): price_minor.")
+        # Optional. Absent means one price for the whole stay, as it always was.
+        charged = value.get(CHARGED, "once")
+        if charged not in CHARGED_WAYS:
+            raise InvalidPlan(
+                f"{where}.{CHARGED} is {charged!r}; write \"per_24_hours\" (the price is "
+                "charged for every 24 hours of the stay, and a started 24 hours counts as "
+                "a whole one) or \"once\" (one price for the whole stay), or leave it out."
+            )
         return {
             "kind": kind,
             "price_minor": as_non_negative_minor(value["price_minor"], f"{where}.price_minor"),
+            CHARGED: charged,
         }
 
     if kind == "rate":
@@ -450,6 +482,39 @@ def _effect(value: object, where: str) -> dict:
     )
 
 
+def _stay_limits(raw: dict, where: str) -> tuple[int | None, int | None]:
+    """The minimum and maximum real stay this window applies to, or None for each.
+
+    Gokhan, 2026-11-07, on the real listings ("5-hour minimum", "up to 10 hours"):
+    *"plain readings are good."* A minimum means the window applies only if the real
+    stay is at least that many minutes, and a maximum only if it is at most that
+    many; otherwise the stay prices on the regular rate, whole, nothing split.
+    """
+    from ..plan import InvalidPlan
+
+    found: dict[str, int | None] = {}
+    for key in STAY_LIMITS:
+        value = raw.get(key)
+        if key not in raw or value is None:
+            found[key] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise InvalidPlan(
+                f"{where}.{key} is {value!r}; it must be a positive whole number of "
+                "minutes. To state no limit of this kind, leave the field out: a limit "
+                "of zero would read as a decision somebody made."
+            )
+        found[key] = value
+    low, high = found["stay_at_least_minutes"], found["stay_at_most_minutes"]
+    if low is not None and high is not None and low > high:
+        raise InvalidPlan(
+            f"{where}.stay_at_least_minutes is {low} and {where}.stay_at_most_minutes is {high}: "
+            "no stay is at least the first and at most the second, so this window could "
+            "never apply. Swap them, or remove one."
+        )
+    return low, high
+
+
 # --- building --------------------------------------------------------------
 
 
@@ -464,7 +529,7 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
     effect = _effect(raw["effect"], f"{where}.effect")
     stage = EFFECT_STAGES[effect["kind"]]
 
-    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA)
+    rule_id, space_classes = common_fields(raw, plan_space_classes, where, EXTRA, OPTIONAL)
     # DERIVED from the effect, then checked against what the document claims.
     # This type runs at two stages, so the framework cannot do it for us.
     check_stated_stage(raw, where, stage)
@@ -500,12 +565,15 @@ def build(raw: dict, plan_space_classes: tuple[str, ...], where: str) -> Rule:
     exit_by = parse_limit(raw, "exit_by", where)
     _refuse_a_limit_that_cannot_be_meant(exit_by, enter_from, day_span, where)
 
+    min_stay, max_stay = _stay_limits(raw, where)
     params = {
         "applies_on": _applies_on(raw, where),
         "enter_from": enter_from,
         "enter_by": enter_by,
         "exit_by": exit_by,
         "day_span": day_span,
+        "stay_at_least_minutes": min_stay,
+        "stay_at_most_minutes": max_stay,
         "effect": effect,
     }
     return Rule(
@@ -620,6 +688,44 @@ def _exit_failure(rule: Rule, entry_local, exit_local) -> str | None:
     return None
 
 
+def _real_length_text(length: timedelta) -> str:
+    """The stay as it really was, in the words a receipt uses: whole minutes, and
+    the seconds too when there are some, because the limits are read on them."""
+    minutes, rest = divmod(length, timedelta(minutes=1))
+    text = f"{minutes} min"
+    if rest:
+        seconds, part = divmod(rest, timedelta(seconds=1))
+        if seconds:
+            text += f" {seconds} s"
+        if part:
+            text += " and a part of a second"
+    return text
+
+
+def _stay_length_failure(rule: Rule, stay) -> str | None:
+    """Why the REAL length of the stay is outside this window's limits, or None.
+
+    Real time, `exit_at - entry_at`, compared as a duration: not `duration_minutes`,
+    which rounds a part-minute UP and would make 239 min 30 s a four-hour stay
+    (Gokhan, 2026-11-07: "measured in real minutes, not rounded"). A stay exactly at
+    a limit is inside it: "at least 240" and "at most 600" both include themselves.
+    """
+    length = stay.exit_at - stay.entry_at
+    low = rule.params["stay_at_least_minutes"]
+    if low is not None and length < timedelta(minutes=low):
+        return (
+            f"the stay is {_real_length_text(length)} and this rule needs a stay of "
+            f"at least {low} min"
+        )
+    high = rule.params["stay_at_most_minutes"]
+    if high is not None and length > timedelta(minutes=high):
+        return (
+            f"the stay is {_real_length_text(length)} and this rule covers a stay of "
+            f"at most {high} min"
+        )
+    return None
+
+
 def _failures(rule: Rule, stay, plan) -> list[str]:
     """Why this stay fails the rule, in plain English. Empty means it qualifies.
 
@@ -663,6 +769,10 @@ def _failures(rule: Rule, stay, plan) -> list[str]:
     if exit_side is not None:
         failed.append(exit_side)
 
+    stay_length = _stay_length_failure(rule, stay)
+    if stay_length is not None:
+        failed.append(stay_length)
+
     # A `rate` effect carries its own ceiling, and it is a condition like any
     # other: a stay past it is not priced at the ceiling and not pro-rated -- the
     # window does not apply, and the stay falls to the plan's ordinary rate or
@@ -702,11 +812,21 @@ def _class_failure(rule: Rule, stay) -> str:
 # --- applying --------------------------------------------------------------
 
 
+def _limits_clause(rule: Rule) -> str:
+    """', stay of at least N min and at most M min' when the window states a limit."""
+    parts = []
+    if rule.params["stay_at_least_minutes"] is not None:
+        parts.append(f"at least {rule.params['stay_at_least_minutes']} min")
+    if rule.params["stay_at_most_minutes"] is not None:
+        parts.append(f"at most {rule.params['stay_at_most_minutes']} min")
+    return f", stay of {' and '.join(parts)}" if parts else ""
+
+
 def _window_clause(rule: Rule, entry_local) -> str:
     return (
         f"entered {entry_local:%a %d %b} between {rule.params['enter_from']:%H:%M} and "
         f"{rule.params['enter_by']:%H:%M}, exited by {rule.params['exit_by']:%H:%M}, "
-        f"day span {rule.params['day_span']}"
+        f"day span {rule.params['day_span']}{_limits_clause(rule)}"
     )
 
 
@@ -835,6 +955,24 @@ def apply(rule: Rule, stay, plan, running_total_minor: int | None = None) -> lis
 
     effect = rule.params["effect"]
     entry_local = local_minute(stay.entry_at, plan.timezone)
+
+    if effect["kind"] == "flat" and effect[CHARGED] == "per_24_hours":
+        blocks = _started_24_hours(stay)
+        price = effect["price_minor"]
+        return [
+            Line(
+                code=APPLIED,
+                rule_id=rule.id,
+                text=(
+                    f"{rule.display_name} {format_minor(price, plan.currency)} for each "
+                    f"started 24 hours, {blocks} x {format_minor(price, plan.currency)} = "
+                    f"{format_minor(price * blocks, plan.currency)} "
+                    f"({_window_clause(rule, entry_local)}) -- replaces the time-based "
+                    "charge when it is the cheaper way"
+                ),
+                delta_minor=price * blocks,
+            )
+        ]
 
     if effect["kind"] == "flat":
         return [

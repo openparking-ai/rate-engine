@@ -363,6 +363,69 @@ ignored.** An operator who adds a key to a plan running on a version that has no
 rule for it would otherwise have a garage pricing something wrong and a document
 saying it does not.
 
+### What changed in version 7
+
+**A special can state a minimum and a maximum stay (F72, F73).** A `time_window`
+may carry `stay_at_least_minutes` and `stay_at_most_minutes`, each a positive whole
+number of minutes, each optional: leaving one out means no limit of that kind, so
+every plan that loaded on version 6 and states neither prices exactly as before. A
+special with a minimum applies only if the real stay is at least that long; one
+with a maximum, only if it is at most that long. The stay is measured in real time,
+to the second, not in the whole minutes it is rounded up to elsewhere. A stay
+outside the limits gets no part of the special -- the regular rate prices the whole
+stay, nothing split -- and the breakdown says which limit it missed. The cheapest
+price still wins. A minimum above the maximum does not load.
+
+**A flat price can be charged per 24 hours, and the cheapest way wins (F79).**
+Gokhan, 2026-11-07, on a flat 24-hour price used on a longer stay: "cheapest win". A
+flat special may carry `charged`, optional, `"once"` or `"per_24_hours"`; leaving it
+out is `"once"`, one price for the whole stay, so every plan that loaded before
+prices as it did. With `"per_24_hours"` the price is charged for every 24 hours of
+the stay, and it is a candidate beside the regular rate: the customer pays the
+lower. **A started 24 hours counts as a whole one** -- Claude's choice, not
+Gokhan's -- in real time, so 24 hours is one block and 24 hours and one second is
+two. With an hourly rate of 8.00 for the first hour and 4.00 after, and a flat 20.00
+per 24 hours: a 2-hour stay is 12.00 (the hour is cheaper), 24 hours is 20.00, 30
+hours is 2 x 20.00 = 40.00 where a flat that covers only a stay of at most 24 hours
+left it at 124.00 by the hour, and 49 hours is 60.00. The breakdown shows the
+blocks.
+
+**A stay outside a window's times gets nothing from it (F80).** Gokhan, 2026-11-07,
+on a max stated inside a time window: "If it doesn't match it doesn't apply." This is
+how it already worked and is now pinned: with "Max 25.00, Mon-Fri 6am-6pm", a stay
+in at 17:00 and out at 20:00 is not covered and pays the regular rate for the whole
+stay.
+
+**A day is the local calendar day, and a week is counted from a day the plan names
+(F75, F76).** Gokhan, 2026-11-07: "calendar day not 24 hrs", and "day: wednesday .
+e.g. sunday to sunday". The `rolling_24h` choice of a daily max and the
+`rolling_7d` choice of a weekly max are gone. **That is a plan that loaded on
+version 6 and does not load here.** The refusal names the field and says what to
+write: `day_boundary` `calendar_day`; `week_boundary` `calendar_week` with
+`week_starts_on` set to the garage's first day, which is now required to be a day
+name (it was `null` under `rolling_7d`). A stay is cut at local midnight, and a
+week at local midnight on its first day, so a stay of 24 hours that starts at 18:00
+is in two days. Both fields are still stated, with no default.
+
+**A stay of no length costs nothing (F24).** Gokhan, 2026-11-07: "0 means $0. 1
+means round up." It used to pay the first period. A fee for a stay where entry and
+exit are the same instant is now zero, with a `zero_length_stay` line saying why;
+one second is a minute and prices as before. See "A stay of zero length costs
+nothing".
+
+**A price is never below $0 (F77).** Gokhan, 2026-11-07: "Rate cannot be below $0."
+A discount bigger than the fee makes the stay free and is not refused: a fixed
+discount takes off at most what the stay costs and its line says it was limited, a
+second discount takes off at most what is left, and a 100% discount makes the stay
+free. This was already how a fixed discount priced (F57); it is now pinned as a
+claim over every combination of discounts and every order. A percent discount above
+100% still does not load (F60) -- that refuses a plan when it is saved, not a stay.
+
+**What a caller must do.** Look for `rolling_24h` and `rolling_7d` in stored plans
+before upgrading: such a plan will not load, and the refusal says what to write. A
+caller that relied on a zero-length stay paying the first period will now get zero,
+and meets one new breakdown line code, `zero_length_stay`.
+
 ### What changed in version 6
 
 **A fill rule states two answers the owner gives, and a rule without them does
@@ -386,13 +449,13 @@ reading breakdown lines meets three new line codes, `fill_level.special_not_rais
 `fill_level.extra_raised` and `fill_level.order`; no finding code was added.
 
 **A daily max caps each day on its own, and a weekly max each week (F59).** The
-garage owner's decision, 2026-10-16: the daily max is per calendar day. The stay
-is cut at each local midnight -- or every 24 hours from entry under
-`rolling_24h`, which stays the plan's choice -- and each day pays the time
+garage owner's decision, 2026-10-16: the daily max is per calendar day (and
+since version 7 it is only that). The stay
+is cut at each local midnight, and each day pays the time
 charged in it, or the daily max where that is less. A day the car is in for no
 time adds nothing. A weekly max caps each of the plan's weeks the same way, by
-the week it already states (`calendar_week` from `week_starts_on`, or
-`rolling_7d`), after the daily max for each of the week's days. At 8 the first
+the week it states (`calendar_week` from `week_starts_on`), after the daily max
+for each of the week's days. At 8 the first
 hour, 4 an hour after and 30 a day, Monday 09:00 to Tuesday 00:15 was 60 -- the
 max times the two days it touched -- and is 30 + 4 = 34; at 100 a week, seven
 days and an hour is 100 + 4. A time-based rate charges a period on the day the
@@ -729,9 +792,8 @@ server happens to run in, which is a different fee on a different machine.
 This is not incidental. `time_window` speaks of "enter by 09:00" and `daily_max`
 speaks of a day; both are wall-clock ideas, and a local day is 23 or 25 hours
 across a daylight-saving transition. `daily_max` therefore requires the plan to
-state whether a day means a local `calendar_day` or a `rolling_24h` window,
-because those price a Friday-night-to-Saturday-morning stay differently and the
-answer is the owner's to give. Whichever it states, the stay is cut at the start
+state that a day means a local `calendar_day` (a "rolling 24 hours" day was the
+other choice until version 7 and is gone, F75). The stay is cut at the start
 of each of its days and each day is capped on its own (F59), so a 23- or 25-hour
 local day is one day, capped once.
 
@@ -981,29 +1043,33 @@ ten minutes and one millisecond is eleven minutes and misses a ten-minute grace.
 That is coherent with every other duration comparison here, including the stated
 ceiling on a time-based rule, and it is recorded rather than adjusted.
 
-## A stay of zero length pays the first period
+## A stay of zero length costs nothing
 
-**Entry and exit at the same instant is priced, not free, and not refused.** The
-first period covers `[0, first_period_minutes]`, so a car that enters and leaves
-without stopping pays `first_period_minor` -- the same as a car that stayed one
-minute or fifty-nine.
+**Entry and exit at the same instant costs nothing, whatever the plan says.**
+Gokhan, 2026-11-07: "0 means $0. 1 means round up." A stay of zero length costs
+nothing -- no first period, no cap, no surcharge, no adjustment -- and the
+breakdown says so in one line, `zero_length_stay`, after the first line, which names
+the stay. A stay of **one second** is a minute (stay length is rounded UP, module-wide) and is
+priced from the first period like any other stay past a grace period, so the line
+between no charge and the first period is the line between no time and some.
 
-It is a DECISION, and it is published here because an integrator cannot otherwise
-learn it: the number is correct under the rule as written, and it is the kind of
-edge a garage owner will be asked about at the counter.
+This used to pay the first period, a decision of 2026-09-07 that diverged from the
+platform's older fee code, which returned zero for the same stay. The two now
+agree. It is a rule change: a caller that relied on a zero-length stay paying the
+first period will get zero.
 
-**It diverges from the platform's own older fee code, which returns zero for the
-same stay.** That divergence is known and is a later round's to reconcile; it is
-recorded rather than left for whoever notices the two answering differently.
+It is decided after everything that refuses has had its say. A zero-length stay in
+a space class the plan does not declare, or that no rule covers, is refused for
+that, as at any length; and a plan with a fill rule still needs the occupancy
+figure. Only a stay the plan could price is priced at nothing.
 
 A negative stay -- exit before entry -- is a different thing and is REFUSED as a
 caller bug rather than priced at zero, because pricing it would hide it.
 
-**And this paragraph now describes only a plan that declares NO grace.** A garage
-that declares one makes a zero-length stay free by the grace rule, because zero
-is at or under any positive number of minutes. Both behaviours are deliberate,
-both are tested, and which one a garage gets is stated in its own plan rather
-than assumed here.
+**A garage that declares a grace period** makes a stay of up to that many minutes
+free by the grace rule, and a stay of zero is the bottom of that range, so a plan
+with or without grace answers zero the same way. The grace line is the one a
+graced stay carries; a plan with none carries the zero-length line.
 - **No validations, no monthly parkers, no payments, no card.**
 - **Tax only as arithmetic.** This bullet said "no tax" until version 3, and it
   is qualified rather than deleted: the module computes tax lines on an amount it

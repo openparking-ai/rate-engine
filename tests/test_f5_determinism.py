@@ -87,18 +87,16 @@ def test_a_spring_forward_day_is_priced_by_the_local_clock_not_by_elapsed_hours(
 
 
 @pytest.mark.guarantee("F5")
-def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
-    """2026-11-01 is 25 hours on the local clock, and it is the whole reason
-    `day_boundary` has to be stated in the plan.
+def test_a_fall_back_day_is_one_calendar_day_however_long_the_clock_makes_it():
+    """2026-11-01 is 25 hours on the local clock, and a daily max counts the local
+    calendar day (F75), so it is still ONE day with ONE cap.
 
     A stay of 1499 minutes beginning at local midnight that day ends at 23:59 the
-    SAME date — so it is one calendar day, and two rolling 24-hour windows. The
-    same stay is 3000 under one rule and 3400 under the other: each day is capped
-    on its own (F59), and the second window holds the stay's 25th hour, 4.00.
-
-    On an ordinary day the two agree, which is why an axis carrying only the
-    spring transition proves nothing about this: the spring day is shorter, so
-    both rules still say one. Only the fall-back day separates them.
+    SAME date, so it pays 3000, where the same 1499 minutes starting at midnight
+    on an ordinary day end on the NEXT date and pay a second day's charge, 3400.
+    Both daily-max day counts used to be a choice (a rolling 24-hour day was the
+    other) and this test was the one that told them apart; it now pins what is
+    left, so a day the clock stretches is not counted as two.
     """
     import copy
 
@@ -113,7 +111,6 @@ def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
 
     long_fall_back = stay("2026-11-01T00:00:00-04:00", 24 * 60 + 59)
     calendar = quote([with_boundary("calendar_day")], long_fall_back)
-    rolling = quote([with_boundary("rolling_24h")], long_fall_back)
 
     zone = with_boundary("calendar_day").timezone
     entry_local = long_fall_back.entry_at.astimezone(zone)
@@ -127,17 +124,12 @@ def test_a_fall_back_day_is_the_case_where_the_two_day_boundaries_DISAGREE():
     )
 
     assert calendar.fee_minor == 3000, "one local calendar date, so one cap"
-    assert rolling.fee_minor == 3400, "24h59m is two rolling windows: 30.00 + 4.00"
-    assert calendar.fee_minor != rolling.fee_minor
 
-    # And on an ordinary day the two rules agree, which is what makes the
-    # disagreement above a property of the TRANSITION rather than of the stay.
+    # And on an ordinary day the same 24h59m is two local dates, which is what makes
+    # the answer above a property of the TRANSITION rather than of the stay: the
+    # day the clock goes back is 25 hours long and is still one calendar day.
     ordinary = stay("2026-11-08T00:00:00-05:00", 24 * 60 + 59)
-    assert (
-        quote([with_boundary("calendar_day")], ordinary).fee_minor
-        == quote([with_boundary("rolling_24h")], ordinary).fee_minor
-        == 3400
-    )
+    assert quote([with_boundary("calendar_day")], ordinary).fee_minor == 3400
 
 
 @pytest.mark.guarantee("F5")

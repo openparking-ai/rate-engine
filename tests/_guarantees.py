@@ -168,9 +168,11 @@ GUARANTEES: dict[str, str] = {
         "turns the suite red."
     ),
     "F24": (
-        "A zero-length stay pays the first period -- a decision, published in the "
-        "contract with the divergence it was disclosed with, not left for an "
-        "integrator to discover as an anomaly."
+        "A stay of no length costs nothing (Gokhan, 2026-11-07: \"0 means $0. 1 means "
+        "round up\"), with or without a grace period, and the receipt says why; one "
+        "second is a minute and pays the first period like any stay past grace. A "
+        "negative stay and a stay the plan cannot price are still refused. Published "
+        "in the contract, not left for an integrator to discover as an anomaly."
     ),
     "F25": (
         "Whether a time window may run past midnight is stated by the PLAN, in "
@@ -427,8 +429,8 @@ GUARANTEES: dict[str, str] = {
     ),
     "F59": (
         "A daily max caps each day on its own (Gokhan, 2026-10-16: per calendar day). "
-        "The stay is cut at each local midnight, or each 24 hours from entry under "
-        "`rolling_24h`, and each day pays the time charged in it or the max, whichever "
+        "The stay is cut at each local midnight, and each day pays the time charged in "
+        "it or the max, whichever "
         "is less: at 8 the first hour, 4 an hour after and 30 a day, Monday 09:00 to "
         "Tuesday 00:15 is 30 + 4 = 34, not 60. A period is charged on the day it "
         "starts, the rate does not start again at midnight, a day with a clock change "
@@ -500,6 +502,81 @@ GUARANTEES: dict[str, str] = {
         "times. 400 qualifying specials beside 400 that do not, on a 90-day stay with "
         "a daily and a weekly max, are priced within a fixed time budget. No limit is "
         "set on the rules a plan may hold or the ways a stay may have."
+    ),
+    "F72": (
+        "A special can need a minimum stay (Gokhan, 2026-11-07, on listings such as "
+        "\"5-hour minimum\"): `stay_at_least_minutes` on a `time_window` means it applies "
+        "only if the REAL stay is at least that many minutes, in real time and not the "
+        "rounded minutes the periods are counted in. A shorter stay prices whole on the "
+        "regular rate, and the breakdown says the special did not apply and why. The "
+        "cheapest price still wins. A plan that states no minimum is priced as before."
+    ),
+    "F73": (
+        "A special can have a maximum stay (Gokhan, 2026-11-07, on listings such as "
+        "\"up to 10 hours\"): `stay_at_most_minutes` on a `time_window` means it "
+        "applies only if the REAL stay is at most that many minutes, in real time. A "
+        "longer stay is priced WHOLE by the regular rate, nothing split, and the "
+        "breakdown says the special did not apply because the stay was longer than its "
+        "maximum. The cheapest price still wins. A plan that states no maximum is "
+        "priced as before."
+    ),
+    "F74": (
+        "The patterns real garages list are expressible as the listing words them "
+        "(Gokhan, 2026-11-07: \"accomodate all those options exactly the way they "
+        "describe\"): banded prices (\"up to 3 hours = X, up to 6 hours = Y\") as a "
+        "flat special with a maximum stay each; a max that applies only inside a "
+        "weekday window as a flat special for stays that enter in it, the cheapest "
+        "price winning; a flat \"24 hours\" price as a flat special for a stay of at "
+        "most 24 hours; and an evening window past midnight as ONE `next_day` rule. "
+        "Each is proven on stays either side of its edges, with an example plan."
+    ),
+    "F75": (
+        "A daily max counts the local calendar day, and only that (Gokhan, "
+        "2026-11-07: \"calendar day not 24 hrs\"). A stay of 24 hours that starts at "
+        "18:00 is in two days and each is capped on its own; a day with a clock change "
+        "is one day. A plan that states a rolling 24-hour day does not load, and the "
+        "refusal names the field and says to write `calendar_day`."
+    ),
+    "F76": (
+        "A weekly max counts a week from a day the plan names (Gokhan, 2026-11-07: "
+        "\"day: wednesday . e.g. sunday to sunday\"). The same stay is one week or two "
+        "depending on that day. `week_starts_on` is a day name, always; a plan that "
+        "states a rolling seven-day week does not load, and the refusal names the field "
+        "and says to write `calendar_week` and a starting day."
+    ),
+    "F77": (
+        "A price can never be below $0 (Gokhan, 2026-11-07: \"Rate cannot be below "
+        "$0\"), and a discount bigger than the fee floors at $0 and is never refused: a "
+        "fixed discount takes off at most what the stay costs and the line says it was "
+        "limited, a second discount takes off at most what is left, and a 100% discount "
+        "makes the stay free. Swept over every combination of discounts in every order "
+        "on stays of every length and both ways of pricing the time. A percent discount "
+        "above 100% still does not load (F60)."
+    ),
+    "F78": (
+        "Real garage listings, written as plans, are priced as the listing says "
+        "(Gokhan, 2026-11-07: test with real rates, \"not some imaginary only created "
+        "rates\"): `tests/plans/real/` holds one plan per real listing from New York, "
+        "Chicago, Los Angeles, Santa Monica and three airports, with its source, its "
+        "words and stays priced at the listing's own edges. The expected number comes "
+        "from the listing, a stay the listing states no price for is refused and not "
+        "guessed, and the files say they are not current prices."
+    ),
+    "F79": (
+        "A flat price can be charged per 24 hours (Gokhan, 2026-11-07, on a flat "
+        "24-hour price used on a longer stay: \"cheapest win\"): a flat special with "
+        "`charged: \"per_24_hours\"` is charged once for every 24 hours of the stay, and is a "
+        "candidate beside the regular rate, so the customer pays the lower. A started "
+        "24 hours counts as a whole one, in real time (Claude's choice, not Gokhan's): "
+        "24 h is one block, 24 h and one second is two. A flat that does not state "
+        "`charged` is one price for the stay, as before."
+    ),
+    "F80": (
+        "A stay that does not match a window's entry and exit times gets no benefit "
+        "from that rate and pays whatever else applies (Gokhan, 2026-11-07, on a daily "
+        "max inside a time window: \"If it doesn't match it doesn't apply\"). With "
+        "\"Max $25, Mon-Fri 6am-6pm\", a stay in at 17:00 and out at 20:00 is not "
+        "covered and is priced whole on the regular rate."
     ),
     "F12b": (
         "A decision is an ACKNOWLEDGEMENT, not a price. A stay hitting a SETTLED gap is "

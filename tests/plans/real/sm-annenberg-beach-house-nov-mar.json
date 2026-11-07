@@ -1,0 +1,84 @@
+{
+  "plan_version": "sm-annenberg-beach-house-nov-mar",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Los_Angeles",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "hourly",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "hourly",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "rate",
+        "first_period_minutes": 60,
+        "first_period_minor": 400,
+        "repeat_period_minutes": 60,
+        "repeat_period_minor": 400,
+        "rounding": "ceil",
+        "max_duration_minutes": null
+      }
+    },
+    {
+      "id": "daily-max",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "daily-max",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
+      "enter_from": "00:00",
+      "enter_by": "23:59",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1000
+      }
+    }
+  ],
+  "decisions": []
+}

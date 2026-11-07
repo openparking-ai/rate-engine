@@ -1,0 +1,107 @@
+{
+  "plan_version": "la-1133-s-olive",
+  "effective_from": "2026-01-01T00:00:00+00:00",
+  "timezone": "America/Los_Angeles",
+  "currency": "USD",
+  "space_classes": [
+    "standard"
+  ],
+  "resolution": {
+    "QUALIFY": {
+      "mode": "cheapest_wins"
+    },
+    "ACCUMULATE": {
+      "mode": "cheapest_wins"
+    }
+  },
+  "adjust_order": null,
+  "rules": [
+    {
+      "id": "blocks-6am-6pm",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "blocks-6am-6pm",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "enter_from": "06:00",
+      "enter_by": "18:00",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "rate",
+        "first_period_minutes": 10,
+        "first_period_minor": 225,
+        "repeat_period_minutes": 10,
+        "repeat_period_minor": 225,
+        "rounding": "ceil",
+        "max_duration_minutes": null
+      }
+    },
+    {
+      "id": "max-25",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "max-25",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "enter_from": "06:00",
+      "enter_by": "18:00",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 2500
+      }
+    },
+    {
+      "id": "early-bird",
+      "type": "time_window",
+      "stage": "QUALIFY",
+      "space_classes": [
+        "standard"
+      ],
+      "label": "early-bird",
+      "applies_on": {
+        "kind": "days_of_week",
+        "days": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      "enter_from": "06:00",
+      "enter_by": "09:00",
+      "exit_by": "23:59",
+      "day_span": "same_day",
+      "effect": {
+        "kind": "flat",
+        "price_minor": 1500
+      }
+    }
+  ],
+  "decisions": []
+}

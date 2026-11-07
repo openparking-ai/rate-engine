@@ -260,16 +260,6 @@ def test_a_flat_under_the_max_is_charged_as_it_is():
 
 
 @pytest.mark.guarantee("F63")
-def test_a_rolling_day_holds_the_flat_the_same_way():
-    """24 hours from entry instead of the calendar: Friday 18:00 to Sunday 20:00 is
-    three rolling days, 90.00, and the 50.00 stands; the Saturday stay is one,
-    and pays 30.00."""
-    plan = _plan(WEEKEND_FLAT, _daily(boundary="rolling_24h"))
-    assert _quote(plan, FRIDAY_1800, SUNDAY_2000)["fee_minor"] == 5000
-    assert _quote(plan, SATURDAY_0900, SATURDAY_1900)["fee_minor"] == 3000
-
-
-@pytest.mark.guarantee("F63")
 def test_a_weekly_max_holds_a_flat_to_the_weeks_the_car_is_in():
     """Friday to the Sunday nine days later touches two Monday weeks. A 250.00 flat
     with a 100.00 weekly max: 200.00, the max for each of the two weeks. With the

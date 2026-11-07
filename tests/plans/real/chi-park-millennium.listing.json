@@ -1,0 +1,96 @@
+{
+  "garage": "Park Millennium Garage",
+  "address": "221 N Stetson Ave, Chicago, IL",
+  "city": "Chicago",
+  "timezone": "America/Chicago",
+  "source_url": "https://en.parkopedia.com/parking/underground/park_millennium_garage/60601/chicago/",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listing (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "early bird $15 (entry 5-7am) or $17 (entry before 10am), exit by 7pm, 5-hour minimum."
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "No days are stated: both rates apply every day. No other price is given, so other stays are refused. 'entry before 10am' is read as up to 09:59."
+  ],
+  "cases": [
+    {
+      "name": "in 5:00, 5 hours",
+      "entry": "2026-03-03T05:00",
+      "minutes": 300,
+      "basis": "listing: $15, entry 5-7am",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in 6:59, 5 hours",
+      "entry": "2026-03-03T06:59",
+      "minutes": 300,
+      "basis": "listing: $15, entry 5-7am",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in 7:30: the $17 rate",
+      "entry": "2026-03-03T07:30",
+      "minutes": 300,
+      "basis": "listing: $17, entry before 10am",
+      "expect_fee_minor": 1700
+    },
+    {
+      "name": "in 9:59: the $17 rate",
+      "entry": "2026-03-03T09:59",
+      "minutes": 300,
+      "basis": "listing: $17, entry before 10am",
+      "expect_fee_minor": 1700
+    },
+    {
+      "name": "in 10:00 or later: none",
+      "entry": "2026-03-03T10:00",
+      "minutes": 300,
+      "basis": "entry before 10am only; no other price listed",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "4h59: one short of the minimum",
+      "entry": "2026-03-03T07:30",
+      "minutes": 299,
+      "basis": "listing: 5-hour minimum",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "5h exactly",
+      "entry": "2026-03-03T07:30",
+      "minutes": 300,
+      "basis": "listing: 5-hour minimum",
+      "expect_fee_minor": 1700
+    },
+    {
+      "name": "out at 19:00 exactly",
+      "entry": "2026-03-03T07:30",
+      "minutes": 690,
+      "basis": "listing: exit by 7pm",
+      "expect_fee_minor": 1700
+    },
+    {
+      "name": "out at 19:01",
+      "entry": "2026-03-03T07:30",
+      "minutes": 691,
+      "basis": "listing: exit by 7pm",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    },
+    {
+      "name": "in 5:00, out 19:00",
+      "entry": "2026-03-03T05:00",
+      "minutes": 840,
+      "basis": "listing: $15 with exit by 7pm",
+      "expect_fee_minor": 1500
+    },
+    {
+      "name": "in 5:00, out 19:01",
+      "entry": "2026-03-03T05:00",
+      "minutes": 841,
+      "basis": "listing: exit by 7pm",
+      "expect_refusal": "GAP_NO_ACCUMULATE_RULE"
+    }
+  ]
+}

@@ -50,7 +50,7 @@ DOCUMENTS = ("README.md", "docs/CONTRACT.md")
 #:
 #: Self-policing: a test below requires every entry to be absent from the code,
 #: so if one of these ever comes back the entry has to go with it.
-REMOVED = frozenset({"early_bird"})
+REMOVED = frozenset({"early_bird", "rolling_24h", "rolling_7d"})
 
 #: Backticked tokens that are not identifiers this module owns. English, JSON,
 #: Python, ISO, and the shell. Every entry here is a decision that this word is
@@ -90,7 +90,7 @@ def _owned_names() -> dict[str, set[str]]:
     import rate_engine  # noqa: F401  (registers the rule types)
     from _guarantees import GUARANTEES
     from rate_engine import engine
-    from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED
+    from rate_engine.engine import RESOLVED, SPECIAL_USED, TIME_BASED_USED, ZERO_LENGTH
     from rate_engine.findings import ALL_CODES, INVALID_CODES
     from rate_engine.plan import PLAN_KEYS, RESOLUTION_MODES
     from rate_engine.rules import (
@@ -113,15 +113,16 @@ def _owned_names() -> dict[str, set[str]]:
     for module in modules:
         fields |= set(module.EXTRA)
     fields |= set(space_surcharge.PERCENT_EXTRA)
+    fields |= set(time_window.OPTIONAL)
     # Nested field names the rule types define inside their own objects.
     fields |= {"days", "dates", "price_minor", "percent_bp", "minor", "amount",
-               "direction", "rounding"}
+               "direction", "rounding", "charged"}
 
     values = set(RESOLUTION_MODES) | set(DAYS_OF_WEEK)
     values |= set(time_window.DAY_SPANS) | set(time_window.APPLIES_ON_KINDS)
     values |= set(time_window.EFFECT_STAGES) | set(time_window.DIRECTIONS)
     values |= set(time_window.AMOUNT_KINDS) | set(time_window.ADJUST_ROUNDINGS)
-    values |= set(increment.ROUNDING_MODES)
+    values |= set(increment.ROUNDING_MODES) | set(time_window.CHARGED_WAYS)
     values |= set(daily_max.DAY_BOUNDARIES) | set(weekly_max.WEEK_BOUNDARIES)
     values |= set(TAX_ROUNDINGS)
     values |= set(fill_level.ROUNDINGS) | set(space_surcharge.ROUNDINGS)
@@ -151,7 +152,7 @@ def _owned_names() -> dict[str, set[str]]:
         "stated value": values,
         "guarantee": set(GUARANTEES),
         "tax": tax_names,
-        "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED},
+        "engine line code": {SPECIAL_USED, TIME_BASED_USED, RESOLVED, ZERO_LENGTH},
         # The engine's one stated limit (F62), read off the module that holds it.
         "engine constant": {name for name in ("MAX_STAY_DAYS",) if hasattr(engine, name)},
     }

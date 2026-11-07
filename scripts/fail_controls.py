@@ -194,8 +194,8 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F9": (
         "tests/test_contract_is_generated.py",
         "contract.py",
-        "SCHEMA_VERSION = 6",
-        "SCHEMA_VERSION = 7  # PLANTED: the published schema version moves",
+        "SCHEMA_VERSION = 7",
+        "SCHEMA_VERSION = 8  # PLANTED: the published schema version moves",
         "the code answers with a schema version the committed contract does not "
         "publish, so docs/CONTRACT.md stops being a reading of the code",
     ),
@@ -440,19 +440,17 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "stops reacting at all -- the exact deletion that left all 97 tests green "
         "when the outside pass measured it",
     ),
-    # X11. The plant makes a zero-length stay free -- the behaviour Grok proposed
-    # and Gokhan has not overruled. The control exists so the DECISION cannot be
-    # changed by accident; changing it on purpose is a brief.
+    # X11, reversed on 2026-11-07. The plant used to make a zero-length stay free,
+    # the behaviour Grok proposed and the owner had not agreed to; he has now said
+    # "0 means $0", so the plant is the old behaviour: a zero-length stay paying the
+    # first period. Still there so the DECISION cannot be changed by accident.
     "F24": (
-        "tests/test_f24_a_zero_length_stay_is_priced.py",
-        "rules/increment.py",
-        "    if minutes <= first_len:",
-        "    if minutes == 0:  # PLANTED: a zero-length stay silently becomes free\n"
-        "        return []\n"
-        "    if minutes <= first_len:",
-        "a stay of zero minutes stops paying the first period, which is a pricing "
-        "decision being changed with nothing said -- and it is the exact behaviour "
-        "an outside reviewer asked for and the owner has not agreed to",
+        "tests/test_f24_a_zero_length_stay_costs_nothing.py",
+        "engine.py",
+        "    if stay.duration_minutes == 0:\n",
+        "    if False:  # PLANTED: a zero-length stay pays the first period again\n",
+        "a stay of zero minutes pays the first period, which the owner said costs "
+        "$0 (\"0 means $0\")",
     ),
     # X4. The plant restores the undeclared condition exactly as it shipped: the
     # engine deciding the day span for every plan, whatever the plan says.
@@ -1402,12 +1400,12 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
     "F56/week-start-at-exit-counted": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/weekly_max.py",
-        "            if boundary >= exit_at:",
-        "            if boundary > exit_at:  # PLANTED: a week start at the exit counts",
+        "        if boundary >= exit_at:",
+        "        if boundary > exit_at:  # PLANTED: a week start at the exit counts",
         "an exit at exactly the start of a calendar week counts that week, so a "
         "Monday-to-Monday stay is two weeks and a flat price pays the weekly max twice",
     ),
-    "F56/rolling-day-past-the-week": (
+    "F56/day-past-the-week": (
         "tests/test_f56_a_cap_counts_only_the_time_the_car_is_in.py",
         "rules/daily_max.py",
         "        if not (day_start < end and day_end > start):",
@@ -1590,7 +1588,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
         "\n"
-        "    ledger = _the_cheapest_way(plan, stay, qualified)\n",
+        "    if stay.duration_minutes == 0:\n"
+        "        # Decided only now, after everything that refuses has had its say: a plan that\n"
+        "        # cannot price this stay still refuses it, and a stay it can price at all\n"
+        "        # costs nothing when the car was in for no time (F24).\n"
+        "        ledger = _zero_length(plan, stay)\n"
+        "    else:\n"
+        "        ledger = _the_cheapest_way(plan, stay, qualified)\n",
         "    plan = select_plan(plans, stay)  # PLANTED: the limit asked after the work\n"
         "    qualified = _Qualified(plan, stay)\n"
         "\n"
@@ -1598,7 +1602,13 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    if blocking:\n"
         "        raise Refused(blocking)\n"
         "\n"
-        "    ledger = _the_cheapest_way(plan, stay, qualified)\n"
+        "    if stay.duration_minutes == 0:\n"
+        "        # Decided only now, after everything that refuses has had its say: a plan that\n"
+        "        # cannot price this stay still refuses it, and a stay it can price at all\n"
+        "        # costs nothing when the car was in for no time (F24).\n"
+        "        ledger = _zero_length(plan, stay)\n"
+        "    else:\n"
+        "        ledger = _the_cheapest_way(plan, stay, qualified)\n"
         "    too_long = _longer_than_priced(stay)\n"
         "    if too_long is not None:\n"
         "        raise Refused([too_long])\n",
@@ -1876,6 +1886,225 @@ CONTROLS: dict[str, tuple[str, str, str, str, str]] = {
         "    timeout = None  # PLANTED: no socket timeout",
         "a connection has no socket timeout, so a caller that stops part-way through "
         "a body holds its thread for as long as it keeps the connection open",
+    ),
+    # A special can need a minimum stay (F72, Gokhan 2026-11-07).
+    "F72": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if False:  # PLANTED: the minimum stay is ignored\n",
+        "a four-hour stay is given the five-hour early bird, so the special applies "
+        "to a stay that did not earn it",
+    ),
+    "F72/rounded-stay": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    length = stay.exit_at - stay.entry_at\n    low = rule.params",
+        "    length = timedelta(minutes=stay.duration_minutes)  # PLANTED: rounded up\n"
+        "    low = rule.params",
+        "a stay of 4 h 59 min 30 s is rounded up to five hours before it is compared "
+        "with the minimum, so it is given the five-hour special",
+    ),
+    "F72/at-least-means-more-than": (
+        "tests/test_f72_a_special_can_need_a_minimum_stay.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if low is not None and length <= timedelta(minutes=low):  # PLANTED\n",
+        "a stay of exactly five hours is refused the five-hour special: \"at least\" "
+        "is read as \"more than\"",
+    ),
+    # A special can have a maximum stay (F73, Gokhan 2026-11-07).
+    "F73": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: the maximum stay is ignored\n",
+        "an eleven-hour stay is given the ten-hour early bird, so the special covers "
+        "a stay it says it does not",
+    ),
+    "F73/rounded-stay": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        '    high = rule.params["stay_at_most_minutes"]\n',
+        '    high = rule.params["stay_at_most_minutes"]\n'
+        "    length = timedelta(minutes=stay.duration_minutes)  # PLANTED: rounded up\n",
+        "a stay of 10 h 0 min 30 s is rounded up to 601 minutes and one of 9 h 59 min "
+        "59 s to 600 before the comparison, so the line moves with the rounding",
+    ),
+    "F73/at-most-means-less-than": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if high is not None and length >= timedelta(minutes=high):  # PLANTED\n",
+        "a stay of exactly ten hours is refused the ten-hour special: \"at most\" is "
+        "read as \"less than\"",
+    ),
+    "F73/no-reason-given": (
+        "tests/test_f73_a_special_can_have_a_maximum_stay.py",
+        "rules/time_window.py",
+        "        failed.append(stay_length)\n",
+        "        pass  # PLANTED: the line does not say why the special did not apply\n",
+        "a stay over the maximum is priced on the regular rate with no line saying the "
+        "special was not applied or why -- the question an attendant is asked",
+    ),
+    # The real listing patterns are expressible (F74, Gokhan 2026-11-07).
+    "F74/no-maximum-stay": (
+        "tests/test_f74_the_real_listing_patterns_are_expressible.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: a band covers any stay\n",
+        "the 'up to 3 hours' and '24 hours' prices are charged to stays far past "
+        "their limits, so a seven-hour stay pays the three-hour band",
+    ),
+    "F74/evening-cannot-pass-midnight": (
+        "tests/test_f74_the_real_listing_patterns_are_expressible.py",
+        "rules/time_window.py",
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 1, "any_span": None}',
+        'DAY_SPAN_LIMITS: dict[str, int | None] = {"same_day": 0, "next_day": 0, "any_span": None}'
+        "  # PLANTED",
+        "a window cannot run past midnight, so 'in after 5pm, out by 6am' has to be "
+        "written as two rules and the one-rule form does not load",
+    ),
+    # A day is the local calendar day, a week starts on the plan's day (F75, F76,
+    # Gokhan 2026-11-07).
+    "F75": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        "        day += ONE_DAY\n"
+        "        yield datetime.combine(day, time(0), tzinfo=plan.timezone).astimezone(UTC)\n",
+        "        day += ONE_DAY\n"
+        "        # PLANTED: a day is 24 hours from entry, not the calendar day\n"
+        "        yield stay.entry_at.astimezone(UTC) + ONE_DAY * (day - entry_date).days\n",
+        "a stay of 24 hours from 18:00 is one day, capped once at 30.00, where it is "
+        "two calendar days and pays 58.00",
+    ),
+    "F75/the-refusal-names-no-fix": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        '    if boundary == "rolling_24h":\n',
+        "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
+        "a plan stating a rolling 24-hour day is refused without being told to write "
+        "calendar_day",
+    ),
+    "F75/any-boundary-loads": (
+        "tests/test_f75_a_daily_max_counts_the_calendar_day.py",
+        "rules/daily_max.py",
+        "    if boundary not in DAY_BOUNDARIES:\n",
+        "    if False:  # PLANTED: any day boundary loads\n",
+        "a daily max stating 'weekday' or nothing at all loads, and prices as a "
+        "calendar day while the plan says something else",
+    ),
+    "F76": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        '    week = _week_start(local_entry, rule.params["week_starts_on"])\n',
+        "    week = local_entry  # PLANTED: the week starts on the day of entry\n",
+        "the day the garage names is ignored and a week is counted from the day the car "
+        "came in, so a Monday garage and a Wednesday garage price a stay the same",
+    ),
+    "F76/the-refusal-names-no-fix": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        '    if boundary == "rolling_7d":\n',
+        "    if False:  # PLANTED: the removed choice gets the generic refusal\n",
+        "a plan stating a rolling seven-day week is refused without being told to write "
+        "calendar_week and a starting day",
+    ),
+    "F76/no-day-loads": (
+        "tests/test_f76_a_weekly_max_counts_from_the_day_the_plan_names.py",
+        "rules/weekly_max.py",
+        "    if starts_on not in DAYS_OF_WEEK:\n",
+        "    if False:  # PLANTED: a week with no starting day loads\n",
+        "a weekly max with a null or misspelt starting day loads and then fails on the "
+        "first stay it touches, or silently counts from the wrong day",
+    ),
+    "F24/one-second-is-free": (
+        "tests/test_f24_a_zero_length_stay_costs_nothing.py",
+        "engine.py",
+        "    if stay.duration_minutes == 0:\n",
+        "    if (stay.exit_at - stay.entry_at).total_seconds() < 60:  # PLANTED\n",
+        "a stay of one second is treated as no time and costs nothing, where it is a "
+        "minute and pays the first period",
+    ),
+    # A price is never below $0 (F77, Gokhan 2026-11-07).
+    "F77": (
+        "tests/test_f77_a_price_is_never_below_zero.py",
+        "rules/time_window.py",
+        "            return max(0, min(amount[\"minor\"], running_total_minor))\n",
+        "            return amount[\"minor\"]  # PLANTED: a discount may exceed the fee\n",
+        "a 10,000.00 discount on a 3.00 stay takes off 10,000.00 and the quote is "
+        "refused as a negative fee, where it should be free",
+    ),
+    # Real listings are priced as the listing says (F78, Gokhan 2026-11-07).
+    "F78": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "rules/time_window.py",
+        "    if low is not None and length < timedelta(minutes=low):\n",
+        "    if False:  # PLANTED: the minimum stay is ignored\n",
+        "the Chicago and New York early birds with a 5-hour or 4-hour minimum are given "
+        "to shorter stays, against what the listings say",
+    ),
+    "F78/maximum-ignored": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "rules/time_window.py",
+        "    if high is not None and length > timedelta(minutes=high):\n",
+        "    if False:  # PLANTED: the maximum stay is ignored\n",
+        "the 'up to 10 hours' early bird and every 'up to 3 hours' / '24 hours' band is "
+        "given to stays past its limit",
+    ),
+    "F78/cheapest-not-wins": (
+        "tests/test_f78_real_listings_are_priced_as_the_listing_says.py",
+        "engine.py",
+        "    if time_fee < special_fee:",
+        "    if False:  # PLANTED: the special is charged over a cheaper hour",
+        "an early bird dearer than the block rate is charged to a short stay",
+    ),
+    # A flat price can be charged per 24 hours (F79, Gokhan 2026-11-07).
+    "F79": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        '    if effect["kind"] == "flat" and effect[CHARGED] == "per_24_hours":\n',
+        '    if False:  # PLANTED: `charged` is ignored, the flat is one price\n',
+        "a 30-hour stay with a flat per 24 hours is given the one price, or drops to "
+        "the regular rate, not two blocks",
+    ),
+    "F79/one-price-however-long": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "                delta_minor=price * blocks,\n",
+        "                delta_minor=price,  # PLANTED: charged once however long\n",
+        "a 49-hour stay is charged 20.00 although the line says 3 blocks",
+    ),
+    "F79/started-block-not-counted": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "    return max(1, blocks + (1 if rest else 0))\n",
+        "    return max(1, blocks)  # PLANTED: only whole 24 hours count\n",
+        "24 hours and one second is one block, and 30 hours is one block, not two",
+    ),
+    "F79/wall-clock-block": (
+        "tests/test_f79_a_flat_price_can_be_charged_per_24_hours.py",
+        "rules/time_window.py",
+        "    blocks, rest = divmod(length, timedelta(hours=24))\n",
+        "    blocks, rest = divmod(stay.exit_at.replace(tzinfo=None) - "
+        "stay.entry_at.replace(tzinfo=None), timedelta(hours=24))  # PLANTED: wall clock\n",
+        "a 24-real-hour stay across the spring clock change is 25 hours on the wall "
+        "clock and is charged two blocks",
+    ),
+    # A stay outside a window's times gets nothing from it (F80, Gokhan 2026-11-07).
+    "F80": (
+        "tests/test_f80_a_stay_outside_a_windows_times_gets_nothing_from_it.py",
+        "rules/time_window.py",
+        "    exit_side = _exit_failure(rule, entry_local, exit_local)\n",
+        "    exit_side = None  # PLANTED: the exit limit is ignored\n",
+        "in at 17:00 and out at 20:00 is given the 6am-6pm max",
+    ),
+    "F80/entry-before-ignored": (
+        "tests/test_f80_a_stay_outside_a_windows_times_gets_nothing_from_it.py",
+        "rules/time_window.py",
+        '    if entry_local.time() < rule.params["enter_from"]:\n',
+        "    if False:  # PLANTED: the entry window's opening is ignored\n",
+        "a stay in at 05:00 is given the 6am-6pm max",
     ),
 }
 

@@ -1,0 +1,76 @@
+{
+  "garage": "Upper East Side garage",
+  "address": "address not matched to this row (the summary does not say)",
+  "city": "New York (Manhattan)",
+  "timezone": "America/New_York",
+  "source_url": "https://en.parkopedia.com/parking/garage/red_ball_garage/10016/new_york_city/ and the five other NYC pages in REAL-RATES-FOUND-20261107.md",
+  "date_seen": "2026-11-07",
+  "date_on_listing": null,
+  "source_kind": "Parkopedia listings (via REAL-RATES-FOUND-20261107.md (a search-snippet summary of the listing; this session could not open the page itself: Parkopedia answered HTTP 403 to automated fetches, and the browser route was refused as bot-check circumvention and not tried again))",
+  "verbatim_rows": [
+    "early bird $23 (Mon-Fri, 5am-10am, out by 9pm); 1 hour $22; 24 hours $73"
+  ],
+  "NOT_CURRENT_PRICES": "Third-party and mostly undated listing, kept only as a test of how a garage words a price. Not a current price and not for any customer-facing place.",
+  "partly_testable": [
+    "Which address this row belongs to was not given; the page could not be opened to check.",
+    "'1 hour' / '24 hours' are read as prices for a stay of up to that long."
+  ],
+  "cases": [
+    {
+      "name": "in at 05:00, out inside the limits",
+      "entry": "2026-03-03T05:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry from 05:00",
+      "expect_fee_minor": 2200
+    },
+    {
+      "name": "in at 04:59: before the window",
+      "entry": "2026-03-03T04:59",
+      "minutes": 60,
+      "basis": "the early bird window opens at 05:00",
+      "expect_fee_minor": 2200
+    },
+    {
+      "name": "in at 10:01: one minute past",
+      "entry": "2026-03-03T10:01",
+      "minutes": 60,
+      "basis": "the early bird is listed for entry up to 10:00",
+      "expect_fee_minor": 2200
+    },
+    {
+      "name": "out at 21:00 exactly",
+      "entry": "2026-03-03T05:00",
+      "minutes": 960,
+      "basis": "listing: out by 21:00",
+      "expect_fee_minor": 2300
+    },
+    {
+      "name": "out at 21:01: one minute late",
+      "entry": "2026-03-03T05:00",
+      "minutes": 961,
+      "basis": "listing: out by 21:00",
+      "expect_fee_minor": 7300
+    },
+    {
+      "name": "a day the early bird is not listed for",
+      "entry": "2026-03-14T05:00",
+      "minutes": 60,
+      "basis": "the early bird is listed for mon, tue, wed, thu, fri",
+      "expect_fee_minor": 2200
+    },
+    {
+      "name": "one hour",
+      "entry": "2026-03-03T12:00",
+      "minutes": 60,
+      "basis": "listing: 1 hour $22",
+      "expect_fee_minor": 2200
+    },
+    {
+      "name": "24 hours",
+      "entry": "2026-03-03T12:00",
+      "minutes": 1440,
+      "basis": "listing: 24 hours $73",
+      "expect_fee_minor": 7300
+    }
+  ]
+}

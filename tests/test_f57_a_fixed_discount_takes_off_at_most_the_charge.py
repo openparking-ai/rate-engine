@@ -112,7 +112,7 @@ def _discount_line(body: dict) -> dict:
 
 @pytest.mark.guarantee("F57")
 @pytest.mark.parametrize(
-    "exit_", ["2026-03-07T10:00:00-05:00", "2026-03-07T10:59:00-05:00",
+    "exit_", ["2026-03-07T10:01:00-05:00", "2026-03-07T10:59:00-05:00",
               "2026-03-07T11:00:00-05:00"],
 )
 def test_a_stay_cheaper_than_the_discount_is_priced_at_zero(exit_):
